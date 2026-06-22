@@ -444,7 +444,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveSpeed: 5
   visualScale: 0.68
-  playerColor: {r: 0.9056604, g: 0.68366116, b: 0.19223925, a: 1}
+  playerColor: {r: 0.80425483, g: 0.51998043, b: 0.8962264, a: 1}
 --- !u!114 &621725372
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -529,7 +529,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eb6962c8b2dddfb4ea61bd41924b024a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyCount: 2
+  enemyCount: 3
   spawnNearPlayerFirst: 1
   excludeExitRoom: 1
   moveSpeed: 4.5
