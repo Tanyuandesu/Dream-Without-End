@@ -392,6 +392,7 @@ GameObject:
   - component: {fileID: 621725371}
   - component: {fileID: 621725370}
   - component: {fileID: 621725369}
+  - component: {fileID: 621725376}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -443,7 +444,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   moveSpeed: 5
   visualScale: 0.68
-  playerColor: {r: 0.25, g: 0.95, b: 0.65, a: 1}
+  playerColor: {r: 0.9056604, g: 0.68366116, b: 0.19223925, a: 1}
 --- !u!114 &621725372
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -471,11 +472,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d4eb49977e743024eb49350793befa56, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mapWidth: 58
-  mapHeight: 38
+  mapWidth: 80
+  mapHeight: 70
   desiredRoomCount: 9
-  minRoomSize: {x: 5, y: 5}
-  maxRoomSize: {x: 10, y: 8}
+  minRoomSize: {x: 7, y: 6}
+  maxRoomSize: {x: 13, y: 10}
   roomPadding: 1
   maxPlacementAttempts: 250
   corridorWidth: 2
@@ -499,6 +500,7 @@ MonoBehaviour:
   playerSpawner: {fileID: 621725371}
   exitSpawner: {fileID: 621725370}
   cameraManager: {fileID: 621725369}
+  enemySpawner: {fileID: 0}
   generateOnStart: 1
 --- !u!4 &621725375
 Transform:
@@ -515,6 +517,34 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &621725376
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 621725368}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eb6962c8b2dddfb4ea61bd41924b024a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  enemyCount: 2
+  spawnNearPlayerFirst: 1
+  excludeExitRoom: 1
+  moveSpeed: 4.5
+  waypointTolerance: 0.035
+  stopDistance: 0.72
+  lastPositionTolerance: 0.15
+  detectionRadius: 20
+  loseTargetRadius: 24
+  requireLineOfSight: 0
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  visualScale: 0.68
+  colliderScale: 0.62
+  enemyColor: {r: 0.2, g: 0.85, b: 0.25, a: 1}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0

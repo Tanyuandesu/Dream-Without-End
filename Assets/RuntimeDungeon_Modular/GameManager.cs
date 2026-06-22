@@ -1,17 +1,16 @@
 using UnityEngine;
 
 /// <summary>
-/// 整體流程的協調者。
-/// 它不生成房間細節，只負責呼叫各個組件。
-///
-/// 空場景用法：
-/// 1. 建立 Empty GameObject。
-/// 2. 只掛上 GameManager。
-/// 3. 按 Play。
-///
-/// GameManager 會自動補上其餘五個組件。
+/// 整體流程協調者。
+/// RequireComponent 讓主要模組在編輯模式中直接出現在 Inspector。
 /// </summary>
 [DisallowMultipleComponent]
+[RequireComponent(typeof(DungeonGenerator))]
+[RequireComponent(typeof(DungeonRenderer))]
+[RequireComponent(typeof(PlayerSpawner))]
+[RequireComponent(typeof(ExitSpawner))]
+[RequireComponent(typeof(CameraManager))]
+[RequireComponent(typeof(EnemySpawner))]
 public sealed class GameManager : MonoBehaviour
 {
     [Header("系統組件")]
@@ -20,6 +19,7 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private PlayerSpawner playerSpawner;
     [SerializeField] private ExitSpawner exitSpawner;
     [SerializeField] private CameraManager cameraManager;
+    [SerializeField] private EnemySpawner enemySpawner;
 
     [Header("啟動")]
     [SerializeField] private bool generateOnStart = true;
@@ -29,17 +29,20 @@ public sealed class GameManager : MonoBehaviour
     private bool isGenerating;
 
     public int CurrentFloor { get; private set; }
+
     public int CurrentSeed =>
-        currentLayout != null ? currentLayout.Seed : 0;
+        currentLayout != null
+            ? currentLayout.Seed
+            : 0;
 
     private void Reset()
     {
-        CacheOrCreateComponents();
+        CacheComponents();
     }
 
     private void Awake()
     {
-        CacheOrCreateComponents();
+        CacheComponents();
     }
 
     private void Start()
@@ -58,9 +61,6 @@ public sealed class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// 出口碰撞器會呼叫此方法。
-    /// </summary>
     public void PlayerReachedExit()
     {
         GenerateNextFloor();
@@ -90,7 +90,7 @@ public sealed class GameManager : MonoBehaviour
         }
 
         isGenerating = true;
-        CacheOrCreateComponents();
+        CacheComponents();
 
         RemoveCurrentFloor();
 
@@ -120,6 +120,12 @@ public sealed class GameManager : MonoBehaviour
             dungeonRenderer,
             this);
 
+        enemySpawner.SpawnTestEnemies(
+            currentLayout,
+            currentDungeonRoot,
+            dungeonRenderer,
+            player.transform);
+
         cameraManager.SetTarget(player.transform);
 
         isGenerating = false;
@@ -137,35 +143,25 @@ public sealed class GameManager : MonoBehaviour
         currentDungeonRoot = null;
     }
 
-    /// <summary>
-    /// 只掛 GameManager 也能運作。
-    /// 缺少的組件會自動加到同一個 GameObject。
-    /// </summary>
-    private void CacheOrCreateComponents()
+    private void CacheComponents()
     {
-        dungeonGenerator = GetOrAdd(dungeonGenerator);
-        dungeonRenderer = GetOrAdd(dungeonRenderer);
-        playerSpawner = GetOrAdd(playerSpawner);
-        exitSpawner = GetOrAdd(exitSpawner);
-        cameraManager = GetOrAdd(cameraManager);
-    }
+        dungeonGenerator =
+            GetComponent<DungeonGenerator>();
 
-    private T GetOrAdd<T>(T current)
-        where T : Component
-    {
-        if (current != null)
-        {
-            return current;
-        }
+        dungeonRenderer =
+            GetComponent<DungeonRenderer>();
 
-        T existing = GetComponent<T>();
+        playerSpawner =
+            GetComponent<PlayerSpawner>();
 
-        if (existing != null)
-        {
-            return existing;
-        }
+        exitSpawner =
+            GetComponent<ExitSpawner>();
 
-        return gameObject.AddComponent<T>();
+        cameraManager =
+            GetComponent<CameraManager>();
+
+        enemySpawner =
+            GetComponent<EnemySpawner>();
     }
 
     private void OnGUI()
@@ -175,18 +171,18 @@ public sealed class GameManager : MonoBehaviour
                 ? currentLayout.Rooms.Count
                 : 0;
 
-        GUI.Box(new Rect(12f, 12f, 360f, 105f), "");
+        GUI.Box(new Rect(12f, 12f, 390f, 105f), "");
 
         GUI.Label(
-            new Rect(24f, 22f, 330f, 24f),
-            "WASD / 方向鍵：移動    R：重生成本層");
+            new Rect(24f, 22f, 360f, 24f),
+            "WASD / 方向鍵：移動    R：按新參數重生成本層");
 
         GUI.Label(
-            new Rect(24f, 48f, 330f, 24f),
+            new Rect(24f, 48f, 360f, 24f),
             "黃色方塊：進入下一個隨機迷宮");
 
         GUI.Label(
-            new Rect(24f, 74f, 330f, 24f),
+            new Rect(24f, 74f, 360f, 24f),
             "Floor: " + CurrentFloor +
             "    Rooms: " + roomCount +
             "    Seed: " + CurrentSeed);
