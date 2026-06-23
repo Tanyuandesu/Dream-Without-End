@@ -10,7 +10,6 @@ using UnityEngine;
 [RequireComponent(typeof(PlayerSpawner))]
 [RequireComponent(typeof(ExitSpawner))]
 [RequireComponent(typeof(CameraManager))]
-[RequireComponent(typeof(EnemySpawner))]
 public sealed class GameManager : MonoBehaviour
 {
     [Header("系統組件")]
@@ -19,7 +18,9 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private PlayerSpawner playerSpawner;
     [SerializeField] private ExitSpawner exitSpawner;
     [SerializeField] private CameraManager cameraManager;
-    [SerializeField] private EnemySpawner enemySpawner;
+    [Header("獨立敵人系統")]
+    [Tooltip("拖入 EnemySystem 上的 EnemyManager。")]
+    [SerializeField] private EnemyManager enemyManager;
 
     [Header("啟動")]
     [SerializeField] private bool generateOnStart = true;
@@ -120,7 +121,7 @@ public sealed class GameManager : MonoBehaviour
             dungeonRenderer,
             this);
 
-        enemySpawner.SpawnTestEnemies(
+        enemyManager.SetupFloor(
             currentLayout,
             currentDungeonRoot,
             dungeonRenderer,
@@ -133,6 +134,11 @@ public sealed class GameManager : MonoBehaviour
 
     private void RemoveCurrentFloor()
     {
+        if (enemyManager != null)
+        {
+            enemyManager.ClearFloor();
+        }
+
         if (currentDungeonRoot == null)
         {
             return;
@@ -160,8 +166,11 @@ public sealed class GameManager : MonoBehaviour
         cameraManager =
             GetComponent<CameraManager>();
 
-        enemySpawner =
-            GetComponent<EnemySpawner>();
+        if (enemyManager == null)
+        {
+            enemyManager =
+                GetComponentInChildren<EnemyManager>(true);
+        }
     }
 
     private void OnGUI()
