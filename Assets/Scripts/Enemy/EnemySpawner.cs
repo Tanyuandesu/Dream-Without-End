@@ -4,9 +4,7 @@ using UnityEngine;
 
 /// <summary>
 /// 測試敵人生成器。
-///
-/// 所有測試敵人的數量、AI 參數、外觀與碰撞參數
-/// 都集中在 EnemySystem 上的這個組件中。
+/// 包含外觀、生命、接觸傷害與目前 AI 參數。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class EnemySpawner : MonoBehaviour
@@ -14,11 +12,7 @@ public sealed class EnemySpawner : MonoBehaviour
     [Header("生成數量")]
     [Min(0)]
     [SerializeField] private int enemyCount = 1;
-
-    [Tooltip("開啟後，敵人優先生成在靠近玩家出生點的房間。")]
     [SerializeField] private bool spawnNearPlayerFirst = true;
-
-    [Tooltip("出口房不生成敵人。")]
     [SerializeField] private bool excludeExitRoom = true;
 
     [Header("移動參數")]
@@ -42,15 +36,31 @@ public sealed class EnemySpawner : MonoBehaviour
     [SerializeField] private float loseTargetRadius = 24f;
 
     [SerializeField] private bool requireLineOfSight = false;
-
-    [Tooltip("開啟視線判定時，可阻擋視線的 Layer。")]
     [SerializeField] private LayerMask obstacleMask = ~0;
 
+    [Header("敵人生命")]
+    [Min(1f)]
+    [SerializeField] private float maxHealth = 30f;
+
+    [Min(0f)]
+    [SerializeField] private float damageInvulnerabilityTime =
+        0.1f;
+
+    [Header("碰撞傷害")]
+    [SerializeField] private bool enableContactDamage = true;
+
+    [Min(0f)]
+    [SerializeField] private float contactDamage = 10f;
+
+    [Min(0f)]
+    [SerializeField] private float contactDamageCooldown = 0.75f;
+
+    [SerializeField] private DamageFactionMask contactDamageTargets =
+        DamageFactionMask.Player;
+
     [Header("敵人外觀")]
-    [Tooltip("把敵人 Sprite 拖到這裡。留空時使用測試方塊。")]
     [SerializeField] private Sprite enemySprite;
 
-    [Tooltip("角色圖片在世界中的目標高度。地圖一格目前約為 1 單位。")]
     [Min(0.05f)]
     [SerializeField] private float visualWorldHeight = 0.8f;
 
@@ -63,7 +73,6 @@ public sealed class EnemySpawner : MonoBehaviour
     [SerializeField] private int sortingOrder = 20;
 
     [Header("敵人碰撞")]
-    [Tooltip("碰撞體尺寸使用世界單位，不會跟著 Sprite 縮放。")]
     [SerializeField] private Vector2 colliderSize =
         new Vector2(0.58f, 0.58f);
 
@@ -147,8 +156,10 @@ public sealed class EnemySpawner : MonoBehaviour
 
         enemy.transform.localScale = Vector3.one;
 
+        CreateHealth(enemy);
         CreateVisual(enemy);
         CreatePhysics(enemy);
+        CreateContactDamage(enemy);
 
         EnemyPathfinder pathfinder =
             enemy.AddComponent<EnemyPathfinder>();
@@ -182,6 +193,34 @@ public sealed class EnemySpawner : MonoBehaviour
         return enemy;
     }
 
+    private void CreateHealth(GameObject enemy)
+    {
+        Health health =
+            enemy.AddComponent<Health>();
+
+        health.Initialize(
+            maxHealth,
+            DamageFaction.Enemy,
+            damageInvulnerabilityTime,
+            true);
+    }
+
+    private void CreateContactDamage(GameObject enemy)
+    {
+        if (!enableContactDamage)
+        {
+            return;
+        }
+
+        ContactDamage2D contactDamageComponent =
+            enemy.AddComponent<ContactDamage2D>();
+
+        contactDamageComponent.Initialize(
+            contactDamage,
+            contactDamageCooldown,
+            contactDamageTargets);
+    }
+
     private void CreateVisual(GameObject enemy)
     {
         EnemyVisual enemyVisual =
@@ -191,16 +230,12 @@ public sealed class EnemySpawner : MonoBehaviour
             ? enemySprite
             : GetFallbackSprite();
 
-        Color colorToUse = enemySprite != null
-            ? visualColor
-            : visualColor;
-
         enemyVisual.Initialize(
             spriteToUse,
             GetFallbackSprite(),
             visualWorldHeight,
             visualOffset,
-            colorToUse,
+            visualColor,
             sortingOrder);
     }
 
@@ -306,22 +341,27 @@ public sealed class EnemySpawner : MonoBehaviour
             0.001f,
             0.25f);
 
-        stopDistance = Mathf.Max(
-            0f,
-            stopDistance);
+        stopDistance = Mathf.Max(0f, stopDistance);
 
         lastPositionTolerance = Mathf.Clamp(
             lastPositionTolerance,
             0.01f,
             1f);
 
-        detectionRadius = Mathf.Max(
-            0.1f,
-            detectionRadius);
-
+        detectionRadius = Mathf.Max(0.1f, detectionRadius);
         loseTargetRadius = Mathf.Max(
             detectionRadius,
             loseTargetRadius);
+
+        maxHealth = Mathf.Max(1f, maxHealth);
+        damageInvulnerabilityTime = Mathf.Max(
+            0f,
+            damageInvulnerabilityTime);
+
+        contactDamage = Mathf.Max(0f, contactDamage);
+        contactDamageCooldown = Mathf.Max(
+            0f,
+            contactDamageCooldown);
 
         visualWorldHeight = Mathf.Max(
             0.05f,

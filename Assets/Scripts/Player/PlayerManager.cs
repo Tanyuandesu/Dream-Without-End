@@ -1,10 +1,8 @@
+using System;
 using UnityEngine;
 
 /// <summary>
-/// 管理玩家的生命週期。
-///
-/// 玩家只建立一次，之後切換迷宮時只重新定位，
-/// 不會跟著 GeneratedDungeon_Floor_X 一起被銷毀。
+/// 管理玩家生命週期與跨樓層存在。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(PlayerSpawner))]
@@ -14,6 +12,7 @@ public sealed class PlayerManager : MonoBehaviour
     [SerializeField] private PlayerSpawner playerSpawner;
 
     private GameObject currentPlayer;
+    private Health currentHealth;
 
     public GameObject CurrentPlayerObject => currentPlayer;
 
@@ -21,6 +20,10 @@ public sealed class PlayerManager : MonoBehaviour
         currentPlayer != null
             ? currentPlayer.transform
             : null;
+
+    public Health CurrentHealth => currentHealth;
+
+    public event Action<Health> PlayerDied;
 
     private void Reset()
     {
@@ -32,9 +35,6 @@ public sealed class PlayerManager : MonoBehaviour
         CacheComponents();
     }
 
-    /// <summary>
-    /// 玩家不存在時生成一次；已存在時移動到新出生點。
-    /// </summary>
     public Transform PlacePlayer(
         Vector2Int spawnCell,
         DungeonRenderer dungeonRenderer)
@@ -57,15 +57,89 @@ public sealed class PlayerManager : MonoBehaviour
             currentPlayer = playerSpawner.Spawn(
                 spawnPosition,
                 transform);
+
+            BindHealth();
         }
         else
         {
             MoveExistingPlayer(spawnPosition);
         }
 
-        return currentPlayer != null
-            ? currentPlayer.transform
-            : null;
+        return CurrentPlayer;
+    }
+
+    public void RevivePlayer()
+    {
+        if (currentHealth == null)
+        {
+            return;
+        }
+
+        currentHealth.Revive();
+
+        RuntimeDungeonPlayer controller =
+            currentPlayer.GetComponent<
+                RuntimeDungeonPlayer>();
+
+        if (controller != null)
+        {
+            controller.enabled = true;
+        }
+
+        Rigidbody2D body =
+            currentPlayer.GetComponent<Rigidbody2D>();
+
+        if (body != null)
+        {
+            body.simulated = true;
+            body.WakeUp();
+        }
+    }
+
+    private void BindHealth()
+    {
+        if (currentPlayer == null)
+        {
+            return;
+        }
+
+        if (currentHealth != null)
+        {
+            currentHealth.Died -= HandlePlayerDied;
+        }
+
+        currentHealth =
+            currentPlayer.GetComponent<Health>();
+
+        if (currentHealth != null)
+        {
+            currentHealth.Died += HandlePlayerDied;
+        }
+    }
+
+    private void HandlePlayerDied(Health health)
+    {
+        RuntimeDungeonPlayer controller =
+            currentPlayer.GetComponent<
+                RuntimeDungeonPlayer>();
+
+        if (controller != null)
+        {
+            controller.enabled = false;
+        }
+
+        Rigidbody2D body =
+            currentPlayer.GetComponent<Rigidbody2D>();
+
+        if (body != null)
+        {
+            body.linearVelocity = Vector2.zero;
+            body.angularVelocity = 0f;
+        }
+
+        PlayerDied?.Invoke(health);
+
+        Debug.Log("Player died.");
     }
 
     private void MoveExistingPlayer(Vector3 worldPosition)
@@ -92,6 +166,14 @@ public sealed class PlayerManager : MonoBehaviour
         {
             playerSpawner =
                 GetComponent<PlayerSpawner>();
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (currentHealth != null)
+        {
+            currentHealth.Died -= HandlePlayerDied;
         }
     }
 }

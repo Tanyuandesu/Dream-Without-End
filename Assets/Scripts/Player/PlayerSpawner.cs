@@ -1,11 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// 只負責第一次建立玩家。
-///
-/// Player 根物件管理移動與碰撞；
-/// Visual 子物件管理 Sprite、尺寸、偏移與動畫外觀。
-/// 因此更換角色圖片不會改變 Collider。
+/// 第一次建立玩家。
+/// Player 根物件負責生命、碰撞與移動；
+/// Visual 子物件只負責角色圖片。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class PlayerSpawner : MonoBehaviour
@@ -14,7 +12,6 @@ public sealed class PlayerSpawner : MonoBehaviour
     [Tooltip("把你的 2D 角色 Sprite 拖到這裡。留空時使用測試方塊。")]
     [SerializeField] private Sprite playerSprite;
 
-    [Tooltip("角色圖片在世界中的目標高度。地圖一格目前約為 1 單位。")]
     [Min(0.05f)]
     [SerializeField] private float visualWorldHeight = 0.9f;
 
@@ -28,12 +25,20 @@ public sealed class PlayerSpawner : MonoBehaviour
         new Color(0.25f, 0.95f, 0.65f);
 
     [Header("玩家碰撞")]
-    [Tooltip("碰撞體使用世界單位，與 Sprite 尺寸互不影響。")]
     [SerializeField] private Vector2 colliderSize =
         new Vector2(0.52f, 0.58f);
 
     [SerializeField] private Vector2 colliderOffset =
         new Vector2(0f, -0.08f);
+
+    [Header("玩家生命")]
+    [Min(1f)]
+    [SerializeField] private float maxHealth = 100f;
+
+    [Tooltip("玩家受到一次傷害後的無敵時間。")]
+    [Min(0f)]
+    [SerializeField] private float damageInvulnerabilityTime =
+        0.35f;
 
     [Header("玩家移動")]
     [Min(0.1f)]
@@ -52,6 +57,10 @@ public sealed class PlayerSpawner : MonoBehaviour
         colliderSize.y =
             Mathf.Max(0.05f, colliderSize.y);
 
+        maxHealth = Mathf.Max(1f, maxHealth);
+        damageInvulnerabilityTime =
+            Mathf.Max(0f, damageInvulnerabilityTime);
+
         moveSpeed = Mathf.Max(0.1f, moveSpeed);
     }
 
@@ -66,11 +75,23 @@ public sealed class PlayerSpawner : MonoBehaviour
         player.transform.localScale = Vector3.one;
         player.tag = "Player";
 
+        CreateHealth(player);
         CreatePhysics(player);
         CreateMovement(player);
         CreateVisual(player.transform);
 
         return player;
+    }
+
+    private void CreateHealth(GameObject player)
+    {
+        Health health = player.AddComponent<Health>();
+
+        health.Initialize(
+            maxHealth,
+            DamageFaction.Player,
+            damageInvulnerabilityTime,
+            false);
     }
 
     private void CreatePhysics(GameObject player)
@@ -197,7 +218,6 @@ public sealed class PlayerSpawner : MonoBehaviour
         }
 
         Texture2D texture = fallbackSprite.texture;
-
         Destroy(fallbackSprite);
 
         if (texture != null)
