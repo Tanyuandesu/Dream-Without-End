@@ -2,14 +2,11 @@ using UnityEngine;
 
 /// <summary>
 /// 第一次建立玩家。
-/// Player 根物件負責生命、碰撞與移動；
-/// Visual 子物件只負責角色圖片。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class PlayerSpawner : MonoBehaviour
 {
     [Header("角色圖片")]
-    [Tooltip("把你的 2D 角色 Sprite 拖到這裡。留空時使用測試方塊。")]
     [SerializeField] private Sprite playerSprite;
 
     [Min(0.05f)]
@@ -35,10 +32,28 @@ public sealed class PlayerSpawner : MonoBehaviour
     [Min(1f)]
     [SerializeField] private float maxHealth = 100f;
 
-    [Tooltip("玩家受到一次傷害後的無敵時間。")]
     [Min(0f)]
     [SerializeField] private float damageInvulnerabilityTime =
         0.35f;
+
+    [Header("玩家自動回血")]
+    [SerializeField] private bool enableRegeneration = true;
+
+    [Tooltip("最後一次受傷後，等待多少秒才進入回血狀態。")]
+    [Min(0f)]
+    [SerializeField] private float regenerationDelay = 3f;
+
+    [Tooltip("進入回血狀態後，每隔多少秒恢復一次生命。")]
+    [Min(0.01f)]
+    [SerializeField] private float regenerationInterval = 1f;
+
+    [Tooltip("每次回血恢復多少生命。")]
+    [Min(0f)]
+    [SerializeField] private float regenerationAmountPerTick = 5f;
+
+    [Tooltip("開啟後，玩家必須先受傷才會開始回血。")]
+    [SerializeField] private bool requireDamageBeforeRegeneration =
+        true;
 
     [Header("玩家移動")]
     [Min(0.1f)]
@@ -48,18 +63,22 @@ public sealed class PlayerSpawner : MonoBehaviour
 
     private void OnValidate()
     {
-        visualWorldHeight =
-            Mathf.Max(0.05f, visualWorldHeight);
-
-        colliderSize.x =
-            Mathf.Max(0.05f, colliderSize.x);
-
-        colliderSize.y =
-            Mathf.Max(0.05f, colliderSize.y);
-
+        visualWorldHeight = Mathf.Max(0.05f, visualWorldHeight);
+        colliderSize.x = Mathf.Max(0.05f, colliderSize.x);
+        colliderSize.y = Mathf.Max(0.05f, colliderSize.y);
         maxHealth = Mathf.Max(1f, maxHealth);
+
         damageInvulnerabilityTime =
             Mathf.Max(0f, damageInvulnerabilityTime);
+
+        regenerationDelay =
+            Mathf.Max(0f, regenerationDelay);
+
+        regenerationInterval =
+            Mathf.Max(0.01f, regenerationInterval);
+
+        regenerationAmountPerTick =
+            Mathf.Max(0f, regenerationAmountPerTick);
 
         moveSpeed = Mathf.Max(0.1f, moveSpeed);
     }
@@ -68,7 +87,8 @@ public sealed class PlayerSpawner : MonoBehaviour
         Vector3 worldPosition,
         Transform playerSystemRoot)
     {
-        GameObject player = new GameObject("Player");
+        GameObject player =
+            new GameObject("Player");
 
         player.transform.SetParent(playerSystemRoot);
         player.transform.position = worldPosition;
@@ -76,6 +96,7 @@ public sealed class PlayerSpawner : MonoBehaviour
         player.tag = "Player";
 
         CreateHealth(player);
+        CreateRegeneration(player);
         CreatePhysics(player);
         CreateMovement(player);
         CreateVisual(player.transform);
@@ -85,13 +106,27 @@ public sealed class PlayerSpawner : MonoBehaviour
 
     private void CreateHealth(GameObject player)
     {
-        Health health = player.AddComponent<Health>();
+        Health health =
+            player.AddComponent<Health>();
 
         health.Initialize(
             maxHealth,
             DamageFaction.Player,
             damageInvulnerabilityTime,
             false);
+    }
+
+    private void CreateRegeneration(GameObject player)
+    {
+        HealthRegeneration regeneration =
+            player.AddComponent<HealthRegeneration>();
+
+        regeneration.Initialize(
+            enableRegeneration,
+            regenerationDelay,
+            regenerationInterval,
+            regenerationAmountPerTick,
+            requireDamageBeforeRegeneration);
     }
 
     private void CreatePhysics(GameObject player)
@@ -124,7 +159,8 @@ public sealed class PlayerSpawner : MonoBehaviour
 
     private void CreateVisual(Transform playerRoot)
     {
-        GameObject visual = new GameObject("Visual");
+        GameObject visual =
+            new GameObject("Visual");
 
         visual.transform.SetParent(playerRoot);
         visual.transform.localPosition = visualOffset;
@@ -164,7 +200,8 @@ public sealed class PlayerSpawner : MonoBehaviour
         Sprite sprite,
         float targetHeight)
     {
-        float spriteHeight = sprite.bounds.size.y;
+        float spriteHeight =
+            sprite.bounds.size.y;
 
         if (spriteHeight <= 0.0001f)
         {
@@ -189,23 +226,26 @@ public sealed class PlayerSpawner : MonoBehaviour
             return fallbackSprite;
         }
 
-        Texture2D texture = new Texture2D(
-            1,
-            1,
-            TextureFormat.RGBA32,
-            false);
+        Texture2D texture =
+            new Texture2D(
+                1,
+                1,
+                TextureFormat.RGBA32,
+                false);
 
         texture.name = "PlayerFallbackTexture";
         texture.SetPixel(0, 0, Color.white);
         texture.Apply();
 
-        fallbackSprite = Sprite.Create(
-            texture,
-            new Rect(0f, 0f, 1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            1f);
+        fallbackSprite =
+            Sprite.Create(
+                texture,
+                new Rect(0f, 0f, 1f, 1f),
+                new Vector2(0.5f, 0.5f),
+                1f);
 
-        fallbackSprite.name = "PlayerFallbackSprite";
+        fallbackSprite.name =
+            "PlayerFallbackSprite";
 
         return fallbackSprite;
     }
@@ -217,7 +257,9 @@ public sealed class PlayerSpawner : MonoBehaviour
             return;
         }
 
-        Texture2D texture = fallbackSprite.texture;
+        Texture2D texture =
+            fallbackSprite.texture;
+
         Destroy(fallbackSprite);
 
         if (texture != null)
