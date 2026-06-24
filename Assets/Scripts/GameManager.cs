@@ -1,23 +1,28 @@
 using UnityEngine;
 
 /// <summary>
-/// 整體流程協調者。
-/// RequireComponent 讓主要模組在編輯模式中直接出現在 Inspector。
+/// 遊戲與樓層流程協調者。
+///
+/// 玩家由 PlayerManager 管理，只生成一次；
+/// 敵人由 EnemyManager 管理，每層重新生成。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(DungeonGenerator))]
 [RequireComponent(typeof(DungeonRenderer))]
-[RequireComponent(typeof(PlayerSpawner))]
 [RequireComponent(typeof(ExitSpawner))]
 [RequireComponent(typeof(CameraManager))]
 public sealed class GameManager : MonoBehaviour
 {
-    [Header("系統組件")]
+    [Header("地圖與流程組件")]
     [SerializeField] private DungeonGenerator dungeonGenerator;
     [SerializeField] private DungeonRenderer dungeonRenderer;
-    [SerializeField] private PlayerSpawner playerSpawner;
     [SerializeField] private ExitSpawner exitSpawner;
     [SerializeField] private CameraManager cameraManager;
+
+    [Header("獨立角色系統")]
+    [Tooltip("拖入 PlayerSystem 上的 PlayerManager。")]
+    [SerializeField] private PlayerManager playerManager;
+
     [Header("獨立敵人系統")]
     [Tooltip("拖入 EnemySystem 上的 EnemyManager。")]
     [SerializeField] private EnemyManager enemyManager;
@@ -44,6 +49,20 @@ public sealed class GameManager : MonoBehaviour
     private void Awake()
     {
         CacheComponents();
+
+        if (playerManager == null)
+        {
+            Debug.LogError(
+                "GameManager：找不到 PlayerManager。" +
+                "請建立子物件 PlayerSystem，掛上 PlayerManager。");
+        }
+
+        if (enemyManager == null)
+        {
+            Debug.LogError(
+                "GameManager：找不到 EnemyManager。" +
+                "請確認 EnemySystem 已正確設定。");
+        }
     }
 
     private void Start()
@@ -90,8 +109,18 @@ public sealed class GameManager : MonoBehaviour
             return;
         }
 
-        isGenerating = true;
         CacheComponents();
+
+        if (playerManager == null ||
+            enemyManager == null)
+        {
+            Debug.LogError(
+                "GameManager：PlayerManager 或 EnemyManager 尚未設定。");
+
+            return;
+        }
+
+        isGenerating = true;
 
         RemoveCurrentFloor();
 
@@ -110,10 +139,21 @@ public sealed class GameManager : MonoBehaviour
             currentLayout,
             currentDungeonRoot);
 
-        GameObject player = playerSpawner.Spawn(
-            currentLayout.StartCell,
-            currentDungeonRoot,
-            dungeonRenderer);
+        // 玩家由 PlayerSystem 保存。
+        // 第一次生成，之後只移動到新出生點。
+        Transform player =
+            playerManager.PlacePlayer(
+                currentLayout.StartCell,
+                dungeonRenderer);
+
+        if (player == null)
+        {
+            Debug.LogError(
+                "GameManager：玩家建立失敗。");
+
+            isGenerating = false;
+            return;
+        }
 
         exitSpawner.Spawn(
             currentLayout.ExitCell,
@@ -125,9 +165,9 @@ public sealed class GameManager : MonoBehaviour
             currentLayout,
             currentDungeonRoot,
             dungeonRenderer,
-            player.transform);
+            player);
 
-        cameraManager.SetTarget(player.transform);
+        cameraManager.SetTarget(player);
 
         isGenerating = false;
     }
@@ -157,14 +197,17 @@ public sealed class GameManager : MonoBehaviour
         dungeonRenderer =
             GetComponent<DungeonRenderer>();
 
-        playerSpawner =
-            GetComponent<PlayerSpawner>();
-
         exitSpawner =
             GetComponent<ExitSpawner>();
 
         cameraManager =
             GetComponent<CameraManager>();
+
+        if (playerManager == null)
+        {
+            playerManager =
+                GetComponentInChildren<PlayerManager>(true);
+        }
 
         if (enemyManager == null)
         {
@@ -180,20 +223,26 @@ public sealed class GameManager : MonoBehaviour
                 ? currentLayout.Rooms.Count
                 : 0;
 
-        GUI.Box(new Rect(12f, 12f, 390f, 105f), "");
+        int enemyCount =
+            enemyManager != null
+                ? enemyManager.ActiveEnemyCount
+                : 0;
+
+        GUI.Box(new Rect(12f, 12f, 450f, 105f), "");
 
         GUI.Label(
-            new Rect(24f, 22f, 360f, 24f),
-            "WASD / 方向鍵：移動    R：按新參數重生成本層");
+            new Rect(24f, 22f, 420f, 24f),
+            "WASD / 方向鍵：移動    R：重生成本層");
 
         GUI.Label(
-            new Rect(24f, 48f, 360f, 24f),
-            "黃色方塊：進入下一個隨機迷宮");
+            new Rect(24f, 48f, 420f, 24f),
+            "玩家跨樓層保留，黃色方塊進入下一個迷宮");
 
         GUI.Label(
-            new Rect(24f, 74f, 360f, 24f),
+            new Rect(24f, 74f, 420f, 24f),
             "Floor: " + CurrentFloor +
             "    Rooms: " + roomCount +
+            "    Enemies: " + enemyCount +
             "    Seed: " + CurrentSeed);
     }
 }

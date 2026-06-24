@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 所有測試敵人的可調參數集中在這個組件。
+/// 測試敵人生成器。
 ///
-/// 修改 Enemy Count 後，需要按 R 或進入下一層，
-/// 才會按照新數量重新生成。
+/// 所有測試敵人的數量、AI 參數、外觀與碰撞參數
+/// 都集中在 EnemySystem 上的這個組件中。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class EnemySpawner : MonoBehaviour
@@ -15,10 +15,10 @@ public sealed class EnemySpawner : MonoBehaviour
     [Min(0)]
     [SerializeField] private int enemyCount = 1;
 
-    [Tooltip("開啟後，敵人會優先生成在靠近出生點的房間，方便測試。")]
+    [Tooltip("開啟後，敵人優先生成在靠近玩家出生點的房間。")]
     [SerializeField] private bool spawnNearPlayerFirst = true;
 
-    [Tooltip("出生房與出口房不會生成敵人。")]
+    [Tooltip("出口房不生成敵人。")]
     [SerializeField] private bool excludeExitRoom = true;
 
     [Header("移動參數")]
@@ -43,21 +43,35 @@ public sealed class EnemySpawner : MonoBehaviour
 
     [SerializeField] private bool requireLineOfSight = false;
 
-    [Tooltip("開啟視線判定時，哪些 Layer 可以阻擋視線。")]
+    [Tooltip("開啟視線判定時，可阻擋視線的 Layer。")]
     [SerializeField] private LayerMask obstacleMask = ~0;
 
-    [Header("外觀與碰撞")]
-    [Range(0.1f, 1.5f)]
-    [SerializeField] private float visualScale = 0.68f;
+    [Header("敵人外觀")]
+    [Tooltip("把敵人 Sprite 拖到這裡。留空時使用測試方塊。")]
+    [SerializeField] private Sprite enemySprite;
 
-    [Tooltip("碰撞體佔一個地圖格子的比例。")]
-    [Range(0.1f, 1f)]
-    [SerializeField] private float colliderScale = 0.62f;
+    [Tooltip("角色圖片在世界中的目標高度。地圖一格目前約為 1 單位。")]
+    [Min(0.05f)]
+    [SerializeField] private float visualWorldHeight = 0.8f;
 
-    [SerializeField] private Color enemyColor =
+    [SerializeField] private Vector2 visualOffset =
+        Vector2.zero;
+
+    [SerializeField] private Color visualColor =
         new Color(0.2f, 0.85f, 0.25f);
 
+    [SerializeField] private int sortingOrder = 20;
+
+    [Header("敵人碰撞")]
+    [Tooltip("碰撞體尺寸使用世界單位，不會跟著 Sprite 縮放。")]
+    [SerializeField] private Vector2 colliderSize =
+        new Vector2(0.58f, 0.58f);
+
+    [SerializeField] private Vector2 colliderOffset =
+        Vector2.zero;
+
     private PhysicsMaterial2D frictionlessMaterial;
+    private Sprite fallbackSprite;
 
     private void Awake()
     {
@@ -82,6 +96,8 @@ public sealed class EnemySpawner : MonoBehaviour
         if (layout == null ||
             layout.Rooms == null ||
             layout.Rooms.Count < 2 ||
+            dungeonRoot == null ||
+            dungeonRenderer == null ||
             player == null)
         {
             return enemies;
@@ -122,37 +138,17 @@ public sealed class EnemySpawner : MonoBehaviour
         DungeonRenderer dungeonRenderer,
         Transform player)
     {
-        GameObject enemy = dungeonRenderer.CreateSquare(
-            "TestEnemy_" + index,
-            spawnCell,
-            enemyColor,
-            dungeonRoot,
-            20,
-            false,
-            visualScale);
+        GameObject enemy =
+            new GameObject("TestEnemy_" + index);
 
-        BoxCollider2D enemyCollider =
-            enemy.AddComponent<BoxCollider2D>();
+        enemy.transform.SetParent(dungeonRoot);
+        enemy.transform.position =
+            dungeonRenderer.CellToWorld(spawnCell);
 
-        // CreateSquare 會縮放整個根物件。
-        // 這裡反向換算，讓世界中的碰撞尺寸仍由 Collider Scale 控制。
-        enemyCollider.size = Vector2.one *
-            (colliderScale / Mathf.Max(0.01f, visualScale));
+        enemy.transform.localScale = Vector3.one;
 
-        enemyCollider.sharedMaterial =
-            frictionlessMaterial;
-
-        Rigidbody2D body =
-            enemy.AddComponent<Rigidbody2D>();
-
-        body.bodyType = RigidbodyType2D.Dynamic;
-        body.gravityScale = 0f;
-        body.freezeRotation = true;
-        body.interpolation =
-            RigidbodyInterpolation2D.Interpolate;
-        body.collisionDetectionMode =
-            CollisionDetectionMode2D.Continuous;
-        body.sleepMode = RigidbodySleepMode2D.NeverSleep;
+        CreateVisual(enemy);
+        CreatePhysics(enemy);
 
         EnemyPathfinder pathfinder =
             enemy.AddComponent<EnemyPathfinder>();
@@ -184,6 +180,52 @@ public sealed class EnemySpawner : MonoBehaviour
             lastPositionTolerance);
 
         return enemy;
+    }
+
+    private void CreateVisual(GameObject enemy)
+    {
+        EnemyVisual enemyVisual =
+            enemy.AddComponent<EnemyVisual>();
+
+        Sprite spriteToUse = enemySprite != null
+            ? enemySprite
+            : GetFallbackSprite();
+
+        Color colorToUse = enemySprite != null
+            ? visualColor
+            : visualColor;
+
+        enemyVisual.Initialize(
+            spriteToUse,
+            GetFallbackSprite(),
+            visualWorldHeight,
+            visualOffset,
+            colorToUse,
+            sortingOrder);
+    }
+
+    private void CreatePhysics(GameObject enemy)
+    {
+        BoxCollider2D enemyCollider =
+            enemy.AddComponent<BoxCollider2D>();
+
+        enemyCollider.size = colliderSize;
+        enemyCollider.offset = colliderOffset;
+        enemyCollider.sharedMaterial =
+            frictionlessMaterial;
+
+        Rigidbody2D body =
+            enemy.AddComponent<Rigidbody2D>();
+
+        body.bodyType = RigidbodyType2D.Dynamic;
+        body.gravityScale = 0f;
+        body.freezeRotation = true;
+        body.interpolation =
+            RigidbodyInterpolation2D.Interpolate;
+        body.collisionDetectionMode =
+            CollisionDetectionMode2D.Continuous;
+        body.sleepMode =
+            RigidbodySleepMode2D.NeverSleep;
     }
 
     private List<Vector2Int> GetCandidateRoomCenters(
@@ -264,7 +306,9 @@ public sealed class EnemySpawner : MonoBehaviour
             0.001f,
             0.25f);
 
-        stopDistance = Mathf.Max(0f, stopDistance);
+        stopDistance = Mathf.Max(
+            0f,
+            stopDistance);
 
         lastPositionTolerance = Mathf.Clamp(
             lastPositionTolerance,
@@ -279,15 +323,17 @@ public sealed class EnemySpawner : MonoBehaviour
             detectionRadius,
             loseTargetRadius);
 
-        visualScale = Mathf.Clamp(
-            visualScale,
-            0.1f,
-            1.5f);
+        visualWorldHeight = Mathf.Max(
+            0.05f,
+            visualWorldHeight);
 
-        colliderScale = Mathf.Clamp(
-            colliderScale,
-            0.1f,
-            1f);
+        colliderSize.x = Mathf.Max(
+            0.05f,
+            colliderSize.x);
+
+        colliderSize.y = Mathf.Max(
+            0.05f,
+            colliderSize.y);
     }
 
     private void CreateFrictionlessMaterial()
@@ -304,11 +350,53 @@ public sealed class EnemySpawner : MonoBehaviour
         frictionlessMaterial.bounciness = 0f;
     }
 
+    private Sprite GetFallbackSprite()
+    {
+        if (fallbackSprite != null)
+        {
+            return fallbackSprite;
+        }
+
+        Texture2D texture = new Texture2D(
+            1,
+            1,
+            TextureFormat.RGBA32,
+            false);
+
+        texture.name = "EnemyFallbackTexture";
+        texture.SetPixel(0, 0, Color.white);
+        texture.Apply();
+
+        fallbackSprite = Sprite.Create(
+            texture,
+            new Rect(0f, 0f, 1f, 1f),
+            new Vector2(0.5f, 0.5f),
+            1f);
+
+        fallbackSprite.name =
+            "EnemyFallbackSprite";
+
+        return fallbackSprite;
+    }
+
     private void OnDestroy()
     {
         if (frictionlessMaterial != null)
         {
             Destroy(frictionlessMaterial);
+        }
+
+        if (fallbackSprite != null)
+        {
+            Texture2D texture =
+                fallbackSprite.texture;
+
+            Destroy(fallbackSprite);
+
+            if (texture != null)
+            {
+                Destroy(texture);
+            }
         }
     }
 }
