@@ -3,8 +3,9 @@ using UnityEngine;
 /// <summary>
 /// 遊戲與樓層流程協調者。
 ///
-/// 玩家由 PlayerManager 管理，只生成一次；
-/// 敵人由 EnemyManager 管理，每層重新生成。
+/// 玩家跨樓層保留；
+/// 敵人與道具由各自系統管理；
+/// 建立下一層前會廣播 RunProgressionContext。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(DungeonGenerator))]
@@ -20,15 +21,19 @@ public sealed class GameManager : MonoBehaviour
     [SerializeField] private CameraManager cameraManager;
 
     [Header("獨立角色系統")]
-    [Tooltip("拖入 PlayerSystem 上的 PlayerManager。")]
     [SerializeField] private PlayerManager playerManager;
 
     [Header("獨立敵人系統")]
-    [Tooltip("拖入 EnemySystem 上的 EnemyManager。")]
     [SerializeField] private EnemyManager enemyManager;
+
+    [Header("獨立道具系統")]
+    [SerializeField] private ItemManager itemManager;
 
     [Header("啟動")]
     [SerializeField] private bool generateOnStart = true;
+
+    [Header("除錯")]
+    [SerializeField] private bool showDebugOverlay = true;
 
     private Transform currentDungeonRoot;
     private DungeonLayout currentLayout;
@@ -41,6 +46,11 @@ public sealed class GameManager : MonoBehaviour
             ? currentLayout.Seed
             : 0;
 
+    public ItemProgressSnapshot CurrentItemProgress =>
+        itemManager != null
+            ? itemManager.CreateProgressSnapshot()
+            : new ItemProgressSnapshot(null, 0, -1);
+
     private void Reset()
     {
         CacheComponents();
@@ -49,20 +59,6 @@ public sealed class GameManager : MonoBehaviour
     private void Awake()
     {
         CacheComponents();
-
-        if (playerManager == null)
-        {
-            Debug.LogError(
-                "GameManager：找不到 PlayerManager。" +
-                "請建立子物件 PlayerSystem，掛上 PlayerManager。");
-        }
-
-        if (enemyManager == null)
-        {
-            Debug.LogError(
-                "GameManager：找不到 EnemyManager。" +
-                "請確認 EnemySystem 已正確設定。");
-        }
     }
 
     private void Start()
@@ -112,10 +108,11 @@ public sealed class GameManager : MonoBehaviour
         CacheComponents();
 
         if (playerManager == null ||
-            enemyManager == null)
+            enemyManager == null ||
+            itemManager == null)
         {
             Debug.LogError(
-                "GameManager：PlayerManager 或 EnemyManager 尚未設定。");
+                "GameManager：PlayerManager、EnemyManager 或 ItemManager 未設定。");
 
             return;
         }
@@ -123,6 +120,14 @@ public sealed class GameManager : MonoBehaviour
         isGenerating = true;
 
         RemoveCurrentFloor();
+
+        RunProgressionContext progressionContext =
+            new RunProgressionContext(
+                CurrentFloor,
+                itemManager.CreateProgressSnapshot());
+
+        BroadcastRunProgression(
+            progressionContext);
 
         currentLayout =
             dungeonGenerator.Generate(CurrentFloor);
@@ -139,8 +144,6 @@ public sealed class GameManager : MonoBehaviour
             currentLayout,
             currentDungeonRoot);
 
-        // 玩家由 PlayerSystem 保存。
-        // 第一次生成，之後只移動到新出生點。
         Transform player =
             playerManager.PlacePlayer(
                 currentLayout.StartCell,
@@ -161,6 +164,12 @@ public sealed class GameManager : MonoBehaviour
             dungeonRenderer,
             this);
 
+        itemManager.SetupFloor(
+            CurrentFloor,
+            currentLayout,
+            currentDungeonRoot,
+            dungeonRenderer);
+
         enemyManager.SetupFloor(
             currentLayout,
             currentDungeonRoot,
@@ -172,11 +181,34 @@ public sealed class GameManager : MonoBehaviour
         isGenerating = false;
     }
 
+    private void BroadcastRunProgression(
+        RunProgressionContext context)
+    {
+        MonoBehaviour[] behaviours =
+            GetComponentsInChildren<MonoBehaviour>(true);
+
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            IRunProgressionConsumer consumer =
+                behaviours[i] as IRunProgressionConsumer;
+
+            if (consumer != null)
+            {
+                consumer.ApplyRunProgression(context);
+            }
+        }
+    }
+
     private void RemoveCurrentFloor()
     {
         if (enemyManager != null)
         {
             enemyManager.ClearFloor();
+        }
+
+        if (itemManager != null)
+        {
+            itemManager.ClearFloor();
         }
 
         if (currentDungeonRoot == null)
@@ -214,10 +246,21 @@ public sealed class GameManager : MonoBehaviour
             enemyManager =
                 GetComponentInChildren<EnemyManager>(true);
         }
+
+        if (itemManager == null)
+        {
+            itemManager =
+                GetComponentInChildren<ItemManager>(true);
+        }
     }
 
     private void OnGUI()
     {
+        if (!showDebugOverlay)
+        {
+            return;
+        }
+
         int roomCount =
             currentLayout != null
                 ? currentLayout.Rooms.Count
@@ -228,21 +271,45 @@ public sealed class GameManager : MonoBehaviour
                 ? enemyManager.ActiveEnemyCount
                 : 0;
 
-        GUI.Box(new Rect(12f, 12f, 450f, 105f), "");
+        int itemCount =
+            itemManager != null
+                ? itemManager.CollectedItemCount
+                : 0;
+
+        float nextItemChance =
+            itemManager != null
+                ? itemManager.GetSpawnChanceForFloor(
+                    CurrentFloor + 1)
+                : 0f;
+
+        GUI.Box(
+            new Rect(12f, 12f, 570f, 130f),
+            "");
 
         GUI.Label(
-            new Rect(24f, 22f, 420f, 24f),
+            new Rect(24f, 22f, 540f, 24f),
             "WASD / 方向鍵：移動    R：重生成本層");
 
         GUI.Label(
-            new Rect(24f, 48f, 420f, 24f),
-            "玩家跨樓層保留，黃色方塊進入下一個迷宮");
+            new Rect(24f, 48f, 540f, 24f),
+            "黃色方塊：下一層    核心道具：碰觸拾取");
 
         GUI.Label(
-            new Rect(24f, 74f, 420f, 24f),
+            new Rect(24f, 74f, 540f, 24f),
             "Floor: " + CurrentFloor +
             "    Rooms: " + roomCount +
             "    Enemies: " + enemyCount +
             "    Seed: " + CurrentSeed);
+
+        GUI.Label(
+            new Rect(24f, 100f, 540f, 24f),
+            "Items: " + itemCount +
+            "    Progression Score: " +
+            (itemManager != null
+                ? itemManager.ProgressionScore
+                : 0) +
+            "    Next Chance: " +
+            Mathf.RoundToInt(nextItemChance * 100f) +
+            "%");
     }
 }
