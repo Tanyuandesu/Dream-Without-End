@@ -11,15 +11,21 @@ public sealed class GameFlowManager : MonoBehaviour
     [Header("場景名稱")]
     [SerializeField] private string titleSceneName = "TitleScene";
     [SerializeField] private string gameSceneName = "GameScene";
+    [SerializeField] private string endingSceneName = "EndingScene";
 
     [Header("流程")]
     [SerializeField] private bool showCursorOnTitle = true;
+    [SerializeField] private bool showCursorOnEnding = true;
     [SerializeField] private bool hideCursorDuringGame = false;
 
     private bool isLoading;
 
     public GameFlowState State { get; private set; }
     public bool IsLoading => isLoading;
+
+    public string TitleSceneName => titleSceneName;
+    public string GameSceneName => gameSceneName;
+    public string EndingSceneName => endingSceneName;
 
     public event Action<GameFlowState> StateChanged;
     public event Action<string> SceneLoadStarted;
@@ -58,16 +64,28 @@ public sealed class GameFlowManager : MonoBehaviour
             return Instance;
         }
 
-        GameObject flowObject = new GameObject("AppFlow_Runtime");
+        GameObject flowObject =
+            new GameObject("AppFlow_Runtime");
+
         return flowObject.AddComponent<GameFlowManager>();
     }
 
     public void StartNewGame()
     {
-        if (!isLoading)
+        LoadGameAfter(0f);
+    }
+
+    public void LoadGameAfter(float delay)
+    {
+        if (isLoading)
         {
-            StartCoroutine(LoadSceneRoutine(gameSceneName, 0f));
+            return;
         }
+
+        StartCoroutine(
+            LoadSceneRoutine(
+                gameSceneName,
+                Mathf.Max(0f, delay)));
     }
 
     public void ReturnToTitle()
@@ -77,25 +95,62 @@ public sealed class GameFlowManager : MonoBehaviour
 
     public void ReturnToTitleAfter(float delay)
     {
-        if (!isLoading)
+        if (isLoading)
         {
-            StartCoroutine(
-                LoadSceneRoutine(
-                    titleSceneName,
-                    Mathf.Max(0f, delay)));
+            return;
         }
+
+        StartCoroutine(
+            LoadSceneRoutine(
+                titleSceneName,
+                Mathf.Max(0f, delay)));
+    }
+
+    public void LoadEnding()
+    {
+        LoadEndingAfter(0f);
+    }
+
+    public void LoadEndingAfter(float delay)
+    {
+        if (isLoading)
+        {
+            return;
+        }
+
+        StartCoroutine(
+            LoadSceneRoutine(
+                endingSceneName,
+                Mathf.Max(0f, delay)));
     }
 
     public bool TryBeginGameOver()
     {
         if (isLoading ||
             State == GameFlowState.GameOver ||
-            State == GameFlowState.Title)
+            State == GameFlowState.Victory ||
+            State == GameFlowState.Title ||
+            State == GameFlowState.Ending)
         {
             return false;
         }
 
         SetState(GameFlowState.GameOver);
+        return true;
+    }
+
+    public bool TryBeginVictory()
+    {
+        if (isLoading ||
+            State == GameFlowState.Victory ||
+            State == GameFlowState.GameOver ||
+            State == GameFlowState.Title ||
+            State == GameFlowState.Ending)
+        {
+            return false;
+        }
+
+        SetState(GameFlowState.Victory);
         return true;
     }
 
@@ -114,7 +169,9 @@ public sealed class GameFlowManager : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(sceneName))
         {
-            Debug.LogError("GameFlowManager：場景名稱為空。");
+            Debug.LogError(
+                "GameFlowManager：場景名稱為空。");
+
             yield break;
         }
 
@@ -135,7 +192,9 @@ public sealed class GameFlowManager : MonoBehaviour
         if (operation == null)
         {
             Debug.LogError(
-                "GameFlowManager：無法載入場景 " + sceneName);
+                "GameFlowManager：無法載入場景 " +
+                sceneName);
+
             isLoading = false;
             yield break;
         }
@@ -179,6 +238,20 @@ public sealed class GameFlowManager : MonoBehaviour
             {
                 Cursor.visible = false;
                 Cursor.lockState = CursorLockMode.Locked;
+            }
+
+            return;
+        }
+
+        if (sceneName == endingSceneName)
+        {
+            SetState(GameFlowState.Ending);
+            Time.timeScale = 1f;
+
+            if (showCursorOnEnding)
+            {
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
             }
 
             return;

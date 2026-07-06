@@ -3,5 +3,7 @@ public enum GameFlowState
     Title,
     Loading,
     Playing,
-    GameOver
+    GameOver,
+    Victory,
+    Ending
 }
