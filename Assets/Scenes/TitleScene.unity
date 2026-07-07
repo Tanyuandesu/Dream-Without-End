@@ -1520,7 +1520,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   titleSceneName: TitleScene
   gameSceneName: GameScene
+  endingSceneName: EndingScene
   showCursorOnTitle: 1
+  showCursorOnEnding: 1
   hideCursorDuringGame: 0
 --- !u!4 &1921789830
 Transform:
