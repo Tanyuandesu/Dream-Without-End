@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c68020dc26226ca4382676ecae26be99, type: 3}
+  m_Name: DreamBackgroundProgressionProfile
+  m_EditorClassIdentifier: 
+  stages:
+  - minimumCollectedItems: 0
+    backgroundBrightness: 0.65
+    fogAlphaMultiplier: 0.35
+    fogSpeedMultiplier: 0.4
+    fogAmplitudeMultiplier: 0.4
+    dustEmissionMultiplier: 0.15
+    dustSizeMultiplier: 0.7
+    glowEmissionMultiplier: 0.05
+    glowSizeMultiplier: 0.6
+    transitionDuration: 3
+  - minimumCollectedItems: 2
+    backgroundBrightness: 0.85
+    fogAlphaMultiplier: 0.75
+    fogSpeedMultiplier: 0.8
+    fogAmplitudeMultiplier: 0.8
+    dustEmissionMultiplier: 0.6
+    dustSizeMultiplier: 0.9
+    glowEmissionMultiplier: 0.4
+    glowSizeMultiplier: 0.85
+    transitionDuration: 3
+  - minimumCollectedItems: 4
+    backgroundBrightness: 1
+    fogAlphaMultiplier: 1.1
+    fogSpeedMultiplier: 1.2
+    fogAmplitudeMultiplier: 1.2
+    dustEmissionMultiplier: 1.1
+    dustSizeMultiplier: 1.15
+    glowEmissionMultiplier: 1
+    glowSizeMultiplier: 1.1
+    transitionDuration: 3
+  - minimumCollectedItems: 6
+    backgroundBrightness: 1.2
+    fogAlphaMultiplier: 0
+    fogSpeedMultiplier: 0
+    fogAmplitudeMultiplier: 0
+    dustEmissionMultiplier: 1.8
+    dustSizeMultiplier: 1.3
+    glowEmissionMultiplier: 2.2
+    glowSizeMultiplier: 1.4
+    transitionDuration: 1

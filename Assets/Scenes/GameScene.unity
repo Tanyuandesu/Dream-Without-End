@@ -233,6 +233,7 @@ GameObject:
   - component: {fileID: 247294342}
   - component: {fileID: 247294344}
   - component: {fileID: 247294343}
+  - component: {fileID: 247294345}
   m_Layer: 0
   m_Name: FogLayer_B
   m_TagString: Untagged
@@ -249,8 +250,8 @@ Transform:
   m_GameObject: {fileID: 247294341}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.36, y: 2.59, z: 10}
-  m_LocalScale: {x: 1.1622252, y: 0.8335453, z: 0.8172407}
+  m_LocalPosition: {x: 4.49, y: 8.8, z: 10}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 1774352368}
@@ -276,6 +277,14 @@ MonoBehaviour:
   scalePulseAmount: 0.015
   scalePulseSpeed: 0.25
   phaseOffset: 0
+  spriteRenderer: {fileID: 0}
+  initialLocalPosition: {x: 0, y: 0, z: 0}
+  initialLocalScale: {x: 0, y: 0, z: 0}
+  initialColor:
+    r: 0
+    g: 0
+    b: 0
+    a: 0
 --- !u!212 &247294344
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -331,6 +340,27 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &247294345
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 247294341}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 06c73bc193bef60449ae0e625e1d6b34, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  driftAmplitude: {x: 0.35, y: 0.22}
+  driftSpeed: {x: 0.1, y: 0.09}
+  baseAlpha: 0.1
+  alphaPulseAmount: 0.04
+  alphaPulseSpeed: 0.45
+  enableScalePulse: 1
+  scalePulseAmount: 0.015
+  scalePulseSpeed: 0.25
+  phaseOffset: 0
 --- !u!1 &249912577
 GameObject:
   m_ObjectHideFlags: 0
@@ -357,12 +387,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 249912577}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 733221004}
+  m_Father: {fileID: 1774352368}
   m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
 --- !u!199 &249912579
 ParticleSystemRenderer:
@@ -5775,12 +5805,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 624218977}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 733221004}
+  m_Father: {fileID: 1774352368}
   m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
 --- !u!199 &624218979
 ParticleSystemRenderer:
@@ -10611,9 +10641,7 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 249912578}
-  - {fileID: 624218978}
+  m_Children: []
   m_Father: {fileID: 1774352368}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!212 &733221005
@@ -11330,6 +11358,7 @@ GameObject:
   - component: {fileID: 1244888844}
   - component: {fileID: 1244888846}
   - component: {fileID: 1244888845}
+  - component: {fileID: 1244888847}
   m_Layer: 0
   m_Name: FogLayer_A
   m_TagString: Untagged
@@ -11373,6 +11402,14 @@ MonoBehaviour:
   scalePulseAmount: 0.015
   scalePulseSpeed: 0.25
   phaseOffset: 0
+  spriteRenderer: {fileID: 0}
+  initialLocalPosition: {x: 0, y: 0, z: 0}
+  initialLocalScale: {x: 0, y: 0, z: 0}
+  initialColor:
+    r: 0
+    g: 0
+    b: 0
+    a: 0
 --- !u!212 &1244888846
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -11428,6 +11465,27 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &1244888847
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1244888843}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 06c73bc193bef60449ae0e625e1d6b34, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  driftAmplitude: {x: 0.35, y: 0.22}
+  driftSpeed: {x: 0.06, y: 0.04}
+  baseAlpha: 0.1
+  alphaPulseAmount: 0.04
+  alphaPulseSpeed: 0.45
+  enableScalePulse: 1
+  scalePulseAmount: 0.015
+  scalePulseSpeed: 0.25
+  phaseOffset: 0
 --- !u!1 &1560645092
 GameObject:
   m_ObjectHideFlags: 0
@@ -11612,6 +11670,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1774352368}
+  - component: {fileID: 1774352369}
+  - component: {fileID: 1774352370}
   m_Layer: 0
   m_Name: DreamBackgroundSystem
   m_TagString: Untagged
@@ -11632,11 +11692,50 @@ Transform:
   m_LocalScale: {x: 2.2, y: 2.2, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
-  - {fileID: 733221004}
   - {fileID: 1244888844}
   - {fileID: 247294342}
+  - {fileID: 249912578}
+  - {fileID: 624218978}
+  - {fileID: 733221004}
   m_Father: {fileID: 330585546}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1774352369
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1774352367}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c08c2fc50a480b545b7643a9ff0aeba3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  itemManager: {fileID: 619913693}
+  profile: {fileID: 11400000, guid: 49da4c0a9f49d1641b72accf8a630a94, type: 2}
+  backgroundBase: {fileID: 733221005}
+  fogLayers:
+  - {fileID: 1244888847}
+  - {fileID: 247294345}
+  dustParticles: {fileID: 249912580}
+  glowParticles: {fileID: 624218980}
+  logStageChanges: 1
+--- !u!114 &1774352370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1774352367}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48d474bb2ac47a04faa1b2a339113b99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  controller: {fileID: 1774352369}
+  showDebugButtons: 1
+  enableKeyboardPreview: 1
+  panelPosition: {x: 15, y: 15}
 --- !u!1 &1886192040
 GameObject:
   m_ObjectHideFlags: 0

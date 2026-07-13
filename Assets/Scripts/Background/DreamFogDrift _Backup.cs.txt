@@ -4,11 +4,11 @@ using UnityEngine;
 [RequireComponent(typeof(SpriteRenderer))]
 public sealed class DreamFogDrift : MonoBehaviour
 {
-    [Header("基礎漂移")]
+    [Header("漂移")]
     [SerializeField] private Vector2 driftAmplitude = new Vector2(0.35f, 0.22f);
     [SerializeField] private Vector2 driftSpeed = new Vector2(0.06f, 0.04f);
 
-    [Header("基礎透明度")]
+    [Header("呼吸透明度")]
     [Range(0f, 1f)]
     [SerializeField] private float baseAlpha = 0.18f;
 
@@ -18,7 +18,7 @@ public sealed class DreamFogDrift : MonoBehaviour
     [Min(0f)]
     [SerializeField] private float alphaPulseSpeed = 0.45f;
 
-    [Header("縮放呼吸")]
+    [Header("可選縮放呼吸")]
     [SerializeField] private bool enableScalePulse = true;
 
     [Range(0f, 0.1f)]
@@ -28,16 +28,12 @@ public sealed class DreamFogDrift : MonoBehaviour
     [SerializeField] private float scalePulseSpeed = 0.25f;
 
     [Header("相位")]
-    [SerializeField] private float phaseOffset;
+    [SerializeField] private float phaseOffset = 0f;
 
     private SpriteRenderer spriteRenderer;
     private Vector3 initialLocalPosition;
     private Vector3 initialLocalScale;
     private Color initialColor;
-
-    private float runtimeAlphaMultiplier = 1f;
-    private float runtimeSpeedMultiplier = 1f;
-    private float runtimeAmplitudeMultiplier = 1f;
 
     private void Awake()
     {
@@ -51,19 +47,14 @@ public sealed class DreamFogDrift : MonoBehaviour
     {
         float t = Time.unscaledTime + phaseOffset;
 
-        float x = Mathf.Sin(t * driftSpeed.x * runtimeSpeedMultiplier)
-            * driftAmplitude.x * runtimeAmplitudeMultiplier;
-
-        float y = Mathf.Cos(t * driftSpeed.y * runtimeSpeedMultiplier)
-            * driftAmplitude.y * runtimeAmplitudeMultiplier;
+        float x = Mathf.Sin(t * driftSpeed.x) * driftAmplitude.x;
+        float y = Mathf.Cos(t * driftSpeed.y) * driftAmplitude.y;
 
         transform.localPosition =
             initialLocalPosition + new Vector3(x, y, 0f);
 
         float alpha =
-            baseAlpha * runtimeAlphaMultiplier +
-            Mathf.Sin(t * alphaPulseSpeed * runtimeSpeedMultiplier)
-            * alphaPulseAmount * runtimeAlphaMultiplier;
+            baseAlpha + Mathf.Sin(t * alphaPulseSpeed) * alphaPulseAmount;
 
         Color color = initialColor;
         color.a = Mathf.Clamp01(alpha);
@@ -72,22 +63,11 @@ public sealed class DreamFogDrift : MonoBehaviour
         if (enableScalePulse)
         {
             float scale =
-                1f +
-                Mathf.Sin(t * scalePulseSpeed * runtimeSpeedMultiplier)
-                * scalePulseAmount * runtimeAmplitudeMultiplier;
+                1f + Mathf.Sin(t * scalePulseSpeed) * scalePulseAmount;
 
-            transform.localScale = initialLocalScale * scale;
+            transform.localScale =
+                initialLocalScale * scale;
         }
-    }
-
-    public void SetRuntimeIntensity(
-        float alphaMultiplier,
-        float speedMultiplier,
-        float amplitudeMultiplier)
-    {
-        runtimeAlphaMultiplier = Mathf.Max(0f, alphaMultiplier);
-        runtimeSpeedMultiplier = Mathf.Max(0f, speedMultiplier);
-        runtimeAmplitudeMultiplier = Mathf.Max(0f, amplitudeMultiplier);
     }
 
     private void OnValidate()
