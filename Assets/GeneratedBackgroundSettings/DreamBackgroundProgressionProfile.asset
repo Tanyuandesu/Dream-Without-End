@@ -45,11 +45,21 @@ MonoBehaviour:
     transitionDuration: 3
   - minimumCollectedItems: 6
     backgroundBrightness: 1.2
-    fogAlphaMultiplier: 0
-    fogSpeedMultiplier: 0
-    fogAmplitudeMultiplier: 0
+    fogAlphaMultiplier: 1.4
+    fogSpeedMultiplier: 1.5
+    fogAmplitudeMultiplier: 1.5
     dustEmissionMultiplier: 1.8
     dustSizeMultiplier: 1.3
     glowEmissionMultiplier: 2.2
     glowSizeMultiplier: 1.4
     transitionDuration: 1
+  - minimumCollectedItems: 7
+    backgroundBrightness: 1.05
+    fogAlphaMultiplier: 0
+    fogSpeedMultiplier: 0
+    fogAmplitudeMultiplier: 0
+    dustEmissionMultiplier: 1.5
+    dustSizeMultiplier: 1.2
+    glowEmissionMultiplier: 1.9
+    glowSizeMultiplier: 1.5
+    transitionDuration: 0.1
