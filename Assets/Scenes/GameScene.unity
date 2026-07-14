@@ -119,6 +119,55 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
+--- !u!1 &11691450
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 11691452}
+  - component: {fileID: 11691451}
+  m_Layer: 0
+  m_Name: RoomSocket_Test
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &11691451
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 11691450}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3788fae3ea26b4d46bd5855ea396b7e9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  socketId: Door_0
+  direction: 0
+  localInsideCell: {x: 4, y: 5}
+  doorWidthInCells: 2
+  closedBlocker: {fileID: 0}
+--- !u!4 &11691452
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 11691450}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 2.5, y: 1.5, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &180109363
 GameObject:
   m_ObjectHideFlags: 0
@@ -268,23 +317,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e9b4375cd130e040879e16213a9360e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  driftAmplitude: {x: 0.4, y: 0.3}
-  driftSpeed: {x: 0.15, y: 0.11}
-  baseAlpha: 0.12
-  alphaPulseAmount: 0.04
-  alphaPulseSpeed: 0.45
-  enableScalePulse: 0
-  scalePulseAmount: 0.015
-  scalePulseSpeed: 0.25
-  phaseOffset: 0
-  spriteRenderer: {fileID: 0}
-  initialLocalPosition: {x: 0, y: 0, z: 0}
-  initialLocalScale: {x: 0, y: 0, z: 0}
-  initialColor:
-    r: 0
-    g: 0
-    b: 0
-    a: 0
 --- !u!212 &247294344
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -5667,6 +5699,7 @@ GameObject:
   - component: {fileID: 621725372}
   - component: {fileID: 621725370}
   - component: {fileID: 621725369}
+  - component: {fileID: 621725376}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -5717,8 +5750,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cellSize: 1
-  floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
-  wallColor: {r: 0.35, g: 0.37, b: 0.44, a: 1}
+  floorColor:
+    r: 0.16
+    g: 0.17
+    b: 0.21
+    a: 1
+  wallColor:
+    r: 0.35
+    g: 0.37
+    b: 0.44
+    a: 1
+  whiteSprite: {fileID: 0}
 --- !u!114 &621725373
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5755,7 +5797,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   dungeonGenerator: {fileID: 621725373}
-  dungeonRenderer: {fileID: 621725372}
+  dungeonRenderer: {fileID: 0}
   exitSpawner: {fileID: 621725370}
   cameraManager: {fileID: 621725369}
   playerManager: {fileID: 1036781217}
@@ -5779,6 +5821,23 @@ Transform:
   - {fileID: 1560645093}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &621725376
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 621725368}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6d0980327b7349e4b89aeb18a8fa3d1d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  renderMode: 0
+  logHybridFallback: 1
+  cellSize: 1
+  floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
+  wallColor: {r: 0.35, g: 0.37, b: 0.44, a: 1}
 --- !u!1 &624218977
 GameObject:
   m_ObjectHideFlags: 0
@@ -11393,23 +11452,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2e9b4375cd130e040879e16213a9360e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  driftAmplitude: {x: 0.4, y: 0.3}
-  driftSpeed: {x: 0.1, y: 0.07}
-  baseAlpha: 0.12
-  alphaPulseAmount: 0.04
-  alphaPulseSpeed: 0.45
-  enableScalePulse: 0
-  scalePulseAmount: 0.015
-  scalePulseSpeed: 0.25
-  phaseOffset: 0
-  spriteRenderer: {fileID: 0}
-  initialLocalPosition: {x: 0, y: 0, z: 0}
-  initialLocalScale: {x: 0, y: 0, z: 0}
-  initialColor:
-    r: 0
-    g: 0
-    b: 0
-    a: 0
 --- !u!212 &1244888846
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -11964,3 +12006,4 @@ SceneRoots:
   - {fileID: 180109367}
   - {fileID: 1016602312}
   - {fileID: 619913695}
+  - {fileID: 11691452}
