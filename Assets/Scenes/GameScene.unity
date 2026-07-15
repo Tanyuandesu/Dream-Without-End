@@ -5647,10 +5647,10 @@ GameObject:
   - component: {fileID: 621725375}
   - component: {fileID: 621725374}
   - component: {fileID: 621725373}
-  - component: {fileID: 621725372}
   - component: {fileID: 621725370}
   - component: {fileID: 621725369}
   - component: {fileID: 621725376}
+  - component: {fileID: 621725377}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -5688,18 +5688,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   visualScale: 0.75
   exitColor: {r: 1, g: 0.78, b: 0.12, a: 1}
---- !u!114 &621725372
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 621725368}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 10016c94b50b12a42ac5e6abf37e65df, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &621725373
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5723,6 +5711,21 @@ MonoBehaviour:
   extraConnections: 2
   useRandomSeed: 1
   fixedSeed: 12345
+  roomGraphMinimumExtraConnections: 1
+  roomGraphMaximumExtraConnections: 2
+  socketCorridorWidth: 2
+  socketCorridorMaximumLayoutAttempts: 20
+  socketCorridorMaximumExpandedNodesPerPath: 20000
+  socketCorridorTurnPenalty: 2
+  templateFirstRoomCatalog: {fileID: 11400000, guid: 7c332a017c8a109458bf5f9a8be2faa3, type: 2}
+  templateFirstMapWidth: 80
+  templateFirstMapHeight: 50
+  templateFirstDesiredRoomCount: 7
+  templateFirstMapBorder: 2
+  templateFirstRoomPadding: 2
+  templateFirstMaximumPlacementAttemptsPerRoom: 100
+  templateFirstMaximumFloorAttempts: 20
+  templateFirstUseAllowedQuarterTurns: 1
 --- !u!114 &621725374
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5777,6 +5780,32 @@ MonoBehaviour:
   cellSize: 1
   floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
   wallColor: {r: 0.35, g: 0.37, b: 0.44, a: 1}
+--- !u!114 &621725377
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 621725368}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ecd5d887c304b48ab6182aa03b5462, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  dungeonGenerator: {fileID: 621725373}
+  previewFloorNumber: 1
+  previewFixedSeed: 12345
+  changedSeedSearchCount: 8
+  cellSize: 1
+  drawMapBounds: 1
+  drawRoomBounds: 1
+  drawTreeCorridors: 1
+  drawExtraCorridors: 1
+  drawUsedSockets: 1
+  drawStartAndExit: 1
+  treeCorridorColor: {r: 0.2, g: 0.9, b: 1, a: 0.55}
+  extraCorridorColor: {r: 1, g: 0.58, b: 0.12, a: 0.6}
+  socketColor: {r: 1, g: 0.95, b: 0.25, a: 1}
 --- !u!1 &624218977
 GameObject:
   m_ObjectHideFlags: 0
