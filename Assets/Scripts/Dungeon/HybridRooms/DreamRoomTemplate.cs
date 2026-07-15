@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 /// <summary>
 /// 一个可被混合地牢系统选择和摆放的房间模板。
 ///
@@ -51,6 +55,29 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     [SerializeField]
     private bool allowQuarterTurns = true;
 
+    [Header("房间用途（R1 只保存，不参与当前生成）")]
+    [SerializeField]
+    private DreamRoomTag roomTags = DreamRoomTag.Standard;
+
+    [Header("格子覆盖（空列表使用完整矩形默认值）")]
+    [Tooltip(
+        "空列表表示尺寸矩形内全部格子都被房间占用。" +
+        "阶段9制作非矩形房间时再显式填写。")]
+    [SerializeField]
+    private List<Vector2Int> occupiedCells =
+        new List<Vector2Int>();
+
+    [Tooltip(
+        "空列表表示 Occupied Cells 中除 Blocked Cells 外全部可行走。")]
+    [SerializeField]
+    private List<Vector2Int> walkableCells =
+        new List<Vector2Int>();
+
+    [Tooltip("内部障碍格；必须同时属于 Occupied Cells。")]
+    [SerializeField]
+    private List<Vector2Int> blockedCells =
+        new List<Vector2Int>();
+
     [Header("房间层级（当前均可留空）")]
     [SerializeField]
     private Transform visualRoot;
@@ -75,12 +102,29 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     private List<DreamRoomDoorSocket> doorSockets =
         new List<DreamRoomDoorSocket>();
 
+    [Header("候选出生点（当前可为空）")]
+    [Tooltip(
+        "开启后，OnValidate 会从 Spawn Points Root 中收集 " +
+        "DreamRoomSpawnPoint。")]
+    [SerializeField]
+    private bool autoCollectSpawnPoints = true;
+
+    [SerializeField]
+    private List<DreamRoomSpawnPoint> spawnPoints =
+        new List<DreamRoomSpawnPoint>();
+
     [Header("Scene 预览")]
     [SerializeField]
     private bool drawCellGrid = true;
 
     [SerializeField]
     private bool drawDoorCells = true;
+
+    [SerializeField]
+    private bool drawCellOverrides = true;
+
+    [SerializeField]
+    private bool drawSpawnPoints = true;
 
     public string TemplateId => templateId;
     public Vector2Int SizeInCells => sizeInCells;
@@ -89,11 +133,30 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     public int MaximumFloor => maximumFloor;
     public int MaximumInstancesPerFloor => maximumInstancesPerFloor;
     public bool AllowQuarterTurns => allowQuarterTurns;
+    public DreamRoomTag RoomTags => roomTags;
+    public IReadOnlyList<Vector2Int> OccupiedCellOverrides =>
+        occupiedCells;
+    public IReadOnlyList<Vector2Int> WalkableCellOverrides =>
+        walkableCells;
+    public IReadOnlyList<Vector2Int> BlockedCellOverrides =>
+        blockedCells;
     public Transform VisualRoot => visualRoot;
     public Transform SocketsRoot => socketsRoot;
     public Transform NavigationRoot => navigationRoot;
     public Transform SpawnPointsRoot => spawnPointsRoot;
     public IReadOnlyList<DreamRoomDoorSocket> DoorSockets => doorSockets;
+    public IReadOnlyList<DreamRoomSpawnPoint> SpawnPoints => spawnPoints;
+
+    public bool UsesRectangularOccupiedCells =>
+        occupiedCells == null || occupiedCells.Count == 0;
+
+    public bool UsesDefaultWalkableCells =>
+        walkableCells == null || walkableCells.Count == 0;
+
+    public bool HasTag(DreamRoomTag requestedTags)
+    {
+        return roomTags.HasAll(requestedTags);
+    }
 
     /// <summary>
     /// 判断模板是否允许出现在指定楼层。
@@ -159,6 +222,102 @@ public sealed class DreamRoomTemplate : MonoBehaviour
                localCell.y >= 0 &&
                localCell.x < sizeInCells.x &&
                localCell.y < sizeInCells.y;
+    }
+
+    /// <summary>
+    /// 空 Occupied Cells 表示完整尺寸矩形。
+    /// results 会先清空，方便生成器复用列表。
+    /// </summary>
+    public void GetOccupiedCells(List<Vector2Int> results)
+    {
+        RequireCellResults(results);
+        results.Clear();
+
+        if (UsesRectangularOccupiedCells)
+        {
+            for (int y = 0; y < sizeInCells.y; y++)
+            {
+                for (int x = 0; x < sizeInCells.x; x++)
+                {
+                    results.Add(new Vector2Int(x, y));
+                }
+            }
+
+            return;
+        }
+
+        AddUniqueCells(occupiedCells, results);
+    }
+
+    public void GetBlockedCells(List<Vector2Int> results)
+    {
+        RequireCellResults(results);
+        results.Clear();
+        AddUniqueCells(blockedCells, results);
+    }
+
+    /// <summary>
+    /// 空 Walkable Cells 表示全部 Occupied Cells 减去 Blocked Cells。
+    /// </summary>
+    public void GetWalkableCells(List<Vector2Int> results)
+    {
+        RequireCellResults(results);
+        results.Clear();
+
+        if (!UsesDefaultWalkableCells)
+        {
+            AddUniqueCells(walkableCells, results);
+
+            for (int i = results.Count - 1; i >= 0; i--)
+            {
+                if (!IsOccupiedCell(results[i]) ||
+                    IsBlockedCell(results[i]))
+                {
+                    results.RemoveAt(i);
+                }
+            }
+
+            return;
+        }
+
+        GetOccupiedCells(results);
+
+        for (int i = results.Count - 1; i >= 0; i--)
+        {
+            if (IsBlockedCell(results[i]))
+            {
+                results.RemoveAt(i);
+            }
+        }
+    }
+
+    public bool IsOccupiedCell(Vector2Int localCell)
+    {
+        if (!ContainsLocalCell(localCell))
+        {
+            return false;
+        }
+
+        return UsesRectangularOccupiedCells ||
+               occupiedCells.Contains(localCell);
+    }
+
+    public bool IsBlockedCell(Vector2Int localCell)
+    {
+        return blockedCells != null &&
+               blockedCells.Contains(localCell);
+    }
+
+    public bool IsWalkableCell(Vector2Int localCell)
+    {
+        if (!IsOccupiedCell(localCell) ||
+            IsBlockedCell(localCell))
+        {
+            return false;
+        }
+
+        return UsesDefaultWalkableCells ||
+               walkableCells.Contains(localCell);
     }
 
     /// <summary>
@@ -236,6 +395,37 @@ public sealed class DreamRoomTemplate : MonoBehaviour
         return false;
     }
 
+    public bool TryGetSpawnPoint(
+        string spawnPointId,
+        out DreamRoomSpawnPoint spawnPoint)
+    {
+        spawnPoint = null;
+
+        if (string.IsNullOrWhiteSpace(spawnPointId) ||
+            spawnPoints == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < spawnPoints.Count; i++)
+        {
+            DreamRoomSpawnPoint candidate =
+                spawnPoints[i];
+
+            if (candidate != null &&
+                string.Equals(
+                    candidate.SpawnPointId,
+                    spawnPointId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                spawnPoint = candidate;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public void SetAllSocketsOpen(bool open)
     {
         for (int i = 0; i < doorSockets.Count; i++)
@@ -255,13 +445,47 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     [ContextMenu("Refresh Door Sockets")]
     public void RefreshDoorSockets()
     {
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            Undo.RecordObject(
+                this,
+                "Refresh Dream Room Door Sockets");
+        }
+#endif
+
+        CollectDoorSockets(
+            preserveExistingWhenNothingFound: true);
+
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            EditorUtility.SetDirty(this);
+
+            if (PrefabUtility.IsPartOfPrefabInstance(
+                    gameObject))
+            {
+                PrefabUtility
+                    .RecordPrefabInstancePropertyModifications(
+                        this);
+            }
+        }
+#endif
+    }
+
+    /// <summary>
+    /// Prefab Asset 的简略 Inspector 并不总会把子层级加载成可遍历对象。
+    /// 因此只有在确实找到属于本模板的 Socket 时才替换已保存列表，
+    /// 避免 OnValidate 在资产上下文中把正确列表误清空。
+    /// </summary>
+    private void CollectDoorSockets(
+        bool preserveExistingWhenNothingFound)
+    {
         if (doorSockets == null)
         {
             doorSockets =
                 new List<DreamRoomDoorSocket>();
         }
-
-        doorSockets.Clear();
 
         Transform searchRoot =
             socketsRoot != null
@@ -271,6 +495,9 @@ public sealed class DreamRoomTemplate : MonoBehaviour
         DreamRoomDoorSocket[] foundSockets =
             searchRoot.GetComponentsInChildren<
                 DreamRoomDoorSocket>(true);
+
+        List<DreamRoomDoorSocket> collectedSockets =
+            new List<DreamRoomDoorSocket>();
 
         for (int i = 0; i < foundSockets.Length; i++)
         {
@@ -283,9 +510,101 @@ public sealed class DreamRoomTemplate : MonoBehaviour
 
             if (owner == this)
             {
-                doorSockets.Add(foundSocket);
+                collectedSockets.Add(foundSocket);
             }
         }
+
+        if (collectedSockets.Count == 0 &&
+            preserveExistingWhenNothingFound &&
+            doorSockets.Count > 0)
+        {
+            return;
+        }
+
+        doorSockets.Clear();
+        doorSockets.AddRange(collectedSockets);
+    }
+
+    [ContextMenu("Refresh Spawn Points")]
+    public void RefreshSpawnPoints()
+    {
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            Undo.RecordObject(
+                this,
+                "Refresh Dream Room Spawn Points");
+        }
+#endif
+
+        CollectSpawnPoints(
+            preserveExistingWhenNothingFound: true);
+
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            EditorUtility.SetDirty(this);
+
+            if (PrefabUtility.IsPartOfPrefabInstance(
+                    gameObject))
+            {
+                PrefabUtility
+                    .RecordPrefabInstancePropertyModifications(
+                        this);
+            }
+        }
+#endif
+    }
+
+    /// <summary>
+    /// 与 Socket 收集使用相同的 Prefab Asset 保护：
+    /// 简略 Inspector 没有加载子层级时，不清空已经保存的引用。
+    /// </summary>
+    private void CollectSpawnPoints(
+        bool preserveExistingWhenNothingFound)
+    {
+        if (spawnPoints == null)
+        {
+            spawnPoints =
+                new List<DreamRoomSpawnPoint>();
+        }
+
+        Transform searchRoot =
+            spawnPointsRoot != null
+                ? spawnPointsRoot
+                : transform;
+
+        DreamRoomSpawnPoint[] foundPoints =
+            searchRoot.GetComponentsInChildren<
+                DreamRoomSpawnPoint>(true);
+
+        List<DreamRoomSpawnPoint> collectedPoints =
+            new List<DreamRoomSpawnPoint>();
+
+        for (int i = 0; i < foundPoints.Length; i++)
+        {
+            DreamRoomSpawnPoint foundPoint =
+                foundPoints[i];
+
+            DreamRoomTemplate owner =
+                foundPoint.GetComponentInParent<
+                    DreamRoomTemplate>();
+
+            if (owner == this)
+            {
+                collectedPoints.Add(foundPoint);
+            }
+        }
+
+        if (collectedPoints.Count == 0 &&
+            preserveExistingWhenNothingFound &&
+            spawnPoints.Count > 0)
+        {
+            return;
+        }
+
+        spawnPoints.Clear();
+        spawnPoints.AddRange(collectedPoints);
     }
 
     /// <summary>
@@ -341,6 +660,9 @@ public sealed class DreamRoomTemplate : MonoBehaviour
             "Spawn Points Root",
             spawnPointsRoot,
             errors);
+
+        ValidateCellOverrides(errors);
+        ValidateSpawnPoints(errors);
 
         if (doorSockets == null ||
             doorSockets.Count == 0)
@@ -423,6 +745,11 @@ public sealed class DreamRoomTemplate : MonoBehaviour
             RefreshDoorSockets();
         }
 
+        if (autoCollectSpawnPoints)
+        {
+            RefreshSpawnPoints();
+        }
+
         List<string> errors =
             GetValidationErrors();
 
@@ -436,7 +763,9 @@ public sealed class DreamRoomTemplate : MonoBehaviour
                 "x" +
                 sizeInCells.y +
                 " | 门口 " +
-                doorSockets.Count,
+                doorSockets.Count +
+                " | 出生点 " +
+                spawnPoints.Count,
                 this);
 
             return;
@@ -461,7 +790,10 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     {
         templateId = gameObject.name;
         NormalizeSerializedValues();
-        RefreshDoorSockets();
+        CollectDoorSockets(
+            preserveExistingWhenNothingFound: false);
+        CollectSpawnPoints(
+            preserveExistingWhenNothingFound: false);
     }
 
     private void OnValidate()
@@ -470,7 +802,14 @@ public sealed class DreamRoomTemplate : MonoBehaviour
 
         if (autoCollectDoorSockets)
         {
-            RefreshDoorSockets();
+            CollectDoorSockets(
+                preserveExistingWhenNothingFound: true);
+        }
+
+        if (autoCollectSpawnPoints)
+        {
+            CollectSpawnPoints(
+                preserveExistingWhenNothingFound: true);
         }
     }
 
@@ -496,6 +835,27 @@ public sealed class DreamRoomTemplate : MonoBehaviour
             doorSockets =
                 new List<DreamRoomDoorSocket>();
         }
+
+        if (occupiedCells == null)
+        {
+            occupiedCells = new List<Vector2Int>();
+        }
+
+        if (walkableCells == null)
+        {
+            walkableCells = new List<Vector2Int>();
+        }
+
+        if (blockedCells == null)
+        {
+            blockedCells = new List<Vector2Int>();
+        }
+
+        if (spawnPoints == null)
+        {
+            spawnPoints =
+                new List<DreamRoomSpawnPoint>();
+        }
     }
 
     private void ValidateRootReference(
@@ -514,6 +874,171 @@ public sealed class DreamRoomTemplate : MonoBehaviour
             errors.Add(
                 fieldName +
                 " 必须是当前房间根节点或其子节点。");
+        }
+    }
+
+    private void ValidateCellOverrides(List<string> errors)
+    {
+        ValidateCellList(
+            "Occupied Cells",
+            occupiedCells,
+            errors);
+
+        ValidateCellList(
+            "Walkable Cells",
+            walkableCells,
+            errors);
+
+        ValidateCellList(
+            "Blocked Cells",
+            blockedCells,
+            errors);
+
+        if (blockedCells != null)
+        {
+            for (int i = 0; i < blockedCells.Count; i++)
+            {
+                Vector2Int cell = blockedCells[i];
+
+                if (ContainsLocalCell(cell) &&
+                    !IsOccupiedCell(cell))
+                {
+                    errors.Add(
+                        "Blocked Cells 的格子 " +
+                        FormatCell(cell) +
+                        " 不属于 Occupied Cells。");
+                }
+            }
+        }
+
+        if (walkableCells != null &&
+            walkableCells.Count > 0)
+        {
+            for (int i = 0; i < walkableCells.Count; i++)
+            {
+                Vector2Int cell = walkableCells[i];
+
+                if (!ContainsLocalCell(cell))
+                {
+                    continue;
+                }
+
+                if (!IsOccupiedCell(cell))
+                {
+                    errors.Add(
+                        "Walkable Cells 的格子 " +
+                        FormatCell(cell) +
+                        " 不属于 Occupied Cells。");
+                }
+                else if (IsBlockedCell(cell))
+                {
+                    errors.Add(
+                        "格子 " + FormatCell(cell) +
+                        " 不能同时属于 Walkable Cells 和 Blocked Cells。");
+                }
+            }
+        }
+    }
+
+    private void ValidateCellList(
+        string listName,
+        List<Vector2Int> cells,
+        List<string> errors)
+    {
+        if (cells == null)
+        {
+            return;
+        }
+
+        HashSet<Vector2Int> usedCells =
+            new HashSet<Vector2Int>();
+
+        for (int i = 0; i < cells.Count; i++)
+        {
+            Vector2Int cell = cells[i];
+
+            if (!ContainsLocalCell(cell))
+            {
+                errors.Add(
+                    listName + " 的格子 " +
+                    FormatCell(cell) +
+                    " 超出房间尺寸。");
+            }
+
+            if (!usedCells.Add(cell))
+            {
+                errors.Add(
+                    listName + " 中的格子 " +
+                    FormatCell(cell) +
+                    " 重复。");
+            }
+        }
+    }
+
+    private void ValidateSpawnPoints(List<string> errors)
+    {
+        if (spawnPoints == null)
+        {
+            return;
+        }
+
+        HashSet<string> usedIds =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < spawnPoints.Count; i++)
+        {
+            DreamRoomSpawnPoint point = spawnPoints[i];
+
+            if (point == null)
+            {
+                errors.Add(
+                    "Spawn Points 列表中存在空引用，请执行 Refresh Spawn Points。");
+                continue;
+            }
+
+            DreamRoomTemplate owner =
+                point.GetComponentInParent<
+                    DreamRoomTemplate>();
+
+            if (owner != this)
+            {
+                errors.Add(
+                    "Spawn Point '" + point.name +
+                    "' 不属于当前 DreamRoomTemplate。");
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    point.SpawnPointId))
+            {
+                errors.Add(
+                    "Spawn Point '" + point.name +
+                    "' 的 Spawn Point Id 不能为空。");
+            }
+            else if (!usedIds.Add(point.SpawnPointId))
+            {
+                errors.Add(
+                    "Spawn Point Id '" +
+                    point.SpawnPointId +
+                    "' 重复。每个房间内必须唯一。");
+            }
+
+            if (!IsWalkableCell(point.LocalCell))
+            {
+                errors.Add(
+                    "Spawn Point '" + point.name +
+                    "' 的 Local Cell " +
+                    FormatCell(point.LocalCell) +
+                    " 不是房间内的可行走格。");
+            }
+
+            if (point.RandomWeight < 1)
+            {
+                errors.Add(
+                    "Spawn Point '" + point.name +
+                    "' 的 Random Weight 必须至少为 1。");
+            }
         }
     }
 
@@ -540,6 +1065,9 @@ public sealed class DreamRoomTemplate : MonoBehaviour
         bool foundWrongBoundaryCell = false;
         Vector2Int firstWrongBoundaryCell =
             Vector2Int.zero;
+        bool foundNonWalkableCell = false;
+        Vector2Int firstNonWalkableCell =
+            Vector2Int.zero;
 
         for (int i = 0; i < occupiedCells.Count; i++)
         {
@@ -565,6 +1093,13 @@ public sealed class DreamRoomTemplate : MonoBehaviour
                 foundWrongBoundaryCell = true;
                 firstWrongBoundaryCell = occupiedCell;
             }
+
+            if (!IsWalkableCell(occupiedCell) &&
+                !foundNonWalkableCell)
+            {
+                foundNonWalkableCell = true;
+                firstNonWalkableCell = occupiedCell;
+            }
         }
 
         if (foundOutsideCell)
@@ -584,6 +1119,15 @@ public sealed class DreamRoomTemplate : MonoBehaviour
                 " 不在 " +
                 socket.Direction +
                 " 边界上。");
+        }
+
+        if (foundNonWalkableCell)
+        {
+            errors.Add(
+                "Socket '" + readableId +
+                "' 的门内格 " +
+                FormatCell(firstNonWalkableCell) +
+                " 必须属于 Walkable Cells。");
         }
     }
 
@@ -615,6 +1159,36 @@ public sealed class DreamRoomTemplate : MonoBehaviour
         return "(" + cell.x + "," + cell.y + ")";
     }
 
+    private static void RequireCellResults(
+        List<Vector2Int> results)
+    {
+        if (results == null)
+        {
+            throw new ArgumentNullException(nameof(results));
+        }
+    }
+
+    private static void AddUniqueCells(
+        List<Vector2Int> source,
+        List<Vector2Int> destination)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        HashSet<Vector2Int> usedCells =
+            new HashSet<Vector2Int>(destination);
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            if (usedCells.Add(source[i]))
+            {
+                destination.Add(source[i]);
+            }
+        }
+    }
+
     private void OnDrawGizmosSelected()
     {
         int width = Mathf.Max(1, sizeInCells.x);
@@ -636,9 +1210,19 @@ public sealed class DreamRoomTemplate : MonoBehaviour
 
         DrawLocalOriginCell();
 
+        if (drawCellOverrides)
+        {
+            DrawCellOverrideGizmos();
+        }
+
         if (drawDoorCells)
         {
             DrawCollectedDoorSockets();
+        }
+
+        if (drawSpawnPoints)
+        {
+            DrawCollectedSpawnPoints();
         }
 
         Gizmos.matrix = previousMatrix;
@@ -768,6 +1352,110 @@ public sealed class DreamRoomTemplate : MonoBehaviour
                 localDoorCenter,
                 localDoorCenter +
                 localDirection * 0.8f);
+        }
+    }
+
+    private void DrawCellOverrideGizmos()
+    {
+        if (occupiedCells != null &&
+            occupiedCells.Count > 0)
+        {
+            DrawCellList(
+                occupiedCells,
+                new Color(0.78f, 0.78f, 0.78f, 0.65f),
+                0.9f);
+        }
+
+        if (walkableCells != null &&
+            walkableCells.Count > 0)
+        {
+            DrawCellList(
+                walkableCells,
+                new Color(0.35f, 1f, 0.45f, 0.8f),
+                0.62f);
+        }
+
+        if (blockedCells != null &&
+            blockedCells.Count > 0)
+        {
+            DrawCellList(
+                blockedCells,
+                new Color(1f, 0.25f, 0.25f, 0.95f),
+                0.48f);
+        }
+    }
+
+    private void DrawCellList(
+        List<Vector2Int> cells,
+        Color color,
+        float size)
+    {
+        Gizmos.color = color;
+
+        for (int i = 0; i < cells.Count; i++)
+        {
+            if (!ContainsLocalCell(cells[i]))
+            {
+                continue;
+            }
+
+            Gizmos.DrawWireCube(
+                GetLocalCellCenter(cells[i]),
+                new Vector3(size, size, 0.06f));
+        }
+    }
+
+    private void DrawCollectedSpawnPoints()
+    {
+        if (spawnPoints == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < spawnPoints.Count; i++)
+        {
+            DreamRoomSpawnPoint point = spawnPoints[i];
+
+            if (point == null)
+            {
+                continue;
+            }
+
+            Vector3 center =
+                GetLocalCellCenter(point.LocalCell);
+
+            Gizmos.color =
+                GetSpawnPointColor(point.Kind);
+
+            Gizmos.DrawWireSphere(center, 0.2f);
+            Gizmos.DrawLine(
+                center + Vector3.left * 0.24f,
+                center + Vector3.right * 0.24f);
+            Gizmos.DrawLine(
+                center + Vector3.down * 0.24f,
+                center + Vector3.up * 0.24f);
+        }
+    }
+
+    private static Color GetSpawnPointColor(
+        DreamRoomSpawnPointKind kind)
+    {
+        switch (kind)
+        {
+            case DreamRoomSpawnPointKind.Player:
+                return new Color(0.25f, 0.95f, 1f);
+
+            case DreamRoomSpawnPointKind.Exit:
+                return new Color(1f, 0.78f, 0.15f);
+
+            case DreamRoomSpawnPointKind.Enemy:
+                return new Color(1f, 0.3f, 0.3f);
+
+            case DreamRoomSpawnPointKind.Item:
+                return new Color(0.45f, 1f, 0.45f);
+
+            default:
+                return Color.white;
         }
     }
 

@@ -7,7 +7,7 @@ using UnityEngine;
 /// 它不建立任何 GameObject。
 /// </summary>
 [DisallowMultipleComponent]
-public sealed class DungeonGenerator : MonoBehaviour
+public sealed partial class DungeonGenerator : MonoBehaviour
 {
     [Header("地圖尺寸")]
     [SerializeField] private int mapWidth = 58;
