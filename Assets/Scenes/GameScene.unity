@@ -5775,7 +5775,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6d0980327b7349e4b89aeb18a8fa3d1d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  renderMode: 0
+  renderMode: 1
   logHybridFallback: 1
   cellSize: 1
   floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
