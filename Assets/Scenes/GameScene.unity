@@ -5709,7 +5709,7 @@ MonoBehaviour:
   maxPlacementAttempts: 250
   corridorWidth: 2
   extraConnections: 2
-  useRandomSeed: 1
+  useRandomSeed: 0
   fixedSeed: 12345
   roomGraphMinimumExtraConnections: 1
   roomGraphMaximumExtraConnections: 2
@@ -5777,6 +5777,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   renderMode: 1
   logHybridFallback: 1
+  r73InjectMissingSocketForControlledFailure: 0
+  r74InjectInvalidCorridorCellForControlledFailure: 0
   cellSize: 1
   floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
   wallColor: {r: 0.35, g: 0.37, b: 0.44, a: 1}
@@ -11831,7 +11833,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 951.31, y: 340.39}
+  m_AnchoredPosition: {x: 788, y: 368}
   m_SizeDelta: {x: 243.5123, y: 285.4327}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1886192042

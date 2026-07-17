@@ -4,12 +4,13 @@ using UnityEngine;
 /// <summary>
 /// 把 DungeonLayout 的数据转换成可见的地板、墙壁与碰撞体。
 ///
-/// R7.3：
+/// R7.4：
 /// 1. 完整保留现有的逐格程序化渲染。
 /// 2. Hybrid Layout 会实例化真实 Room Prefab。
 /// 3. 所有实例 Socket 先关闭；全部 Connection 解析通过后再统一开门。
-/// 4. 任一连接错误都拒绝整批开门，不猜测替代 Socket，也不部分提交。
-/// 5. 走廊与走廊墙仍只建立空容器；正式渲染属于 R7.4。
+/// 4. 只把 CorridorCells 渲染成走廊地板，并从边界建立走廊墙。
+/// 5. 墙候选会排除最终 FloorCells 与房间 Occupied Global Cells。
+/// 6. 门与走廊统一提交；任一错误都不留下部分开门或半条走廊。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class DungeonRenderer : MonoBehaviour
@@ -35,6 +36,16 @@ public sealed class DungeonRenderer : MonoBehaviour
     private bool r73InjectMissingSocketForControlledFailure;
 #endif
 
+#if UNITY_EDITOR
+    [Header("R7.4 受控失败测试")]
+    [Tooltip(
+        "正常运行必须关闭。开启时，Renderer 只在本地走廊预检副本中" +
+        "加入一个房间 Occupied Cell；不会修改 Layout、Connection、" +
+        "Prefab Asset 或 R6 数据。")]
+    [SerializeField]
+    private bool r74InjectInvalidCorridorCellForControlledFailure;
+#endif
+
     [Header("显示")]
     [SerializeField] private float cellSize = 1f;
     [SerializeField] private Color floorColor =
@@ -49,7 +60,7 @@ public sealed class DungeonRenderer : MonoBehaviour
 
     /// <summary>
     /// 索引与当前 Hybrid Layout 的 RoomPlacements 完全一致。
-    /// R7.3 会使用这份“房间索引 → 实例模板”映射打开连接门。
+    /// R7.3/R7.4 使用这份“房间索引 → 实例模板”映射打开连接门。
     /// </summary>
     private readonly List<DreamRoomTemplate>
         hybridRoomInstanceTemplates =
@@ -128,7 +139,7 @@ public sealed class DungeonRenderer : MonoBehaviour
     }
 
     /// <summary>
-    /// R7.3 的 Hybrid 入口。
+    /// R7.4 的 Hybrid 入口。
     ///
     /// R7.1 的生成失败会把一个旧 Procedural Layout 交给 Renderer；
     /// 这种情况必须明确回退，不能把零个 Placement 当成 Hybrid 成功。
@@ -143,7 +154,7 @@ public sealed class DungeonRenderer : MonoBehaviour
             if (logHybridFallback)
             {
                 Debug.LogWarning(
-                    "[DungeonRenderer/R7.3] 收到 Procedural fallback Layout。" +
+                    "[DungeonRenderer/R7.4] 收到 Procedural fallback Layout。" +
                     " Requested=HybridPrefabRooms," +
                     " Effective=ProceduralCells" +
                     " | HasHybridRoomData=" +
@@ -165,7 +176,7 @@ public sealed class DungeonRenderer : MonoBehaviour
                 out validationFailure))
         {
             Debug.LogError(
-                "[DungeonRenderer/R7.3] Hybrid 房间实例化前校验失败。" +
+                "[DungeonRenderer/R7.4] Hybrid 房间实例化前校验失败。" +
                 " Requested=HybridPrefabRooms," +
                 " Effective=ProceduralCells" +
                 " | " + validationFailure +
@@ -213,8 +224,8 @@ public sealed class DungeonRenderer : MonoBehaviour
     }
 
     /// <summary>
-    /// 实例化房间 Prefab，并在全部 Connection 解析通过后统一开门。
-    /// 本阶段仍不会绘制走廊。
+    /// 实例化房间 Prefab，预检并暂存走廊几何，最后统一开门与显示。
+    /// 任何失败都保持实例门关闭，且不会暴露半条走廊。
     /// </summary>
     private void RenderHybridRoomPrefabs(
         DungeonLayout layout,
@@ -291,7 +302,7 @@ public sealed class DungeonRenderer : MonoBehaviour
             Destroy(roomsRoot.gameObject);
 
             Debug.LogError(
-                "[DungeonRenderer/R7.3] Hybrid 房间实例化中止。" +
+                "[DungeonRenderer/R7.4] Hybrid 房间实例化中止。" +
                 " Requested=HybridPrefabRooms," +
                 " Effective=ProceduralCells" +
                 " | 未提交半成品 Rooms。\n" +
@@ -302,23 +313,20 @@ public sealed class DungeonRenderer : MonoBehaviour
             return;
         }
 
-        int openedSocketCount;
+        List<DreamRoomDoorSocket> resolvedSockets;
         string doorFailureReason;
 
-        bool doorStateCommitted =
-            TryResolveAndOpenConnectionSockets(
+        bool doorSocketsResolved =
+            TryResolveConnectionSockets(
                 layout,
-                out openedSocketCount,
+                out resolvedSockets,
                 out doorFailureReason);
 
-        roomsRoot.gameObject.SetActive(true);
-
-        // R7.3 继续冻结目标层级；这两个容器在 R7.4 前保持为空。
-        CreateHybridRoot("Corridors", dungeonRoot);
-        CreateHybridRoot("CorridorWalls", dungeonRoot);
-
-        if (!doorStateCommitted)
+        if (!doorSocketsResolved)
         {
+            roomsRoot.gameObject.SetActive(true);
+            CreateEmptyHybridCorridorRoots(dungeonRoot);
+
             Debug.LogError(
                 "[DungeonRenderer/R7.3] Connection 门状态提交被拒绝。\n" +
                 doorFailureReason + "\n" +
@@ -339,13 +347,126 @@ public sealed class DungeonRenderer : MonoBehaviour
             return;
         }
 
+        List<Vector2Int> corridorFloorCells;
+        List<Vector2Int> corridorWallCells;
+        int occupiedRoomCellCount;
+        string corridorFailureReason;
+
+        bool corridorPlanValid =
+            TryBuildHybridCorridorRenderPlan(
+                layout,
+                out corridorFloorCells,
+                out corridorWallCells,
+                out occupiedRoomCellCount,
+                out corridorFailureReason);
+
+        if (!corridorPlanValid)
+        {
+            roomsRoot.gameObject.SetActive(true);
+            CreateEmptyHybridCorridorRoots(dungeonRoot);
+
+            Debug.LogError(
+                "[DungeonRenderer/R7.4] 走廊渲染提交被拒绝。\n" +
+                corridorFailureReason + "\n" +
+                "Requested=HybridPrefabRooms, " +
+                "Effective=HybridPrefabRooms, " +
+                "CorridorRender=Rejected, " +
+                "DoorActivation=Rejected" +
+                " | RoomInstances=" +
+                hybridRoomInstanceTemplates.Count + "/" +
+                layout.RoomPlacements.Count +
+                " | Connections=0/" +
+                layout.Connections.Count +
+                " | OpenedSockets=0" +
+                " | ClosedSockets=" + totalSocketCount +
+                " | CorridorFloors=0/" +
+                layout.CorridorCells.Count +
+                " | CorridorWalls=0" +
+                " | 所有实例门保持关闭；走廊容器为空；" +
+                "Layout 与 Prefab Asset 未修改。",
+                this);
+
+            return;
+        }
+
+        Transform corridorsRoot;
+        Transform corridorWallsRoot;
+        string geometryFailureReason;
+
+        bool geometryReady =
+            TryCreateHybridCorridorGeometry(
+                corridorFloorCells,
+                corridorWallCells,
+                dungeonRoot,
+                out corridorsRoot,
+                out corridorWallsRoot,
+                out geometryFailureReason);
+
+        if (!geometryReady)
+        {
+            roomsRoot.gameObject.SetActive(true);
+            CreateEmptyHybridCorridorRoots(dungeonRoot);
+
+            Debug.LogError(
+                "[DungeonRenderer/R7.4] 走廊几何建立中止。" +
+                " Requested=HybridPrefabRooms," +
+                " Effective=HybridPrefabRooms," +
+                " CorridorRender=ExceptionRejected," +
+                " DoorActivation=Rejected" +
+                " | OpenedSockets=0" +
+                " | ClosedSockets=" + totalSocketCount +
+                " | 未提交暂存走廊。\n" +
+                geometryFailureReason,
+                this);
+
+            return;
+        }
+
+        string doorCommitFailureReason;
+
+        if (!TryOpenResolvedConnectionSockets(
+                resolvedSockets,
+                out doorCommitFailureReason))
+        {
+            DiscardHybridCorridorGeometry(
+                corridorsRoot,
+                corridorWallsRoot);
+
+            SetAllHybridInstanceSocketsClosed();
+            roomsRoot.gameObject.SetActive(true);
+            CreateEmptyHybridCorridorRoots(dungeonRoot);
+
+            Debug.LogError(
+                "[DungeonRenderer/R7.4] 门与走廊统一提交中止。" +
+                " Requested=HybridPrefabRooms," +
+                " Effective=HybridPrefabRooms," +
+                " CorridorRender=Rejected," +
+                " DoorActivation=Rejected" +
+                " | OpenedSockets=0" +
+                " | ClosedSockets=" + totalSocketCount +
+                " | 已回滚所有实例门并丢弃暂存走廊。\n" +
+                doorCommitFailureReason,
+                this);
+
+            return;
+        }
+
+        int openedSocketCount = resolvedSockets.Count;
+
+        corridorsRoot.name = "Corridors";
+        corridorWallsRoot.name = "CorridorWalls";
+
+        roomsRoot.gameObject.SetActive(true);
+        corridorsRoot.gameObject.SetActive(true);
+        corridorWallsRoot.gameObject.SetActive(true);
+
         int closedUnusedSocketCount =
             Mathf.Max(
                 0,
                 totalSocketCount - openedSocketCount);
 
         Debug.Log(
-            "[DungeonRenderer/R7.3] Hybrid 房间 Prefab 与 Connection 门状态已提交。" +
+            "[DungeonRenderer/R7.4] Hybrid 房间、Connection 门与程序化走廊已提交。" +
             " Requested=HybridPrefabRooms," +
             " Effective=HybridPrefabRooms" +
             " | RoomInstances=" +
@@ -359,21 +480,34 @@ public sealed class DungeonRenderer : MonoBehaviour
             " | ClosedUnusedSockets=" +
             closedUnusedSocketCount +
             " | SocketTarget=InstanceOnly" +
-            " | Corridors=Deferred(R7.4)",
+            " | CorridorSource=Layout.CorridorCells" +
+            " | CorridorFloors=" +
+            corridorFloorCells.Count + "/" +
+            layout.CorridorCells.Count +
+            " | CorridorFloorColliders=0" +
+            " | CorridorWalls=" +
+            corridorWallCells.Count +
+            " | CorridorWallColliders=" +
+            corridorWallCells.Count +
+            " | OccupiedRoomCells=" +
+            occupiedRoomCellCount +
+            " | FloorSorting=-10" +
+            " | WallSorting=0" +
+            " | SharedCorridorCells=Deduplicated",
             this);
     }
 
     /// <summary>
-    /// 第一阶段只解析并去重所有实例 Socket；第二阶段才统一开门。
-    /// 因此任何 Connection 错误都不会留下“前几条已开、后几条失败”
-    /// 的半提交状态。
+    /// 这里只解析并去重所有实例 Socket，不改变门状态。
+    /// R7.4 会在走廊几何暂存完成后才统一开门。
     /// </summary>
-    private bool TryResolveAndOpenConnectionSockets(
+    private bool TryResolveConnectionSockets(
         DungeonLayout layout,
-        out int openedSocketCount,
+        out List<DreamRoomDoorSocket> resolvedSockets,
         out string failureReason)
     {
-        openedSocketCount = 0;
+        resolvedSockets =
+            new List<DreamRoomDoorSocket>();
         failureReason = string.Empty;
 
         if (layout.Connections.Count == 0)
@@ -388,9 +522,8 @@ public sealed class DungeonRenderer : MonoBehaviour
             return false;
         }
 
-        List<DreamRoomDoorSocket> resolvedSockets =
-            new List<DreamRoomDoorSocket>(
-                layout.Connections.Count * 2);
+        resolvedSockets.Capacity =
+            layout.Connections.Count * 2;
 
         HashSet<DreamRoomDoorSocket> uniqueSockets =
             new HashSet<DreamRoomDoorSocket>();
@@ -505,15 +638,445 @@ public sealed class DungeonRenderer : MonoBehaviour
             return false;
         }
 
-        for (int socketIndex = 0;
-             socketIndex < resolvedSockets.Count;
-             socketIndex++)
+        return true;
+    }
+
+    /// <summary>
+    /// 从权威 CorridorCells 建立纯数据渲染计划。
+    /// 走廊地板只来自 CorridorCells；墙候选来自走廊八方向边界，
+    /// 并排除最终 FloorCells 与所有房间 Occupied Global Cells。
+    /// </summary>
+    private bool TryBuildHybridCorridorRenderPlan(
+        DungeonLayout layout,
+        out List<Vector2Int> corridorFloorCells,
+        out List<Vector2Int> corridorWallCells,
+        out int occupiedRoomCellCount,
+        out string failureReason)
+    {
+        corridorFloorCells = new List<Vector2Int>();
+        corridorWallCells = new List<Vector2Int>();
+        occupiedRoomCellCount = 0;
+        failureReason = string.Empty;
+
+        if (layout.CorridorCells.Count == 0)
         {
-            resolvedSockets[socketIndex].SetOpen(true);
+            failureReason =
+                "CorridorCells 为空，不能建立 R7.4 走廊。";
+            return false;
         }
 
-        openedSocketCount = resolvedSockets.Count;
+        HashSet<Vector2Int> occupiedRoomCells =
+            new HashSet<Vector2Int>();
+
+        List<Vector2Int> placementCells =
+            new List<Vector2Int>();
+
+        bool foundControlledFailureCell = false;
+        Vector2Int controlledFailureCell =
+            Vector2Int.zero;
+
+        for (int roomIndex = 0;
+             roomIndex < layout.RoomPlacements.Count;
+             roomIndex++)
+        {
+            DreamRoomPlacement placement =
+                layout.RoomPlacements[roomIndex];
+
+            if (placement == null)
+            {
+                failureReason =
+                    "RoomPlacement " + roomIndex +
+                    " 是空引用，无法收集 Occupied Global Cells。";
+                return false;
+            }
+
+            placement.GetOccupiedGlobalCells(
+                placementCells);
+
+            for (int cellIndex = 0;
+                 cellIndex < placementCells.Count;
+                 cellIndex++)
+            {
+                Vector2Int occupiedCell =
+                    placementCells[cellIndex];
+
+                occupiedRoomCells.Add(occupiedCell);
+
+                if (!foundControlledFailureCell &&
+                    layout.FloorCells.Contains(occupiedCell) &&
+                    !layout.CorridorCells.Contains(occupiedCell))
+                {
+                    controlledFailureCell = occupiedCell;
+                    foundControlledFailureCell = true;
+                }
+            }
+        }
+
+        occupiedRoomCellCount =
+            occupiedRoomCells.Count;
+
+        corridorFloorCells.AddRange(
+            layout.CorridorCells);
+
+        bool controlledFailureInjected =
+            ShouldInjectR74ControlledFailure();
+
+        if (controlledFailureInjected)
+        {
+            if (!foundControlledFailureCell)
+            {
+                failureReason =
+                    "R7.4 受控失败无法取得一个属于最终 FloorCells 的" +
+                    "房间 Occupied Cell；未修改 Layout。";
+                return false;
+            }
+
+            // 只改本地计划副本，用真实房间占格验证拒绝路径。
+            corridorFloorCells.Add(
+                controlledFailureCell);
+        }
+
+        corridorFloorCells.Sort(
+            CompareCellCoordinates);
+
+        HashSet<Vector2Int> uniqueCorridorFloorCells =
+            new HashSet<Vector2Int>();
+
+        for (int cellIndex = 0;
+             cellIndex < corridorFloorCells.Count;
+             cellIndex++)
+        {
+            Vector2Int corridorCell =
+                corridorFloorCells[cellIndex];
+
+            if (!uniqueCorridorFloorCells.Add(
+                    corridorCell))
+            {
+                failureReason =
+                    BuildCorridorRenderFailure(
+                        corridorCell,
+                        layout.FloorCells.Contains(
+                            corridorCell),
+                        occupiedRoomCells.Contains(
+                            corridorCell),
+                        "走廊渲染计划出现重复格。" +
+                        ControlledFailureNote(
+                            controlledFailureInjected,
+                            corridorCell,
+                            controlledFailureCell));
+                return false;
+            }
+
+            if (!layout.FloorCells.Contains(
+                    corridorCell))
+            {
+                failureReason =
+                    BuildCorridorRenderFailure(
+                        corridorCell,
+                        false,
+                        occupiedRoomCells.Contains(
+                            corridorCell),
+                        "Corridor Cell 不属于最终 FloorCells。" +
+                        ControlledFailureNote(
+                            controlledFailureInjected,
+                            corridorCell,
+                            controlledFailureCell));
+                return false;
+            }
+
+            if (occupiedRoomCells.Contains(
+                    corridorCell))
+            {
+                failureReason =
+                    BuildCorridorRenderFailure(
+                        corridorCell,
+                        true,
+                        true,
+                        "Corridor Cell 与房间 Occupied Global Cell 重叠。" +
+                        ControlledFailureNote(
+                            controlledFailureInjected,
+                            corridorCell,
+                            controlledFailureCell));
+                return false;
+            }
+        }
+
+        if (uniqueCorridorFloorCells.Count !=
+            layout.CorridorCells.Count)
+        {
+            failureReason =
+                "唯一走廊地板数量不等于 Layout.CorridorCells。" +
+                " Unique=" +
+                uniqueCorridorFloorCells.Count +
+                "，Layout=" +
+                layout.CorridorCells.Count + "。";
+            return false;
+        }
+
+        HashSet<Vector2Int> uniqueWallCells =
+            new HashSet<Vector2Int>();
+
+        foreach (Vector2Int corridorCell in
+                 layout.CorridorCells)
+        {
+            for (int directionIndex = 0;
+                 directionIndex < EightDirections.Length;
+                 directionIndex++)
+            {
+                Vector2Int wallCandidate =
+                    corridorCell +
+                    EightDirections[directionIndex];
+
+                if (layout.FloorCells.Contains(
+                        wallCandidate) ||
+                    occupiedRoomCells.Contains(
+                        wallCandidate))
+                {
+                    continue;
+                }
+
+                uniqueWallCells.Add(wallCandidate);
+            }
+        }
+
+        if (uniqueWallCells.Count == 0)
+        {
+            failureReason =
+                "走廊边界没有产生任何合法墙候选。";
+            return false;
+        }
+
+        corridorWallCells.AddRange(uniqueWallCells);
+        corridorWallCells.Sort(CompareCellCoordinates);
+
+        for (int wallIndex = 0;
+             wallIndex < corridorWallCells.Count;
+             wallIndex++)
+        {
+            Vector2Int wallCell =
+                corridorWallCells[wallIndex];
+
+            if (layout.FloorCells.Contains(wallCell) ||
+                occupiedRoomCells.Contains(wallCell))
+            {
+                failureReason =
+                    BuildCorridorRenderFailure(
+                        wallCell,
+                        layout.FloorCells.Contains(wallCell),
+                        occupiedRoomCells.Contains(wallCell),
+                        "内部错误：走廊墙候选没有通过排除规则。");
+                return false;
+            }
+        }
+
         return true;
+    }
+
+    private bool TryCreateHybridCorridorGeometry(
+        IReadOnlyList<Vector2Int> corridorFloorCells,
+        IReadOnlyList<Vector2Int> corridorWallCells,
+        Transform dungeonRoot,
+        out Transform corridorsRoot,
+        out Transform corridorWallsRoot,
+        out string failureReason)
+    {
+        corridorsRoot = null;
+        corridorWallsRoot = null;
+        failureReason = string.Empty;
+
+        try
+        {
+            corridorsRoot =
+                CreateHybridRoot(
+                    "Corridors_Staging_R7.4",
+                    dungeonRoot);
+
+            corridorWallsRoot =
+                CreateHybridRoot(
+                    "CorridorWalls_Staging_R7.4",
+                    dungeonRoot);
+
+            corridorsRoot.gameObject.SetActive(false);
+            corridorWallsRoot.gameObject.SetActive(false);
+
+            for (int floorIndex = 0;
+                 floorIndex < corridorFloorCells.Count;
+                 floorIndex++)
+            {
+                Vector2Int floorCell =
+                    corridorFloorCells[floorIndex];
+
+                CreateSquare(
+                    "CorridorFloor_" +
+                    floorCell.x + "_" + floorCell.y,
+                    floorCell,
+                    floorColor,
+                    corridorsRoot,
+                    -10,
+                    false,
+                    1f);
+            }
+
+            for (int wallIndex = 0;
+                 wallIndex < corridorWallCells.Count;
+                 wallIndex++)
+            {
+                Vector2Int wallCell =
+                    corridorWallCells[wallIndex];
+
+                CreateSquare(
+                    "CorridorWall_" +
+                    wallCell.x + "_" + wallCell.y,
+                    wallCell,
+                    wallColor,
+                    corridorWallsRoot,
+                    0,
+                    true,
+                    1f);
+            }
+
+            return true;
+        }
+        catch (System.Exception exception)
+        {
+            DiscardHybridCorridorGeometry(
+                corridorsRoot,
+                corridorWallsRoot);
+
+            corridorsRoot = null;
+            corridorWallsRoot = null;
+            failureReason = exception.ToString();
+            return false;
+        }
+    }
+
+    private bool TryOpenResolvedConnectionSockets(
+        IReadOnlyList<DreamRoomDoorSocket> resolvedSockets,
+        out string failureReason)
+    {
+        failureReason = string.Empty;
+
+        if (resolvedSockets == null)
+        {
+            failureReason =
+                "解析后的 Socket 列表是空引用。";
+            return false;
+        }
+
+        try
+        {
+            for (int socketIndex = 0;
+                 socketIndex < resolvedSockets.Count;
+                 socketIndex++)
+            {
+                DreamRoomDoorSocket socket =
+                    resolvedSockets[socketIndex];
+
+                if (socket == null)
+                {
+                    throw new MissingReferenceException(
+                        "Resolved Socket " + socketIndex +
+                        " 在提交前变成空引用。");
+                }
+
+                socket.SetOpen(true);
+            }
+
+            return true;
+        }
+        catch (System.Exception exception)
+        {
+            SetAllHybridInstanceSocketsClosed();
+            failureReason = exception.ToString();
+            return false;
+        }
+    }
+
+    private void SetAllHybridInstanceSocketsClosed()
+    {
+        for (int roomIndex = 0;
+             roomIndex < hybridRoomInstanceTemplates.Count;
+             roomIndex++)
+        {
+            DreamRoomTemplate instanceTemplate =
+                hybridRoomInstanceTemplates[roomIndex];
+
+            if (instanceTemplate != null)
+            {
+                instanceTemplate.SetAllSocketsOpen(false);
+            }
+        }
+    }
+
+    private void CreateEmptyHybridCorridorRoots(
+        Transform dungeonRoot)
+    {
+        CreateHybridRoot("Corridors", dungeonRoot);
+        CreateHybridRoot("CorridorWalls", dungeonRoot);
+    }
+
+    private void DiscardHybridCorridorGeometry(
+        Transform corridorsRoot,
+        Transform corridorWallsRoot)
+    {
+        if (corridorsRoot != null)
+        {
+            corridorsRoot.gameObject.SetActive(false);
+            Destroy(corridorsRoot.gameObject);
+        }
+
+        if (corridorWallsRoot != null)
+        {
+            corridorWallsRoot.gameObject.SetActive(false);
+            Destroy(corridorWallsRoot.gameObject);
+        }
+    }
+
+    private bool ShouldInjectR74ControlledFailure()
+    {
+#if UNITY_EDITOR
+        return
+            r74InjectInvalidCorridorCellForControlledFailure;
+#else
+        return false;
+#endif
+    }
+
+    private string ControlledFailureNote(
+        bool controlledFailureInjected,
+        Vector2Int inspectedCell,
+        Vector2Int controlledFailureCell)
+    {
+        return controlledFailureInjected &&
+               inspectedCell == controlledFailureCell
+            ? " R7.4 受控失败已注入；只修改本地预检副本。"
+            : string.Empty;
+    }
+
+    private string BuildCorridorRenderFailure(
+        Vector2Int cell,
+        bool belongsToFinalFloor,
+        bool belongsToOccupiedRoom,
+        string reason)
+    {
+        return
+            "Cell=(" + cell.x + "," + cell.y + ")" +
+            " | InFinalFloorCells=" +
+            belongsToFinalFloor +
+            " | InRoomOccupiedCells=" +
+            belongsToOccupiedRoom +
+            " | Reason=" + ReadableValue(reason);
+    }
+
+    private static int CompareCellCoordinates(
+        Vector2Int first,
+        Vector2Int second)
+    {
+        int yComparison = first.y.CompareTo(second.y);
+
+        return yComparison != 0
+            ? yComparison
+            : first.x.CompareTo(second.x);
     }
 
     private bool TryResolveConnectionSocket(
@@ -711,7 +1274,7 @@ public sealed class DungeonRenderer : MonoBehaviour
 
     /// <summary>
     /// PlayerManager、EnemyManager、ItemManager 与 ExitSpawner
-    /// 仍可继续使用这个公开工厂；R7.3 不改变其签名。
+    /// 仍可继续使用这个公开工厂；R7.4 不改变其签名。
     /// </summary>
     public GameObject CreateSquare(
         string objectName,
