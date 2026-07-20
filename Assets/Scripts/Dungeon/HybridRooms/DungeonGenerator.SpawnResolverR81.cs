@@ -222,7 +222,8 @@ public sealed partial class DungeonGenerator
             "Layout／Prefab／Scene Mutation：None");
 
         report.AppendLine(
-            "Manager Integration：Not Yet（R8.2/R8.3 才接入）");
+            "Manager Integration：Player/Exit=R8.2 Integrated" +
+            " | Enemy/Item=Not Yet（R8.3）");
 
         Debug.Log(report.ToString(), this);
     }
