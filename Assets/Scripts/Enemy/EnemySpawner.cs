@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 /// <summary>
@@ -9,11 +10,21 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class EnemySpawner : MonoBehaviour
 {
+    private const int R83EnemySelectionSalt = 830301;
+
     [Header("生成數量")]
     [Min(0)]
     [SerializeField] private int enemyCount = 1;
     [SerializeField] private bool spawnNearPlayerFirst = true;
     [SerializeField] private bool excludeExitRoom = true;
+
+    [Header("R8.3 受控失败测试")]
+    [Tooltip(
+        "只用于 R8.3 受控失败：把全部 FloorCells 视为已保留，" +
+        "强制 Enemy Spawn Cell 解析被拒绝。正常运行必须关闭；" +
+        "不会修改 Layout、Prefab 或敌人 AI。")]
+    [SerializeField]
+    private bool r83InjectNoLegalEnemyCellForControlledFailure;
 
     [Header("移動參數")]
     [Min(0.1f)]
@@ -99,6 +110,26 @@ public sealed class EnemySpawner : MonoBehaviour
         DungeonRenderer dungeonRenderer,
         Transform player)
     {
+        return SpawnTestEnemies(
+            layout,
+            dungeonRoot,
+            dungeonRenderer,
+            player,
+            null);
+    }
+
+    /// <summary>
+    /// R8.3 运行时入口。旧四参数入口完整保留；
+    /// 先解析全部安全格，再一次性实例化，避免部分提交。
+    /// 本方法只改变生成位置来源，不改变任何 AI 参数或组件。
+    /// </summary>
+    public List<GameObject> SpawnTestEnemies(
+        DungeonLayout layout,
+        Transform dungeonRoot,
+        DungeonRenderer dungeonRenderer,
+        Transform player,
+        ISet<Vector2Int> runtimeSpawnReservations)
+    {
         List<GameObject> enemies =
             new List<GameObject>();
 
@@ -115,18 +146,118 @@ public sealed class EnemySpawner : MonoBehaviour
         ValidateSettings();
         CreateFrictionlessMaterial();
 
-        List<Vector2Int> candidateCells =
-            GetCandidateRoomCenters(layout);
+        List<int> candidateRoomIndices;
+        int startRoomIndex;
+        int exitRoomIndex;
+        string roomFailureReason;
+
+        if (!TryGetCandidateRoomIndices(
+                layout,
+                out candidateRoomIndices,
+                out startRoomIndex,
+                out exitRoomIndex,
+                out roomFailureReason))
+        {
+            LogR83EnemyRejection(
+                layout,
+                roomFailureReason,
+                startRoomIndex,
+                exitRoomIndex,
+                runtimeSpawnReservations);
+
+            return enemies;
+        }
 
         int amount = Mathf.Clamp(
             enemyCount,
             0,
-            candidateCells.Count);
+            candidateRoomIndices.Count);
+
+        if (enemyCount > 0 && amount == 0)
+        {
+            LogR83EnemyRejection(
+                layout,
+                "排除 Start Room 与当前 Exit Room 策略后，" +
+                "没有可用于 Enemy 的房间。",
+                startRoomIndex,
+                exitRoomIndex,
+                runtimeSpawnReservations);
+
+            return enemies;
+        }
+
+        HashSet<Vector2Int> requestReservations =
+            runtimeSpawnReservations == null
+                ? new HashSet<Vector2Int>()
+                : new HashSet<Vector2Int>(
+                    runtimeSpawnReservations);
+
+        requestReservations.Add(layout.StartCell);
+        requestReservations.Add(layout.ExitCell);
+
+        if (r83InjectNoLegalEnemyCellForControlledFailure)
+        {
+            requestReservations.UnionWith(
+                layout.FloorCells);
+        }
+
+        List<DungeonSpawnCellResult> spawnResults =
+            new List<DungeonSpawnCellResult>(amount);
 
         for (int i = 0; i < amount; i++)
         {
+            int roomIndex = candidateRoomIndices[i];
+
+            DungeonSpawnCellRequest request =
+                new DungeonSpawnCellRequest(
+                    layout,
+                    DreamRoomSpawnPointKind.Enemy,
+                    new int[] { roomIndex },
+                    selectionSalt:
+                        BuildR83EnemySelectionSalt(
+                            roomIndex,
+                            i),
+                    reservedCells: requestReservations,
+                    excludeStartCell: true,
+                    excludeExitCell: true,
+                    preferredCell:
+                        GetRoomBoundsCenter(
+                            layout,
+                            roomIndex),
+                    allowWalkableFallback: true,
+                    allowLayoutWideFallback: false);
+
+            DungeonSpawnCellResult spawnResult;
+            string failureReason;
+
+            if (!DungeonSpawnCellResolver.TryResolve(
+                    request,
+                    out spawnResult,
+                    out failureReason))
+            {
+                LogR83EnemyRejection(
+                    layout,
+                    "Enemy_" + (i + 1) +
+                    " RoomIndex=" + roomIndex +
+                    " | " + failureReason,
+                    startRoomIndex,
+                    exitRoomIndex,
+                    runtimeSpawnReservations);
+
+                return enemies;
+            }
+
+            spawnResults.Add(spawnResult);
+            requestReservations.Add(spawnResult.Cell);
+        }
+
+        for (int i = 0; i < spawnResults.Count; i++)
+        {
+            DungeonSpawnCellResult spawnResult =
+                spawnResults[i];
+
             GameObject enemy = CreateEnemy(
-                candidateCells[i],
+                spawnResult.Cell,
                 i + 1,
                 layout,
                 dungeonRoot,
@@ -134,7 +265,20 @@ public sealed class EnemySpawner : MonoBehaviour
                 player);
 
             enemies.Add(enemy);
+
+            if (runtimeSpawnReservations != null)
+            {
+                runtimeSpawnReservations.Add(
+                    spawnResult.Cell);
+            }
         }
+
+        LogR83EnemyCommit(
+            layout,
+            spawnResults,
+            startRoomIndex,
+            exitRoomIndex,
+            runtimeSpawnReservations);
 
         return enemies;
     }
@@ -263,50 +407,287 @@ public sealed class EnemySpawner : MonoBehaviour
             RigidbodySleepMode2D.NeverSleep;
     }
 
-    private List<Vector2Int> GetCandidateRoomCenters(
-        DungeonLayout layout)
+    private bool TryGetCandidateRoomIndices(
+        DungeonLayout layout,
+        out List<int> candidateRoomIndices,
+        out int startRoomIndex,
+        out int exitRoomIndex,
+        out string failureReason)
     {
-        List<Vector2Int> centers =
-            new List<Vector2Int>();
+        candidateRoomIndices = new List<int>();
+        startRoomIndex = FindRoomContainingCell(
+            layout,
+            layout.StartCell);
+        exitRoomIndex = FindRoomContainingCell(
+            layout,
+            layout.ExitCell);
+        failureReason = string.Empty;
 
-        for (int i = 0; i < layout.Rooms.Count; i++)
+        if (startRoomIndex < 0)
         {
-            RectInt room = layout.Rooms[i];
+            failureReason =
+                "无法确定 StartCell 所属房间，" +
+                "不能保证排除 Start Room。";
 
-            Vector2Int center = new Vector2Int(
-                room.xMin + room.width / 2,
-                room.yMin + room.height / 2);
+            return false;
+        }
 
-            if (center == layout.StartCell)
+        if (excludeExitRoom && exitRoomIndex < 0)
+        {
+            failureReason =
+                "Exclude Exit Room 已开启，但无法确定 " +
+                "ExitCell 所属房间。";
+
+            return false;
+        }
+
+        int roomCount = Mathf.Max(
+            layout.Rooms.Count,
+            layout.RoomPlacements.Count);
+
+        for (int roomIndex = 0;
+             roomIndex < roomCount;
+             roomIndex++)
+        {
+            if (roomIndex == startRoomIndex)
             {
                 continue;
             }
 
             if (excludeExitRoom &&
-                center == layout.ExitCell)
+                roomIndex == exitRoomIndex)
             {
                 continue;
             }
 
-            centers.Add(center);
+            candidateRoomIndices.Add(roomIndex);
         }
 
         if (spawnNearPlayerFirst)
         {
-            centers.Sort((first, second) =>
-                Manhattan(layout.StartCell, first)
-                    .CompareTo(
-                        Manhattan(layout.StartCell, second)));
+            candidateRoomIndices.Sort(
+                (firstRoomIndex, secondRoomIndex) =>
+                {
+                    int firstDistance = Manhattan(
+                        layout.StartCell,
+                        GetRoomBoundsCenter(
+                            layout,
+                            firstRoomIndex));
+
+                    int secondDistance = Manhattan(
+                        layout.StartCell,
+                        GetRoomBoundsCenter(
+                            layout,
+                            secondRoomIndex));
+
+                    int distanceComparison =
+                        firstDistance.CompareTo(
+                            secondDistance);
+
+                    return distanceComparison != 0
+                        ? distanceComparison
+                        : firstRoomIndex.CompareTo(
+                            secondRoomIndex);
+                });
         }
         else
         {
             Shuffle(
-                centers,
+                candidateRoomIndices,
                 new System.Random(
                     layout.Seed ^ 19349663));
         }
 
-        return centers;
+        return true;
+    }
+
+    private static int FindRoomContainingCell(
+        DungeonLayout layout,
+        Vector2Int cell)
+    {
+        for (int roomIndex = 0;
+             roomIndex < layout.RoomPlacements.Count;
+             roomIndex++)
+        {
+            DreamRoomPlacement placement =
+                layout.RoomPlacements[roomIndex];
+
+            if (placement == null ||
+                placement.Template == null ||
+                !placement.ContainsBoundsCell(cell))
+            {
+                continue;
+            }
+
+            Vector2Int localCell =
+                placement.GlobalToOriginalCell(cell);
+
+            if (placement.Template.IsWalkableCell(localCell))
+            {
+                return roomIndex;
+            }
+        }
+
+        for (int roomIndex = 0;
+             roomIndex < layout.Rooms.Count;
+             roomIndex++)
+        {
+            RectInt room = layout.Rooms[roomIndex];
+
+            if (cell.x >= room.xMin &&
+                cell.x < room.xMax &&
+                cell.y >= room.yMin &&
+                cell.y < room.yMax &&
+                layout.FloorCells.Contains(cell))
+            {
+                return roomIndex;
+            }
+        }
+
+        return -1;
+    }
+
+    private static Vector2Int GetRoomBoundsCenter(
+        DungeonLayout layout,
+        int roomIndex)
+    {
+        RectInt bounds;
+
+        if (roomIndex >= 0 &&
+            roomIndex < layout.RoomPlacements.Count &&
+            layout.RoomPlacements[roomIndex] != null)
+        {
+            bounds =
+                layout.RoomPlacements[roomIndex].CellBounds;
+        }
+        else if (roomIndex >= 0 &&
+                 roomIndex < layout.Rooms.Count)
+        {
+            bounds = layout.Rooms[roomIndex];
+        }
+        else
+        {
+            return layout.StartCell;
+        }
+
+        return new Vector2Int(
+            bounds.xMin + bounds.width / 2,
+            bounds.yMin + bounds.height / 2);
+    }
+
+    private static int BuildR83EnemySelectionSalt(
+        int roomIndex,
+        int enemyIndex)
+    {
+        unchecked
+        {
+            int hash = R83EnemySelectionSalt;
+            hash = hash * 31 + roomIndex;
+            hash = hash * 31 + enemyIndex;
+            return hash;
+        }
+    }
+
+    private void LogR83EnemyRejection(
+        DungeonLayout layout,
+        string failureReason,
+        int startRoomIndex,
+        int exitRoomIndex,
+        ISet<Vector2Int> runtimeSpawnReservations)
+    {
+        Debug.LogWarning(
+            "[EnemySpawner/R8.3] Enemy SpawnCell 提交被拒绝。" +
+            "\nRequested=SpawnPoint(Enemy)" +
+            " | Effective=Rejected" +
+            " | ControlledFailure=" +
+            r83InjectNoLegalEnemyCellForControlledFailure +
+            " | Seed=" + (layout != null ? layout.Seed : 0) +
+            "\nStartRoomIndex=" + startRoomIndex +
+            " | ExitRoomIndex=" + exitRoomIndex +
+            " | ExcludeExitRoom=" + excludeExitRoom +
+            " | SharedReserved=" +
+            (runtimeSpawnReservations != null
+                ? runtimeSpawnReservations.Count
+                : 0) +
+            "\nReason=" + failureReason +
+            "\nEnemiesSpawned=0" +
+            " | PartialCommit=None" +
+            " | LayoutMutation=None" +
+            " | PrefabMutation=None" +
+            " | EnemyAI=Unchanged",
+            this);
+    }
+
+    private void LogR83EnemyCommit(
+        DungeonLayout layout,
+        List<DungeonSpawnCellResult> spawnResults,
+        int startRoomIndex,
+        int exitRoomIndex,
+        ISet<Vector2Int> runtimeSpawnReservations)
+    {
+        StringBuilder report = new StringBuilder();
+        HashSet<Vector2Int> uniqueCells =
+            new HashSet<Vector2Int>();
+        int floorCellMembershipCount = 0;
+
+        for (int i = 0; i < spawnResults.Count; i++)
+        {
+            DungeonSpawnCellResult result = spawnResults[i];
+
+            uniqueCells.Add(result.Cell);
+
+            if (layout.FloorCells.Contains(result.Cell))
+            {
+                floorCellMembershipCount++;
+            }
+        }
+
+        report.AppendLine(
+            "[EnemySpawner/R8.3] Enemy SpawnCell 已提交。");
+
+        report.AppendLine(
+            "Requested=SpawnPoint(Enemy)" +
+            " | RequestedCount=" + enemyCount +
+            " | EffectiveCount=" + spawnResults.Count +
+            " | Seed=" + layout.Seed +
+            " | StartRoomIndex=" + startRoomIndex +
+            " | ExitRoomIndex=" + exitRoomIndex +
+            " | ExcludeExitRoom=" + excludeExitRoom);
+
+        for (int i = 0; i < spawnResults.Count; i++)
+        {
+            DungeonSpawnCellResult result = spawnResults[i];
+
+            report.AppendLine(
+                "Enemy_" + (i + 1) +
+                " Requested=SpawnPoint(Enemy)" +
+                " | Effective=" + result.Source +
+                " | RoomIndex=" + result.RoomIndex +
+                " | Cell=" + result.Cell +
+                " | SpawnPointId=" +
+                (string.IsNullOrEmpty(result.SpawnPointId)
+                    ? "None"
+                    : result.SpawnPointId) +
+                " | Candidates=" + result.CandidateCount +
+                " | Rejected=" +
+                result.RejectedCandidateCount +
+                " | SelectionSeed=" + result.SelectionSeed);
+        }
+
+        report.Append(
+            "FloorCellsMembership=" +
+            floorCellMembershipCount +
+            "/" + spawnResults.Count +
+            " | UniqueCells=" + uniqueCells.Count +
+            "/" + spawnResults.Count +
+            " | SharedReserved=" +
+            (runtimeSpawnReservations != null
+                ? runtimeSpawnReservations.Count
+                : spawnResults.Count + 2) +
+            " | LayoutMutation=None" +
+            " | EnemyAI=Unchanged");
+
+        Debug.Log(report.ToString(), this);
     }
 
     private static void Shuffle<T>(

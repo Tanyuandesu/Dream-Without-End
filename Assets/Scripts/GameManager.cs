@@ -219,17 +219,29 @@ public sealed class GameManager : MonoBehaviour
                 dungeonRenderer,
                 this);
 
+            // R8.3：同一楼层的 Player／Exit／Item／Enemy 共用一份
+            // 运行时出生格保留集合。它只协调消费者，不写回 Layout，
+            // 也不改变 R4／R5／R6 的房间与走廊结果。
+            HashSet<Vector2Int> runtimeSpawnReservations =
+                new HashSet<Vector2Int>
+                {
+                    currentLayout.StartCell,
+                    currentLayout.ExitCell
+                };
+
             itemManager.SetupFloor(
                 CurrentFloor,
                 currentLayout,
                 currentDungeonRoot,
-                dungeonRenderer);
+                dungeonRenderer,
+                runtimeSpawnReservations);
 
             enemyManager.SetupFloor(
                 currentLayout,
                 currentDungeonRoot,
                 dungeonRenderer,
-                player);
+                player,
+                runtimeSpawnReservations);
 
             cameraManager.SetTarget(player);
 

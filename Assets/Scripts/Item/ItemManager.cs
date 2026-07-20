@@ -70,6 +70,25 @@ public sealed class ItemManager :
         Transform floorRoot,
         DungeonRenderer dungeonRenderer)
     {
+        SetupFloor(
+            floorNumber,
+            layout,
+            floorRoot,
+            dungeonRenderer,
+            null);
+    }
+
+    /// <summary>
+    /// R8.3 运行时入口。旧四参数入口完整保留；
+    /// GameManager 会传入本楼层共用的出生格保留集合。
+    /// </summary>
+    public void SetupFloor(
+        int floorNumber,
+        DungeonLayout layout,
+        Transform floorRoot,
+        DungeonRenderer dungeonRenderer,
+        ISet<Vector2Int> runtimeSpawnReservations)
+    {
         ClearFloor();
         CacheComponents();
 
@@ -115,7 +134,8 @@ public sealed class ItemManager :
                 floorRoot,
                 dungeonRenderer,
                 this,
-                floorNumber);
+                floorNumber,
+                runtimeSpawnReservations);
     }
 
     public bool TryCollect(

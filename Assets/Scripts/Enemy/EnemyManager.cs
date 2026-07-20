@@ -42,6 +42,25 @@ public sealed class EnemyManager : MonoBehaviour
         DungeonRenderer renderer,
         Transform playerTransform)
     {
+        SetupFloor(
+            layout,
+            floorRoot,
+            renderer,
+            playerTransform,
+            null);
+    }
+
+    /// <summary>
+    /// R8.3 运行时入口。旧四参数入口完整保留；
+    /// GameManager 会传入已经包含 Player／Exit／Item 的保留格。
+    /// </summary>
+    public void SetupFloor(
+        DungeonLayout layout,
+        Transform floorRoot,
+        DungeonRenderer renderer,
+        Transform playerTransform,
+        ISet<Vector2Int> runtimeSpawnReservations)
+    {
         ClearFloor();
 
         if (layout == null ||
@@ -62,7 +81,8 @@ public sealed class EnemyManager : MonoBehaviour
                 layout,
                 floorRoot,
                 renderer,
-                playerTransform);
+                playerTransform,
+                runtimeSpawnReservations);
 
         for (int i = 0;
              i < spawnedEnemies.Count;

@@ -8,9 +8,9 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class ItemSpawner : MonoBehaviour
 {
-    [Header("生成位置")]
-    [SerializeField] private bool preferRoomCenters = true;
+    private const int R83ItemSelectionSalt = 830303;
 
+    [Header("生成位置")]
     [Min(0)]
     [SerializeField] private int minimumDistanceFromStart = 4;
 
@@ -20,6 +20,14 @@ public sealed class ItemSpawner : MonoBehaviour
     [Header("測試外觀")]
     [SerializeField] private int fallbackSortingOrder = 12;
 
+    [Header("R8.3 受控失败测试")]
+    [Tooltip(
+        "只用于 R8.3 受控失败：把全部 FloorCells 视为已保留，" +
+        "强制 Item Spawn Cell 解析被拒绝。正常运行必须关闭；" +
+        "不会修改 Layout、Prefab 或道具进度。")]
+    [SerializeField]
+    private bool r83InjectNoLegalItemCellForControlledFailure;
+
     public GameObject Spawn(
         ItemDefinition definition,
         DungeonLayout layout,
@@ -27,6 +35,30 @@ public sealed class ItemSpawner : MonoBehaviour
         DungeonRenderer dungeonRenderer,
         ItemManager itemManager,
         int floorNumber)
+    {
+        return Spawn(
+            definition,
+            layout,
+            floorRoot,
+            dungeonRenderer,
+            itemManager,
+            floorNumber,
+            null);
+    }
+
+    /// <summary>
+    /// R8.3 运行时入口。旧六参数入口完整保留；
+    /// 共用保留集合由 GameManager 建立，解析器只读取它，
+    /// 成功实例化后才提交 Item 的最终出生格。
+    /// </summary>
+    public GameObject Spawn(
+        ItemDefinition definition,
+        DungeonLayout layout,
+        Transform floorRoot,
+        DungeonRenderer dungeonRenderer,
+        ItemManager itemManager,
+        int floorNumber,
+        ISet<Vector2Int> runtimeSpawnReservations)
     {
         if (definition == null ||
             layout == null ||
@@ -40,31 +72,78 @@ public sealed class ItemSpawner : MonoBehaviour
             return null;
         }
 
-        List<Vector2Int> candidates =
-            BuildCandidateCells(layout);
+        HashSet<Vector2Int> requestReservations =
+            runtimeSpawnReservations == null
+                ? new HashSet<Vector2Int>()
+                : new HashSet<Vector2Int>(
+                    runtimeSpawnReservations);
 
-        if (candidates.Count == 0)
+        requestReservations.Add(layout.StartCell);
+        requestReservations.Add(layout.ExitCell);
+
+        if (r83InjectNoLegalItemCellForControlledFailure)
+        {
+            requestReservations.UnionWith(
+                layout.FloorCells);
+        }
+
+        int selectionSalt = CombineSeed(
+            R83ItemSelectionSalt,
+            floorNumber,
+            StableHash(definition.ItemId));
+
+        selectionSalt = CombineSeed(
+            selectionSalt,
+            itemManager.ProgressionScore,
+            83);
+
+        DungeonSpawnCellRequest request =
+            new DungeonSpawnCellRequest(
+                layout,
+                DreamRoomSpawnPointKind.Item,
+                allowedRoomIndices: null,
+                selectionSalt: selectionSalt,
+                reservedCells: requestReservations,
+                excludeStartCell: true,
+                excludeExitCell: true,
+                minimumDistanceFromStart:
+                    minimumDistanceFromStart,
+                minimumDistanceFromExit:
+                    minimumDistanceFromExit,
+                allowWalkableFallback: true,
+                allowLayoutWideFallback: true);
+
+        DungeonSpawnCellResult spawnResult;
+        string failureReason;
+
+        if (!DungeonSpawnCellResolver.TryResolve(
+                request,
+                out spawnResult,
+                out failureReason))
         {
             Debug.LogWarning(
-                "ItemSpawner：找不到適合的道具生成格。");
+                "[ItemSpawner/R8.3] Item SpawnCell 提交被拒绝。" +
+                "\nRequested=SpawnPoint(Item)" +
+                " | Effective=Rejected" +
+                " | ControlledFailure=" +
+                r83InjectNoLegalItemCellForControlledFailure +
+                " | Floor=" + floorNumber +
+                " | Seed=" + layout.Seed +
+                " | ItemId=" + definition.ItemId +
+                "\nReason=" + failureReason +
+                "\nItemSpawned=None" +
+                " | LayoutMutation=None" +
+                " | PrefabMutation=None" +
+                " | ProgressMutation=None",
+                this);
 
             return null;
         }
 
-        System.Random random =
-            new System.Random(
-                CombineSeed(
-                    layout.Seed,
-                    floorNumber,
-                    StableHash(definition.ItemId)));
-
-        Vector2Int spawnCell =
-            candidates[random.Next(candidates.Count)];
-
         GameObject pickup =
             CreatePickupObject(
                 definition,
-                spawnCell,
+                spawnResult.Cell,
                 floorRoot,
                 dungeonRenderer);
 
@@ -92,78 +171,43 @@ public sealed class ItemSpawner : MonoBehaviour
             itemManager,
             floorNumber);
 
+        if (runtimeSpawnReservations != null)
+        {
+            runtimeSpawnReservations.Add(
+                spawnResult.Cell);
+        }
+
+        Debug.Log(
+            "[ItemSpawner/R8.3] Item SpawnCell 已提交。" +
+            "\nRequested=SpawnPoint(Item)" +
+            " | Effective=" + spawnResult.Source +
+            " | Floor=" + floorNumber +
+            " | Seed=" + layout.Seed +
+            " | ProgressionScore=" +
+            itemManager.ProgressionScore +
+            " | ItemId=" + definition.ItemId +
+            "\nRoomIndex=" + spawnResult.RoomIndex +
+            " | Cell=" + spawnResult.Cell +
+            " | SpawnPointId=" +
+            (string.IsNullOrEmpty(spawnResult.SpawnPointId)
+                ? "None"
+                : spawnResult.SpawnPointId) +
+            " | Candidates=" +
+            spawnResult.CandidateCount +
+            " | Rejected=" +
+            spawnResult.RejectedCandidateCount +
+            " | SelectionSeed=" +
+            spawnResult.SelectionSeed +
+            "\nFloorCellsMembership=True" +
+            " | MinimumDistanceFromStart=" +
+            minimumDistanceFromStart +
+            " | MinimumDistanceFromExit=" +
+            minimumDistanceFromExit +
+            " | SharedReservation=Committed" +
+            " | LayoutMutation=None",
+            this);
+
         return pickup;
-    }
-
-    private List<Vector2Int> BuildCandidateCells(
-        DungeonLayout layout)
-    {
-        List<Vector2Int> candidates =
-            new List<Vector2Int>();
-
-        if (preferRoomCenters &&
-            layout.Rooms != null)
-        {
-            for (int i = 0; i < layout.Rooms.Count; i++)
-            {
-                RectInt room = layout.Rooms[i];
-
-                Vector2Int center =
-                    new Vector2Int(
-                        room.xMin + room.width / 2,
-                        room.yMin + room.height / 2);
-
-                TryAddCandidate(
-                    center,
-                    layout,
-                    candidates);
-            }
-        }
-
-        if (candidates.Count > 0)
-        {
-            return candidates;
-        }
-
-        foreach (Vector2Int cell in layout.FloorCells)
-        {
-            TryAddCandidate(
-                cell,
-                layout,
-                candidates);
-        }
-
-        return candidates;
-    }
-
-    private void TryAddCandidate(
-        Vector2Int cell,
-        DungeonLayout layout,
-        List<Vector2Int> candidates)
-    {
-        if (!layout.FloorCells.Contains(cell) ||
-            cell == layout.StartCell ||
-            cell == layout.ExitCell)
-        {
-            return;
-        }
-
-        if (Manhattan(cell, layout.StartCell) <
-            minimumDistanceFromStart)
-        {
-            return;
-        }
-
-        if (Manhattan(cell, layout.ExitCell) <
-            minimumDistanceFromExit)
-        {
-            return;
-        }
-
-        if (!candidates.Contains(cell))
-        {
-            candidates.Add(cell);
-        }
     }
 
     private GameObject CreatePickupObject(
@@ -210,14 +254,6 @@ public sealed class ItemSpawner : MonoBehaviour
         }
 
         pickupCollider.isTrigger = true;
-    }
-
-    private static int Manhattan(
-        Vector2Int first,
-        Vector2Int second)
-    {
-        return Mathf.Abs(first.x - second.x) +
-               Mathf.Abs(first.y - second.y);
     }
 
     private static int CombineSeed(

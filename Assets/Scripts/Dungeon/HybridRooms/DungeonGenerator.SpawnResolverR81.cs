@@ -223,7 +223,7 @@ public sealed partial class DungeonGenerator
 
         report.AppendLine(
             "Manager Integration：Player/Exit=R8.2 Integrated" +
-            " | Enemy/Item=Not Yet（R8.3）");
+            " | Enemy/Item=R8.3 Integrated");
 
         Debug.Log(report.ToString(), this);
     }

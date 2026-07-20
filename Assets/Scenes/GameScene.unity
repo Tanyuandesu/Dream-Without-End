@@ -5617,10 +5617,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ee35400615e9c8f4eab3f09a772e6972, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  preferRoomCenters: 1
   minimumDistanceFromStart: 4
   minimumDistanceFromExit: 2
   fallbackSortingOrder: 12
+  r83InjectNoLegalItemCellForControlledFailure: 0
 --- !u!4 &619913695
 Transform:
   m_ObjectHideFlags: 0
@@ -5709,8 +5709,9 @@ MonoBehaviour:
   maxPlacementAttempts: 250
   corridorWidth: 2
   extraConnections: 2
-  useRandomSeed: 1
+  useRandomSeed: 0
   fixedSeed: 12345
+  r82InjectNoLegalPlayerCellForControlledFailure: 0
   roomGraphMinimumExtraConnections: 1
   roomGraphMaximumExtraConnections: 2
   socketCorridorWidth: 2
@@ -10838,6 +10839,7 @@ MonoBehaviour:
   enemyCount: 3
   spawnNearPlayerFirst: 1
   excludeExitRoom: 1
+  r83InjectNoLegalEnemyCellForControlledFailure: 0
   moveSpeed: 4.7
   waypointTolerance: 0.035
   stopDistance: 0.72
