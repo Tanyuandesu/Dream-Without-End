@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -35,6 +36,14 @@ public sealed class GameManager : MonoBehaviour
     [Header("啟動")]
     [SerializeField] private bool generateOnStart = true;
 
+    [Header("R8.4 受控失败测试")]
+    [Tooltip(
+        "只用于 R8.4：已有楼层时，拒绝下一层的事务提交，" +
+        "验证旧层、玩家、进度与出口重试能力。" +
+        "首次生成与 R 重生成不受影响；正常运行必须关闭。")]
+    [SerializeField]
+    private bool r84RejectNextFloorCommitForControlledFailure;
+
     [Header("除錯")]
     [SerializeField] private bool showDebugOverlay = true;
 
@@ -46,6 +55,7 @@ public sealed class GameManager : MonoBehaviour
     private DungeonRenderMode effectiveGenerationMode =
         DungeonRenderMode.ProceduralCells;
     private string generationModeStatus = "尚未生成";
+    private int r84TransactionSerial;
 
     public int CurrentFloor { get; private set; }
 
@@ -93,15 +103,29 @@ public sealed class GameManager : MonoBehaviour
 
     public void PlayerReachedExit()
     {
-        GenerateNextFloor();
+        TryGenerateNextFloor();
+    }
+
+    /// <summary>
+    /// R8.4 出口入口。失败时返回 false，让当前出口重新待命。
+    /// 原有 PlayerReachedExit() 与 GenerateNextFloor() 均继续保留。
+    /// </summary>
+    public bool TryPlayerReachedExit()
+    {
+        return TryGenerateNextFloor();
     }
 
     public void GenerateNextFloor()
     {
+        TryGenerateNextFloor();
+    }
+
+    private bool TryGenerateNextFloor()
+    {
         int targetFloorNumber =
             Mathf.Max(1, CurrentFloor + 1);
 
-        GenerateFloor(targetFloorNumber);
+        return GenerateFloor(targetFloorNumber);
     }
 
     public void RegenerateCurrentFloor()
@@ -137,11 +161,66 @@ public sealed class GameManager : MonoBehaviour
 
         try
         {
+            int transactionId =
+                ++r84TransactionSerial;
+
+            int previousFloor = CurrentFloor;
+            GameObject previousRoot =
+                currentDungeonRoot != null
+                    ? currentDungeonRoot.gameObject
+                    : null;
+            int previousRootId =
+                GetR84InstanceId(previousRoot);
+            int previousPlayerId =
+                GetR84InstanceId(
+                    playerManager.CurrentPlayerObject);
+            List<int> previousEnemyIds =
+                GetR84ActiveEnemyIds();
+            int previousPickupId =
+                GetR84InstanceId(
+                    itemManager.ActivePickup);
+            ItemProgressSnapshot previousProgress =
+                itemManager.CreateProgressSnapshot();
+
             DungeonRenderMode requestedMode =
                 dungeonRenderer.RenderMode;
 
             requestedGenerationMode = requestedMode;
             generationModeStatus = "准备中";
+
+            if (r84RejectNextFloorCommitForControlledFailure &&
+                CurrentFloor > 0 &&
+                targetFloorNumber > CurrentFloor)
+            {
+                generationModeStatus =
+                    "受控失败，旧层保留";
+
+                Debug.LogWarning(
+                    "[GameManager/R8.4] 下一层事务被受控拒绝，" +
+                    "旧层保持可用。" +
+                    "\nTransaction=" + transactionId +
+                    " | ControlledFailure=True" +
+                    " | Commit=Rejected" +
+                    " | Requested=" + requestedMode +
+                    " | Effective=Unchanged(" +
+                    effectiveGenerationMode + ")" +
+                    "\nCurrentFloor=" + CurrentFloor +
+                    " | TargetFloor=" + targetFloorNumber +
+                    " | GeneratedRootId=" + previousRootId +
+                    " | PlayerId=" + previousPlayerId +
+                    " | ActiveEnemies=" +
+                    previousEnemyIds.Count +
+                    " | ActivePickupId=" +
+                    previousPickupId +
+                    "\nProgress=" +
+                    FormatR84Progress(previousProgress) +
+                    " | LifecycleUnchanged=True" +
+                    " | SceneMutation=None" +
+                    " | ProgressMutation=None",
+                    this);
+
+                return false;
+            }
 
             DungeonLayout preparedLayout;
             DungeonRenderMode preparedEffectiveMode;
@@ -245,12 +324,254 @@ public sealed class GameManager : MonoBehaviour
 
             cameraManager.SetTarget(player);
 
+            GameObject committedRoot =
+                currentDungeonRoot != null
+                    ? currentDungeonRoot.gameObject
+                    : null;
+
+            StartCoroutine(
+                AuditR84CommitAfterFrame(
+                    transactionId,
+                    previousFloor,
+                    targetFloorNumber,
+                    requestedMode,
+                    preparedEffectiveMode,
+                    previousRoot,
+                    previousRootId,
+                    committedRoot,
+                    GetR84InstanceId(committedRoot),
+                    previousPlayerId,
+                    previousEnemyIds,
+                    previousPickupId,
+                    previousProgress));
+
             return true;
         }
         finally
         {
             isGenerating = false;
         }
+    }
+
+    private IEnumerator AuditR84CommitAfterFrame(
+        int transactionId,
+        int previousFloor,
+        int targetFloor,
+        DungeonRenderMode requestedMode,
+        DungeonRenderMode effectiveMode,
+        GameObject previousRoot,
+        int previousRootId,
+        GameObject committedRoot,
+        int committedRootId,
+        int previousPlayerId,
+        List<int> previousEnemyIds,
+        int previousPickupId,
+        ItemProgressSnapshot previousProgress)
+    {
+        // Destroy 在帧末真正执行；下一帧检查才能区分
+        // “排队销毁”与“旧 GeneratedDungeon 已经消失”。
+        yield return null;
+
+        int generatedRootCount =
+            CountR84GeneratedRoots();
+        int playerObjectCount =
+            CountR84PlayerObjects();
+        int currentPlayerId =
+            GetR84InstanceId(
+                playerManager.CurrentPlayerObject);
+        List<int> currentEnemyIds =
+            GetR84ActiveEnemyIds();
+        int currentPickupId =
+            GetR84InstanceId(
+                itemManager.ActivePickup);
+        ItemProgressSnapshot currentProgress =
+            itemManager.CreateProgressSnapshot();
+
+        bool floorCommitted =
+            CurrentFloor == targetFloor &&
+            committedRoot != null &&
+            GetR84InstanceId(committedRoot) ==
+                committedRootId;
+        bool oldRootDestroyed =
+            previousRootId == 0 ||
+            previousRoot == null;
+        bool exactlyOneGeneratedRoot =
+            generatedRootCount == 1;
+        bool exactlyOnePlayer =
+            playerObjectCount == 1 &&
+            currentPlayerId != 0;
+        bool playerReused =
+            previousPlayerId == 0 ||
+            currentPlayerId == previousPlayerId;
+        bool cameraTargetMatches =
+            cameraManager.CurrentTarget != null &&
+            cameraManager.CurrentTarget ==
+                playerManager.CurrentPlayer;
+        bool oldEnemyReferencesCleared =
+            !HasAnySharedR84InstanceId(
+                previousEnemyIds,
+                currentEnemyIds);
+        bool oldItemReferenceCleared =
+            previousPickupId == 0 ||
+            currentPickupId != previousPickupId;
+        bool progressPreserved =
+            HasSameR84Progress(
+                previousProgress,
+                currentProgress);
+
+        bool auditPassed =
+            floorCommitted &&
+            oldRootDestroyed &&
+            exactlyOneGeneratedRoot &&
+            exactlyOnePlayer &&
+            playerReused &&
+            cameraTargetMatches &&
+            oldEnemyReferencesCleared &&
+            oldItemReferenceCleared &&
+            progressPreserved;
+
+        string playerReuseText =
+            previousPlayerId == 0
+                ? "InitialCreation"
+                : playerReused.ToString();
+
+        string message =
+            "[GameManager/R8.4] 楼层生命周期审计" +
+            (auditPassed ? "通过。" : "失败。") +
+            "\nTransaction=" + transactionId +
+            " | PreviousFloor=" + previousFloor +
+            " | CurrentFloor=" + CurrentFloor +
+            " | Requested=" + requestedMode +
+            " | Effective=" + effectiveMode +
+            "\nGeneratedRoots=" +
+            generatedRootCount +
+            " | OldRootId=" + previousRootId +
+            " | NewRootId=" + committedRootId +
+            " | OldRootDestroyed=" +
+            oldRootDestroyed +
+            "\nPlayerObjects=" + playerObjectCount +
+            " | PreviousPlayerId=" + previousPlayerId +
+            " | CurrentPlayerId=" + currentPlayerId +
+            " | PlayerReused=" + playerReuseText +
+            " | CameraTargetMatches=" +
+            cameraTargetMatches +
+            "\nOldEnemyReferencesCleared=" +
+            oldEnemyReferencesCleared +
+            " | ActiveEnemies=" +
+            currentEnemyIds.Count +
+            " | OldItemReferenceCleared=" +
+            oldItemReferenceCleared +
+            " | ActivePickupId=" + currentPickupId +
+            "\nProgressBefore=" +
+            FormatR84Progress(previousProgress) +
+            " | ProgressAfter=" +
+            FormatR84Progress(currentProgress) +
+            " | ProgressPreserved=" +
+            progressPreserved;
+
+        if (auditPassed)
+        {
+            Debug.Log(message, this);
+        }
+        else
+        {
+            Debug.LogError(message, this);
+        }
+    }
+
+    private int CountR84GeneratedRoots()
+    {
+        int count = 0;
+
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+
+            if (child != null &&
+                child.name.StartsWith(
+                    "GeneratedDungeon_Floor_",
+                    StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private int CountR84PlayerObjects()
+    {
+        RuntimeDungeonPlayer[] players =
+            playerManager.GetComponentsInChildren<
+                RuntimeDungeonPlayer>(true);
+
+        return players.Length;
+    }
+
+    private List<int> GetR84ActiveEnemyIds()
+    {
+        List<int> instanceIds =
+            new List<int>();
+        IReadOnlyList<GameObject> enemies =
+            enemyManager.ActiveEnemies;
+
+        for (int i = 0; i < enemies.Count; i++)
+        {
+            int instanceId =
+                GetR84InstanceId(enemies[i]);
+
+            if (instanceId != 0)
+            {
+                instanceIds.Add(instanceId);
+            }
+        }
+
+        return instanceIds;
+    }
+
+    private static bool HasAnySharedR84InstanceId(
+        List<int> first,
+        List<int> second)
+    {
+        for (int i = 0; i < first.Count; i++)
+        {
+            if (second.Contains(first[i]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasSameR84Progress(
+        ItemProgressSnapshot first,
+        ItemProgressSnapshot second)
+    {
+        return
+            first.CollectedCount == second.CollectedCount &&
+            first.ProgressionScore ==
+                second.ProgressionScore &&
+            first.LastCollectedFloor ==
+                second.LastCollectedFloor;
+    }
+
+    private static int GetR84InstanceId(
+        UnityEngine.Object value)
+    {
+        return value != null
+            ? value.GetInstanceID()
+            : 0;
+    }
+
+    private static string FormatR84Progress(
+        ItemProgressSnapshot progress)
+    {
+        return
+            "(Items=" + progress.CollectedCount +
+            ",Score=" + progress.ProgressionScore +
+            ",LastFloor=" +
+            progress.LastCollectedFloor + ")";
     }
 
     private bool TryPrepareLayout(
