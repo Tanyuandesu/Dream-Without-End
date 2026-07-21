@@ -5747,6 +5747,7 @@ MonoBehaviour:
   enemyManager: {fileID: 908851852}
   itemManager: {fileID: 619913693}
   generateOnStart: 1
+  r84RejectNextFloorCommitForControlledFailure: 0
   showDebugOverlay: 1
 --- !u!4 &621725375
 Transform:
