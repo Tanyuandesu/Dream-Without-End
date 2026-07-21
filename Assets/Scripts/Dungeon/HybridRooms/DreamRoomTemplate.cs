@@ -55,7 +55,7 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     [SerializeField]
     private bool allowQuarterTurns = true;
 
-    [Header("房间用途（R1 只保存，不参与当前生成）")]
+    [Header("房间用途（R9.4 分阶段参与正式选择）")]
     [SerializeField]
     private DreamRoomTag roomTags = DreamRoomTag.Standard;
 

@@ -406,6 +406,10 @@ public sealed partial class DungeonGenerator
         {
             bool placedRoom = false;
 
+            R941RequiredRoomRole requiredRole =
+                R941GetRequiredRoleForPlacementSlot(
+                    roomIndex);
+
             for (int attempt = 0;
                  attempt <
                  templateFirstMaximumPlacementAttemptsPerRoom;
@@ -425,6 +429,22 @@ public sealed partial class DungeonGenerator
                         (roomIndex + 1) +
                         " 个房间时已经没有可用模板。" +
                         "请检查楼层限制、Maximum Instances 与地图尺寸。";
+
+                    return false;
+                }
+
+                string roleSelectionFailure;
+
+                if (!R941RestrictCandidatesForRole(
+                        requiredRole,
+                        fittingTemplates,
+                        out roleSelectionFailure))
+                {
+                    failureReason =
+                        "第 " +
+                        (roomIndex + 1) +
+                        " 个房间的 R9.4.1 角色候选无效：" +
+                        roleSelectionFailure;
 
                     return false;
                 }

@@ -178,7 +178,26 @@ public sealed partial class DungeonGenerator
                 seed,
                 graphSeed,
                 layoutAttemptIndex + 1,
-                statistics);
+                statistics) +
+                "\n" +
+                R941BuildResolvedRoleReport(
+                    layout,
+                    floorNumber,
+                    templateFirstRoomCatalog.CatalogId);
+
+            string roleFallbackWarning =
+                R941BuildFallbackWarning(
+                    layout,
+                    floorNumber,
+                    templateFirstRoomCatalog.CatalogId);
+
+            if (!string.IsNullOrEmpty(
+                    roleFallbackWarning))
+            {
+                Debug.LogWarning(
+                    roleFallbackWarning,
+                    this);
+            }
 
             return true;
         }

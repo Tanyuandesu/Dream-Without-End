@@ -572,6 +572,26 @@ public sealed partial class DungeonGenerator
 
         if (candidates.Count == 0)
         {
+            R5CollectTaggedRoomIndices(
+                placements,
+                DreamRoomTag.Standard,
+                startRoomIndex,
+                excludeSpecialRooms: true,
+                results: candidates);
+        }
+
+        if (candidates.Count == 0)
+        {
+            R5CollectTaggedRoomIndices(
+                placements,
+                DreamRoomTag.Standard,
+                startRoomIndex,
+                excludeSpecialRooms: false,
+                results: candidates);
+        }
+
+        if (candidates.Count == 0)
+        {
             for (int i = 0; i < placements.Count; i++)
             {
                 if (i != startRoomIndex)

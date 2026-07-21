@@ -507,18 +507,40 @@ public sealed class DungeonRoomGraphR5Preview : MonoBehaviour
             out hops);
 
         bool hasExitCandidate = false;
+        bool hasOrdinaryStandardCandidate = false;
+        bool hasAnyStandardCandidate = false;
 
         for (int i = 0;
              i < layout.RoomPlacements.Count;
              i++)
         {
-            if (i != metrics.StartRoomIndex &&
-                layout.RoomPlacements[i].Template.
-                    HasTag(DreamRoomTag.ExitCandidate))
+            if (i == metrics.StartRoomIndex)
             {
-                hasExitCandidate = true;
-                break;
+                continue;
             }
+
+            DreamRoomTemplate template =
+                layout.RoomPlacements[i].Template;
+
+            if (template == null)
+            {
+                continue;
+            }
+
+            hasExitCandidate |=
+                template.HasTag(
+                    DreamRoomTag.ExitCandidate);
+
+            bool isStandard =
+                template.HasTag(
+                    DreamRoomTag.Standard);
+
+            hasAnyStandardCandidate |= isStandard;
+
+            hasOrdinaryStandardCandidate |=
+                isStandard &&
+                !template.HasTag(
+                    DreamRoomTag.Special);
         }
 
         int expectedExitRoomIndex = -1;
@@ -529,10 +551,26 @@ public sealed class DungeonRoomGraphR5Preview : MonoBehaviour
              i < layout.RoomPlacements.Count;
              i++)
         {
+            DreamRoomTemplate template =
+                layout.RoomPlacements[i].Template;
+
+            bool isEligibleExitCandidate =
+                template != null &&
+                (hasExitCandidate
+                    ? template.HasTag(
+                        DreamRoomTag.ExitCandidate)
+                    : hasOrdinaryStandardCandidate
+                        ? template.HasTag(
+                              DreamRoomTag.Standard) &&
+                          !template.HasTag(
+                              DreamRoomTag.Special)
+                        : hasAnyStandardCandidate
+                            ? template.HasTag(
+                                DreamRoomTag.Standard)
+                            : true);
+
             if (i == metrics.StartRoomIndex ||
-                (hasExitCandidate &&
-                 !layout.RoomPlacements[i].Template.
-                    HasTag(DreamRoomTag.ExitCandidate)) ||
+                !isEligibleExitCandidate ||
                 distances[i] == long.MaxValue)
             {
                 continue;
