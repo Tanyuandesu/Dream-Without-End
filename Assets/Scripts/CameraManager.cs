@@ -16,6 +16,8 @@ public sealed class CameraManager : MonoBehaviour
     private Transform target;
     private Vector3 velocity;
 
+    public Transform CurrentTarget => target;
+
     private void Awake()
     {
         EnsureCameraExists();
