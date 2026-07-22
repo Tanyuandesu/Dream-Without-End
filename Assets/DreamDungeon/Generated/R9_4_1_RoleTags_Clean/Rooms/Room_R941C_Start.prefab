@@ -1154,7 +1154,7 @@ GameObject:
   - component: {fileID: 2746147357088717943}
   - component: {fileID: 1319530957827645176}
   m_Layer: 0
-  m_Name: Room_R941_Standard_A
+  m_Name: Room_R941C_Start
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1191,14 +1191,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 07e0952ce065ea44796b1e204d33e9e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  templateId: R941_Standard_A
+  templateId: R941C_Start
   sizeInCells: {x: 8, y: 6}
-  randomWeight: 10
+  randomWeight: 1
   minimumFloor: 1
   maximumFloor: 0
-  maximumInstancesPerFloor: 0
+  maximumInstancesPerFloor: 1
   allowQuarterTurns: 1
-  roomTags: 1
+  roomTags: 3
   occupiedCells: []
   walkableCells: []
   blockedCells: []

@@ -10,16 +10,16 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c290711cbeed4db458ae245287a31c1d, type: 3}
-  m_Name: RoomCatalog_R941_RoleTagsTest
-  m_EditorClassIdentifier: 
-  catalogId: RoleTags_R941_Test
+  m_Name: RoomCatalog_R941C_RoleTagsTest
+  m_EditorClassIdentifier:
+  catalogId: RoleTags_R941_CleanTest
   roomTemplates:
-  - {fileID: 1319530957827645176, guid: 54014921efa7e214c8c5bee177fbff14, type: 3}
-  - {fileID: 1319530957827645176, guid: f794713d90b8486418855876c6aa8381, type: 3}
-  - {fileID: 1319530957827645176, guid: 0273a4ab87874d545842f5683f2d6616, type: 3}
-  - {fileID: 1319530957827645176, guid: 1bedd3a8e129bf3499a093df626da80f, type: 3}
+  - {fileID: 1319530957827645176, guid: d01e2bd056e40fb37109faabe3515799, type: 3}
+  - {fileID: 1319530957827645176, guid: eaa943d2b4b01577056754a10fc455bf, type: 3}
+  - {fileID: 1319530957827645176, guid: 60c30b444842e1b3030c8ae63cc4ac43, type: 3}
+  - {fileID: 1319530957827645176, guid: 03f5db71b437f24f2d660c325db2d64c, type: 3}
   previewFloorNumber: 1
-  previewUsedTemplateId: 
+  previewUsedTemplateId:
   previewExistingInstances: 0
   previewRollCount: 1000
   previewRandomSeed: 12345

@@ -8,16 +8,11 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// R9.4.1 Start／Exit RoomTags 的独立资产生成与验收工具。
+/// R9.4.1 Clean Replacement 的只读资产、数据生成与 Live 验收工具。
 ///
-/// 测试资产全部位于 R9_4_RoleTags；不会修改 R3 Graybox Prefab、
-/// R9.1 非矩形样本或正式 GameScene。只有 Prepare 菜单会把当前
-/// GameScene 的 Catalog 临时切到测试目录，Restore 菜单负责恢复并保存。
-///
-/// R9.4.1b：每次从受保护的 Graybox 源重新建立工具自有测试 Prefab，
-/// 随后直接在持久 Prefab Asset 上写入角色参数与内部引用。刻意避开
-/// LoadPrefabContents -> SaveAsPrefabAsset 的同路径二次保存，防止 Unity 6000
-/// 把已经重绑的 Socket 再次序列化为跨 Prefab 引用。
+/// 测试 Prefab 和 Catalog 随补丁静态提供；本工具不会创建、复制或保存
+/// Prefab。只有 Prepare／Restore 会有意改变当前 Scene 的 Catalog，
+/// Cleanup 菜单只删除旧失败补丁专用的隔离目录。
 /// </summary>
 public static class DreamRoomRoleTagAuditR941
 {
@@ -33,70 +28,93 @@ public static class DreamRoomRoleTagAuditR941
     private const string GrayboxCatalogPath =
         GrayboxRoot + "/Catalog/RoomCatalog_Graybox.asset";
 
-    private const string GrayboxSourcePrefabPath =
-        GrayboxRoot + "/Rooms/Room_08x06.prefab";
-
-    private const string TestRoot =
-        "Assets/DreamDungeon/Generated/R9_4_RoleTags";
-
-    private const string TestRoomFolder =
-        TestRoot + "/Rooms";
-
-    private const string TestCatalogFolder =
-        TestRoot + "/Catalog";
-
-    private const string TestCatalogPath =
-        TestCatalogFolder +
-        "/RoomCatalog_R941_RoleTagsTest.asset";
-
-    private const string TestCatalogId =
-        "RoleTags_R941_Test";
-
     private const string GrayboxCatalogId =
         "Graybox_R3";
+
+    private const string CleanTestRoot =
+        "Assets/DreamDungeon/Generated/R9_4_1_RoleTags_Clean";
+
+    private const string CleanRoomRoot =
+        CleanTestRoot + "/Rooms";
+
+    private const string CleanCatalogRoot =
+        CleanTestRoot + "/Catalog";
+
+    private const string TaggedCatalogPath =
+        CleanCatalogRoot +
+        "/RoomCatalog_R941C_RoleTagsTest.asset";
+
+    private const string TaggedCatalogId =
+        "RoleTags_R941_CleanTest";
+
+    private const string UnsafeCatalogPath =
+        CleanCatalogRoot +
+        "/RoomCatalog_R941C_UnsafeNoStandard.asset";
+
+    private const string UnsafeCatalogId =
+        "RoleTags_R941_UnsafeNoStandard";
+
+    private const string LegacyFailedRoot =
+        "Assets/DreamDungeon/Generated/R9_4_RoleTags";
+
+    private const string FallbackWarningMarker =
+        "[DungeonGenerator/R9.4.1] RoomTags 安全回退";
+
+    private const string AuditFixId =
+        "PrefabContentsContextFix_2026-07-22";
 
     private const int TestFloor = 1;
     private const int ExpectedRoomCount = 7;
 
-    private static readonly RolePrefabSpec[] RolePrefabSpecs =
+    private static readonly TemplateSpec[] TaggedTemplateSpecs =
     {
-        new RolePrefabSpec(
-            "R941_Start",
-            "Room_R941_Start.prefab",
+        new TemplateSpec(
+            CleanRoomRoot + "/Room_R941C_Start.prefab",
+            "R941C_Start",
             DreamRoomTag.Standard |
             DreamRoomTag.StartCandidate,
             randomWeight: 1,
-            maximumInstances: 1),
+            maximumInstancesPerFloor: 1),
 
-        new RolePrefabSpec(
-            "R941_Exit",
-            "Room_R941_Exit.prefab",
+        new TemplateSpec(
+            CleanRoomRoot + "/Room_R941C_Exit.prefab",
+            "R941C_Exit",
             DreamRoomTag.Standard |
             DreamRoomTag.ExitCandidate,
             randomWeight: 1,
-            maximumInstances: 1),
+            maximumInstancesPerFloor: 1),
 
-        new RolePrefabSpec(
-            "R941_Standard_A",
-            "Room_R941_Standard_A.prefab",
+        new TemplateSpec(
+            CleanRoomRoot + "/Room_R941C_Standard_A.prefab",
+            "R941C_Standard_A",
             DreamRoomTag.Standard,
             randomWeight: 10,
-            maximumInstances: 0),
+            maximumInstancesPerFloor: 0),
 
-        new RolePrefabSpec(
-            "R941_Standard_B",
-            "Room_R941_Standard_B.prefab",
+        new TemplateSpec(
+            CleanRoomRoot + "/Room_R941C_Standard_B.prefab",
+            "R941C_Standard_B",
             DreamRoomTag.Standard,
             randomWeight: 10,
-            maximumInstances: 0)
+            maximumInstancesPerFloor: 0)
+    };
+
+    private static readonly TemplateSpec[] UnsafeTemplateSpecs =
+    {
+        new TemplateSpec(
+            CleanRoomRoot + "/Room_R941C_RareOnly.prefab",
+            "R941C_RareOnly",
+            DreamRoomTag.Rare,
+            randomWeight: 10,
+            maximumInstancesPerFloor: 0)
     };
 
     [MenuItem(
         MenuRoot +
-        "Generate Start-Exit Role Test Assets (R9.4.1)",
+        "Diagnose Prefab Validation Context (R9.4.1 Fix)",
         false,
-        2410)]
-    private static void GenerateTestAssets()
+        2400)]
+    private static void DiagnosePrefabValidationContext()
     {
         SceneContext context;
         List<string> errors;
@@ -107,121 +125,331 @@ public static class DreamRoomRoleTagAuditR941
                 out errors))
         {
             ReportFailure(
-                "R9.4.1 资产生成无法开始",
+                "R9.4.1 Prefab 读取上下文诊断无法开始",
                 errors,
                 null);
             return;
         }
 
-        string baselineHashBefore =
+        string protectedHashBefore =
             BuildProtectedBaselineHashSignature();
 
-        EnsureAssetFolder(TestRoot);
-        EnsureAssetFolder(TestRoomFolder);
-        EnsureAssetFolder(TestCatalogFolder);
+        bool sceneDirtyBefore = context.Scene.isDirty;
+        TemplateSpec spec = TaggedTemplateSpecs[0];
 
-        List<DreamRoomTemplate> templates =
-            new List<DreamRoomTemplate>();
+        int assetViewErrorCount = -1;
+        int assetViewSocketCount = -1;
+        int assetViewSocketOwners = -1;
+        int prefabContentsErrorCount = -1;
+        int prefabContentsSocketCount = -1;
+        int prefabContentsSocketOwners = -1;
 
-        for (int i = 0;
-             i < RolePrefabSpecs.Length;
-             i++)
+        DreamRoomTemplate assetTemplate =
+            AssetDatabase.LoadAssetAtPath<
+                DreamRoomTemplate>(
+                spec.AssetPath);
+
+        if (assetTemplate == null)
         {
-            DreamRoomTemplate template;
+            errors.Add(
+                "Asset 视图找不到 DreamRoomTemplate：" +
+                spec.AssetPath);
+        }
+        else
+        {
+            List<string> assetViewErrors =
+                assetTemplate.GetValidationErrors();
 
-            if (!TryCreateOrRefreshRolePrefab(
-                    RolePrefabSpecs[i],
-                    out template,
-                    errors))
+            assetViewErrorCount = assetViewErrors.Count;
+            assetViewSocketCount =
+                assetTemplate.DoorSockets.Count;
+            assetViewSocketOwners =
+                CountOwnedSockets(assetTemplate);
+        }
+
+        GameObject loadedRoot = null;
+
+        try
+        {
+            loadedRoot =
+                PrefabUtility.LoadPrefabContents(
+                    spec.AssetPath);
+
+            DreamRoomTemplate loadedTemplate =
+                loadedRoot != null
+                    ? loadedRoot.GetComponent<
+                        DreamRoomTemplate>()
+                    : null;
+
+            if (loadedTemplate == null)
             {
-                break;
+                errors.Add(
+                    "Prefab Contents 找不到 DreamRoomTemplate：" +
+                    spec.AssetPath);
             }
+            else
+            {
+                List<string> loadedErrors =
+                    loadedTemplate.GetValidationErrors();
 
-            templates.Add(template);
+                prefabContentsErrorCount =
+                    loadedErrors.Count;
+
+                prefabContentsSocketCount =
+                    loadedTemplate.DoorSockets.Count;
+
+                prefabContentsSocketOwners =
+                    CountOwnedSockets(loadedTemplate);
+
+                for (int i = 0;
+                     i < loadedErrors.Count;
+                     i++)
+                {
+                    errors.Add(
+                        "Prefab Contents：" +
+                        loadedErrors[i]);
+                }
+
+                if (prefabContentsSocketCount != 4)
+                {
+                    errors.Add(
+                        "Prefab Contents 应有 4 个 Socket，实际 " +
+                        prefabContentsSocketCount + "。" );
+                }
+
+                if (prefabContentsSocketOwners !=
+                    prefabContentsSocketCount)
+                {
+                    errors.Add(
+                        "Prefab Contents Socket 归属应为 " +
+                        prefabContentsSocketCount + "/" +
+                        prefabContentsSocketCount +
+                        "，实际 " +
+                        prefabContentsSocketOwners + "/" +
+                        prefabContentsSocketCount + "。" );
+                }
+            }
         }
-
-        DreamRoomCatalog catalog = null;
-
-        if (errors.Count == 0)
+        catch (Exception exception)
         {
-            catalog = CreateOrRefreshTestCatalog(
-                templates,
-                errors);
+            errors.Add(
+                "LoadPrefabContents 诊断抛出异常：\n" +
+                exception);
         }
-
-        if (catalog != null)
+        finally
         {
-            AssetDatabase.SaveAssetIfDirty(catalog);
+            if (loadedRoot != null)
+            {
+                PrefabUtility.UnloadPrefabContents(
+                    loadedRoot);
+            }
         }
 
-        AssetDatabase.Refresh();
-
-        if (catalog != null)
-        {
-            AppendTestAssetValidationErrors(
-                catalog,
-                errors);
-        }
-
-        string baselineHashAfter =
+        string protectedHashAfter =
             BuildProtectedBaselineHashSignature();
 
-        bool baselineUnchanged =
+        bool protectedHashUnchanged =
             string.Equals(
-                baselineHashBefore,
-                baselineHashAfter,
+                protectedHashBefore,
+                protectedHashAfter,
                 StringComparison.Ordinal);
 
-        if (!baselineUnchanged)
+        bool sceneChanged =
+            context.Scene.isDirty != sceneDirtyBefore;
+
+        if (!protectedHashUnchanged)
         {
             errors.Add(
-                "受保护的 GameScene／Graybox 依赖哈希发生变化。" +
-                "不要继续测试，请保留当前 Console。" );
+                "只读上下文诊断改变了受保护基线依赖哈希。" );
         }
 
-        if (context.Scene.isDirty)
+        if (sceneChanged)
         {
             errors.Add(
-                "生成测试资产后 GameScene 意外变为未保存状态。" );
+                "只读上下文诊断改变了 GameScene Dirty 状态。" );
         }
 
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 测试资产生成失败",
+                "R9.4.1 Prefab 读取上下文诊断失败",
                 errors,
                 context.Generator);
             return;
         }
 
+        bool contextMismatchObserved =
+            assetViewErrorCount !=
+                prefabContentsErrorCount ||
+            assetViewSocketOwners !=
+                prefabContentsSocketOwners;
+
         Debug.Log(
             "[DreamRoomRoleTagAuditR941] " +
-            "R9.4.1 Start／Exit 独立测试资产已生成并校验通过。\n" +
-            "Catalog=" + TestCatalogId +
-            " | Templates=4" +
-            " | StartCandidates=1" +
-            " | ExitCandidates=1\n" +
-            "StartMaxPerFloor=1 | ExitMaxPerFloor=1" +
-            " | StandardFallbackTemplates=2\n" +
-            "Hotfix=R9.4.1b" +
-            " | TestPrefabsRebuilt=4/4" +
-            " | PersistentRefsValidated=4/4\n" +
-            "GameSceneChanged=False" +
-            " | GrayboxAssetsModified=False" +
-            " | BaselineHashUnchanged=" +
-            baselineUnchanged,
-            catalog);
+            "R9.4.1 Prefab 读取上下文诊断通过。\n" +
+            "AuditFix=" + AuditFixId + "\n" +
+            "Prefab=" + spec.TemplateId +
+            " | AssetViewErrors=" +
+            assetViewErrorCount +
+            " | AssetViewSocketOwners=" +
+            assetViewSocketOwners + "/" +
+            assetViewSocketCount + "\n" +
+            "PrefabContentsErrors=" +
+            prefabContentsErrorCount +
+            " | PrefabContentsSocketOwners=" +
+            prefabContentsSocketOwners + "/" +
+            prefabContentsSocketCount + "\n" +
+            "ContextMismatchObserved=" +
+            contextMismatchObserved +
+            " | HierarchyAuthority=LoadPrefabContents\n" +
+            "SceneChanged=" + sceneChanged +
+            " | ProtectedHashUnchanged=" +
+            protectedHashUnchanged +
+            " | AssetsModified=False",
+            assetTemplate);
 
         EditorUtility.DisplayDialog(
-            "R9.4.1 Test Assets Ready",
-            "四个独立测试 Prefab 与专用 Catalog 已生成。\n\n" +
-            "GameScene 和 R3 Graybox 均未修改。",
+            "R9.4.1 Prefab Context Passed",
+            "完整 Prefab Contents 的层级与 Socket 归属已通过。\n\n" +
+            "Asset 视图只保留为诊断对照，不再作为层级校验依据。",
             "OK");
     }
 
     [MenuItem(
         MenuRoot +
-        "Validate Start-Exit Tag Contract (R9.4.1)",
+        "Validate Installed Role Test Assets (R9.4.1 Clean)",
+        false,
+        2410)]
+    private static void ValidateInstalledRoleTestAssets()
+    {
+        SceneContext context;
+        List<string> errors;
+
+        if (!TryGetCleanGrayboxSceneContext(
+                requireCleanScene: true,
+                out context,
+                out errors))
+        {
+            ReportFailure(
+                "R9.4.1 Clean 静态资产校验无法开始",
+                errors,
+                null);
+            return;
+        }
+
+        string protectedHashBefore =
+            BuildProtectedBaselineHashSignature();
+
+        bool sceneDirtyBefore = context.Scene.isDirty;
+
+        DreamRoomCatalog taggedCatalog =
+            LoadCatalog(
+                TaggedCatalogPath,
+                TaggedCatalogId,
+                "Tagged Test Catalog",
+                errors);
+
+        DreamRoomCatalog unsafeCatalog =
+            LoadCatalog(
+                UnsafeCatalogPath,
+                UnsafeCatalogId,
+                "Unsafe Test Catalog",
+                errors);
+
+        int taggedSocketReferences = 0;
+        int unsafeSocketReferences = 0;
+
+        if (taggedCatalog != null)
+        {
+            AppendStaticCatalogErrors(
+                taggedCatalog,
+                TaggedTemplateSpecs,
+                "Tagged Test Catalog",
+                errors,
+                out taggedSocketReferences);
+        }
+
+        if (unsafeCatalog != null)
+        {
+            AppendStaticCatalogErrors(
+                unsafeCatalog,
+                UnsafeTemplateSpecs,
+                "Unsafe Test Catalog",
+                errors,
+                out unsafeSocketReferences);
+        }
+
+        string protectedHashAfter =
+            BuildProtectedBaselineHashSignature();
+
+        bool protectedHashUnchanged =
+            string.Equals(
+                protectedHashBefore,
+                protectedHashAfter,
+                StringComparison.Ordinal);
+
+        bool sceneChanged =
+            context.Scene.isDirty != sceneDirtyBefore;
+
+        if (!protectedHashUnchanged)
+        {
+            errors.Add(
+                "只读资产校验改变了 GameScene／Graybox 依赖哈希。" );
+        }
+
+        if (sceneChanged)
+        {
+            errors.Add(
+                "只读资产校验改变了 GameScene Dirty 状态。" );
+        }
+
+        if (errors.Count > 0)
+        {
+            ReportFailure(
+                "R9.4.1 Clean 静态测试资产失败",
+                errors,
+                context.Generator);
+            return;
+        }
+
+        bool legacyFolderPresent =
+            AssetDatabase.IsValidFolder(
+                LegacyFailedRoot);
+
+        Debug.Log(
+            "[DreamRoomRoleTagAuditR941] " +
+            "R9.4.1 Clean 静态测试资产校验通过。\n" +
+            "AuditFix=" + AuditFixId + "\n" +
+            "Source=PackageStaticAssets" +
+            " | PrefabCreateCalls=0" +
+            " | PrefabSaveCalls=0\n" +
+            "HierarchyAuthority=LoadPrefabContents" +
+            " | AssetViewHierarchyTraversal=False\n" +
+            "TaggedCatalog=" + TaggedCatalogId +
+            " | Templates=4" +
+            " | SocketOwners=" +
+            taggedSocketReferences + "/16\n" +
+            "UnsafeCatalog=" + UnsafeCatalogId +
+            " | Templates=1" +
+            " | SocketOwners=" +
+            unsafeSocketReferences + "/4\n" +
+            "GameSceneChanged=" + sceneChanged +
+            " | ProtectedHashUnchanged=" +
+            protectedHashUnchanged +
+            " | LegacyFailedFolderPresent=" +
+            legacyFolderPresent,
+            taggedCatalog);
+
+        EditorUtility.DisplayDialog(
+            "R9.4.1 Clean Assets Passed",
+            "五个随包静态提供的 Prefab 与两个 Catalog 已通过。\n\n" +
+            "本工具没有创建、复制或保存任何 Prefab。",
+            "OK");
+    }
+
+    [MenuItem(
+        MenuRoot +
+        "Validate Start-Exit Tag Contract (R9.4.1 Clean)",
         false,
         2420)]
     private static void ValidateSelectionContract()
@@ -235,18 +463,14 @@ public static class DreamRoomRoleTagAuditR941
                 out errors))
         {
             ReportFailure(
-                "R9.4.1 契约校验无法开始",
+                "R9.4.1 Clean 选择契约无法开始",
                 errors,
                 null);
             return;
         }
 
-        DreamRoomCatalog testCatalog =
-            LoadCatalog(
-                TestCatalogPath,
-                TestCatalogId,
-                "R9.4.1 Test Catalog",
-                errors);
+        DreamRoomCatalog taggedCatalog =
+            LoadAndValidateTaggedCatalog(errors);
 
         DreamRoomCatalog grayboxCatalog =
             LoadCatalog(
@@ -255,98 +479,102 @@ public static class DreamRoomRoleTagAuditR941
                 "Graybox Catalog",
                 errors);
 
-        if (testCatalog != null)
-        {
-            AppendTestAssetValidationErrors(
-                testCatalog,
-                errors);
-        }
+        DreamRoomCatalog unsafeCatalog =
+            LoadAndValidateUnsafeCatalog(errors);
 
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 契约校验无法开始",
+                "R9.4.1 Clean 选择契约无法开始",
                 errors,
                 context.Generator);
             return;
         }
 
-        string baselineHashBefore =
+        string protectedHashBefore =
             BuildProtectedBaselineHashSignature();
 
         bool sceneDirtyBefore = context.Scene.isDirty;
 
-        DungeonGenerator auditGenerator =
-            context.Generator;
-
         DreamRoomCatalog originalCatalog =
-            auditGenerator.TemplateFirstRoomCatalog;
+            context.Generator.TemplateFirstRoomCatalog;
 
         RoleMetrics taggedMetrics = default(RoleMetrics);
         RoleMetrics fallbackMetrics = default(RoleMetrics);
         bool deterministic = false;
+        bool unsafeRejected = false;
+        int taggedWarningCount = -1;
+        int fallbackWarningCount = -1;
+        int unsafeWarningCount = -1;
+
+        FallbackWarningCapture warningCapture =
+            new FallbackWarningCapture();
 
         try
         {
             SetGeneratorCatalogTransient(
-                auditGenerator,
-                testCatalog);
+                context.Generator,
+                taggedCatalog);
+
+            warningCapture.Reset();
 
             DungeonLayout firstTaggedLayout;
             DungeonLayout repeatedTaggedLayout;
 
-            if (!TryGenerateForAudit(
-                    auditGenerator,
+            if (TryGenerateForAudit(
+                    context.Generator,
                     out firstTaggedLayout,
                     errors,
-                    "Tagged Catalog 第一次生成") ||
-                !TryGenerateForAudit(
-                    auditGenerator,
+                    "Tagged Catalog 第一次生成") &&
+                TryGenerateForAudit(
+                    context.Generator,
                     out repeatedTaggedLayout,
                     errors,
                     "Tagged Catalog 重复生成"))
-            {
-                // errors 已由 TryGenerateForAudit 填写。
-            }
-            else
             {
                 ValidateRoleLayout(
                     firstTaggedLayout,
                     requireTaggedRoles: true,
                     requireUniqueTaggedRoles: true,
-                    "Tagged Catalog",
-                    errors,
-                    out taggedMetrics);
-
-                string firstSignature =
-                    BuildLayoutSignature(
-                        firstTaggedLayout);
-
-                string repeatedSignature =
-                    BuildLayoutSignature(
-                        repeatedTaggedLayout);
+                    label: "Tagged Catalog",
+                    errors: errors,
+                    metrics: out taggedMetrics);
 
                 deterministic =
                     string.Equals(
-                        firstSignature,
-                        repeatedSignature,
+                        BuildLayoutSignature(
+                            firstTaggedLayout),
+                        BuildLayoutSignature(
+                            repeatedTaggedLayout),
                         StringComparison.Ordinal);
 
                 if (!deterministic)
                 {
                     errors.Add(
-                        "Tagged Catalog 使用同一固定 Seed 重复生成不一致。" );
+                        "Tagged Catalog 使用固定 Seed 重复生成不一致。" );
                 }
             }
 
+            taggedWarningCount =
+                warningCapture.Count;
+
+            if (taggedWarningCount != 0)
+            {
+                errors.Add(
+                    "Tagged Catalog 不应触发回退警告，实际 " +
+                    taggedWarningCount + " 条。" );
+            }
+
             SetGeneratorCatalogTransient(
-                auditGenerator,
+                context.Generator,
                 grayboxCatalog);
+
+            warningCapture.Reset();
 
             DungeonLayout fallbackLayout;
 
             if (TryGenerateForAudit(
-                    auditGenerator,
+                    context.Generator,
                     out fallbackLayout,
                     errors,
                     "Graybox Standard 回退生成"))
@@ -355,52 +583,95 @@ public static class DreamRoomRoleTagAuditR941
                     fallbackLayout,
                     requireTaggedRoles: false,
                     requireUniqueTaggedRoles: false,
-                    "Graybox Standard 回退",
-                    errors,
-                    out fallbackMetrics);
+                    label: "Graybox Standard 回退",
+                    errors: errors,
+                    metrics: out fallbackMetrics);
+            }
+
+            fallbackWarningCount =
+                warningCapture.Count;
+
+            if (fallbackWarningCount != 1)
+            {
+                errors.Add(
+                    "每份 Graybox 最终布局应有 1 条合并回退警告，实际 " +
+                    fallbackWarningCount + " 条。" );
+            }
+            else if (!warningCapture.LastMessage.Contains(
+                         "Start=StandardFallback") ||
+                     !warningCapture.LastMessage.Contains(
+                         "Exit=StandardFallback"))
+            {
+                errors.Add(
+                    "Graybox 合并警告没有同时记录 Start／Exit 回退。" );
+            }
+
+            SetGeneratorCatalogTransient(
+                context.Generator,
+                unsafeCatalog);
+
+            warningCapture.Reset();
+
+            string unsafeReport;
+
+            unsafeRejected =
+                TryGenerateExpectedFailure(
+                    context.Generator,
+                    out unsafeReport,
+                    errors);
+
+            unsafeWarningCount =
+                warningCapture.Count;
+
+            if (unsafeWarningCount != 0)
+            {
+                errors.Add(
+                    "无安全回退的失败布局不应输出成功回退警告。" );
             }
         }
         catch (Exception exception)
         {
             errors.Add(
-                "R9.4.1 只读契约校验抛出异常：\n" +
+                "R9.4.1 Clean 只读契约校验抛出异常：\n" +
                 exception);
         }
         finally
         {
             SetGeneratorCatalogTransient(
-                auditGenerator,
+                context.Generator,
                 originalCatalog);
+
+            warningCapture.Dispose();
         }
 
-        string baselineHashAfter =
+        string protectedHashAfter =
             BuildProtectedBaselineHashSignature();
 
-        bool baselineUnchanged =
+        bool protectedHashUnchanged =
             string.Equals(
-                baselineHashBefore,
-                baselineHashAfter,
+                protectedHashBefore,
+                protectedHashAfter,
                 StringComparison.Ordinal);
 
         bool sceneChanged =
             context.Scene.isDirty != sceneDirtyBefore;
 
-        if (!baselineUnchanged)
+        if (!protectedHashUnchanged)
         {
             errors.Add(
-                "只读校验改变了受保护基线的依赖哈希。" );
+                "只读契约校验改变了受保护基线依赖哈希。" );
         }
 
         if (sceneChanged)
         {
             errors.Add(
-                "只读校验改变了 GameScene 的 Dirty 状态。" );
+                "只读契约校验改变了 GameScene Dirty 状态。" );
         }
 
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 Start／Exit 标签契约失败",
+                "R9.4.1 Clean Start／Exit 标签契约失败",
                 errors,
                 context.Generator);
             return;
@@ -408,35 +679,37 @@ public static class DreamRoomRoleTagAuditR941
 
         Debug.Log(
             "[DreamRoomRoleTagAuditR941] " +
-            "R9.4.1 Start／Exit 标签选择契约通过。\n" +
+            "R9.4.1 Clean Start／Exit 标签选择契约通过。\n" +
             FormatMetrics(
                 "Tagged",
-                TestCatalogId,
+                TaggedCatalogId,
                 taggedMetrics) + "\n" +
             FormatMetrics(
                 "Fallback",
                 GrayboxCatalogId,
                 fallbackMetrics) + "\n" +
             "Deterministic=" + deterministic +
-            " | FallbackPolicy=StandardOnly" +
-            " | FallbackWarning=SingleCombinedPerFinalLayout\n" +
+            " | TaggedWarnings=" + taggedWarningCount +
+            " | FallbackWarnings=" + fallbackWarningCount + "\n" +
+            "UnsafeNoStandardRejected=" + unsafeRejected +
+            " | UnsafeWarnings=" + unsafeWarningCount +
+            " | FallbackPolicy=StandardOnly\n" +
             "SceneChanged=" + sceneChanged +
-            " | BaselineHashUnchanged=" +
-            baselineUnchanged +
+            " | ProtectedHashUnchanged=" +
+            protectedHashUnchanged +
             " | RuntimeObjectsModified=False",
             context.Generator);
 
         EditorUtility.DisplayDialog(
-            "R9.4.1 Contract Passed",
-            "Tagged 强制选择与 Graybox Standard 回退均通过。\n\n" +
-            "Console 中会有一条 Graybox 回退黄色警告；" +
-            "这是本轮被验证的预期行为，不是失败。",
+            "R9.4.1 Clean Contract Passed",
+            "标签强制选择、Graybox Standard 回退、单条警告、" +
+            "固定 Seed 与无 Standard 受控失败均通过。",
             "OK");
     }
 
     [MenuItem(
         MenuRoot +
-        "Prepare Tagged Role Runtime Test (R9.4.1)",
+        "Prepare Tagged Role Runtime Test (R9.4.1 Clean)",
         false,
         2430)]
     private static void PrepareTaggedRuntimeTest()
@@ -450,44 +723,37 @@ public static class DreamRoomRoleTagAuditR941
                 out errors))
         {
             ReportFailure(
-                "R9.4.1 Runtime Test 准备失败",
+                "R9.4.1 Clean Runtime Test 准备失败",
                 errors,
                 null);
             return;
         }
 
-        DreamRoomCatalog testCatalog =
-            LoadCatalog(
-                TestCatalogPath,
-                TestCatalogId,
-                "R9.4.1 Test Catalog",
-                errors);
-
-        if (testCatalog != null)
-        {
-            AppendTestAssetValidationErrors(
-                testCatalog,
-                errors);
-        }
+        DreamRoomCatalog taggedCatalog =
+            LoadAndValidateTaggedCatalog(errors);
 
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 Runtime Test 准备失败",
+                "R9.4.1 Clean Runtime Test 准备失败",
                 errors,
                 context.Generator);
             return;
         }
 
-        DungeonLayout auditLayout;
         DreamRoomCatalog originalCatalog =
             context.Generator.TemplateFirstRoomCatalog;
+
+        FallbackWarningCapture warningCapture =
+            new FallbackWarningCapture();
 
         try
         {
             SetGeneratorCatalogTransient(
                 context.Generator,
-                testCatalog);
+                taggedCatalog);
+
+            DungeonLayout auditLayout;
 
             if (TryGenerateForAudit(
                     context.Generator,
@@ -501,22 +767,36 @@ public static class DreamRoomRoleTagAuditR941
                     auditLayout,
                     requireTaggedRoles: true,
                     requireUniqueTaggedRoles: true,
-                    "Runtime Test 预生成",
-                    errors,
-                    out metrics);
+                    label: "Runtime Test 预生成",
+                    errors: errors,
+                    metrics: out metrics);
             }
+
+            if (warningCapture.Count != 0)
+            {
+                errors.Add(
+                    "Tagged Runtime 预生成不应触发回退警告。" );
+            }
+        }
+        catch (Exception exception)
+        {
+            errors.Add(
+                "Runtime Test 预生成抛出异常：\n" +
+                exception);
         }
         finally
         {
             SetGeneratorCatalogTransient(
                 context.Generator,
                 originalCatalog);
+
+            warningCapture.Dispose();
         }
 
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 Runtime Test 准备失败",
+                "R9.4.1 Clean Runtime Test 准备失败",
                 errors,
                 context.Generator);
             return;
@@ -524,31 +804,32 @@ public static class DreamRoomRoleTagAuditR941
 
         SetGeneratorCatalog(
             context.Generator,
-            testCatalog);
+            taggedCatalog);
 
         EditorSceneManager.MarkSceneDirty(
             context.Scene);
 
         Debug.Log(
             "[DreamRoomRoleTagAuditR941] " +
-            "R9.4.1 Tagged Runtime Test 已准备。\n" +
-            "Catalog=" + TestCatalogId +
+            "R9.4.1 Clean Tagged Runtime Test 已准备。\n" +
+            "Catalog=" + TaggedCatalogId +
             " | SceneSaved=False" +
-            " | DiskBaseline=Graybox_R3\n" +
-            "DoNotSaveUntilRestore=True" +
-            " | ReadOnlyPreflightPassed=True",
+            " | DiskBaseline=" + GrayboxCatalogId + "\n" +
+            "StaticAssets=True" +
+            " | ReadOnlyPreflightPassed=True" +
+            " | DoNotSaveUntilRestore=True",
             context.Generator);
 
         EditorUtility.DisplayDialog(
-            "R9.4.1 Tagged Runtime Test Ready",
-            "GameScene 当前仅在内存中使用 RoleTags_R941_Test。\n\n" +
-            "现在可以进入 Play Mode。测试后必须执行 R9.4.1 Restore。",
+            "R9.4.1 Clean Runtime Test Ready",
+            "GameScene 当前仅在内存中使用 Clean Tagged Catalog。\n\n" +
+            "现在可以进入 Play Mode；测试后必须执行 Restore。",
             "OK");
     }
 
     [MenuItem(
         MenuRoot +
-        "Validate Live Tagged Roles (R9.4.1)",
+        "Validate Live Tagged Roles (R9.4.1 Clean)",
         false,
         2440)]
     private static void ValidateLiveTaggedRoles()
@@ -560,7 +841,7 @@ public static class DreamRoomRoleTagAuditR941
             errors.Add(
                 "必须在 Play Mode 且 Floor 1 已完整生成后执行。" );
             ReportFailure(
-                "R9.4.1 Live 校验无法开始",
+                "R9.4.1 Clean Live 校验无法开始",
                 errors,
                 null);
             return;
@@ -576,24 +857,26 @@ public static class DreamRoomRoleTagAuditR941
 
         if (generator == null)
         {
-            errors.Add("Play Mode 中找不到 DungeonGenerator。" );
+            errors.Add(
+                "Play Mode 中找不到 DungeonGenerator。" );
         }
 
         if (gameManager == null)
         {
-            errors.Add("Play Mode 中找不到 GameManager。" );
+            errors.Add(
+                "Play Mode 中找不到 GameManager。" );
         }
 
         if (generator != null &&
             (generator.TemplateFirstRoomCatalog == null ||
              !string.Equals(
                  generator.TemplateFirstRoomCatalog.CatalogId,
-                 TestCatalogId,
+                 TaggedCatalogId,
                  StringComparison.Ordinal)))
         {
             errors.Add(
-                "当前 Catalog 不是 " + TestCatalogId +
-                "。请退出 Play Mode，重新执行 Prepare。" );
+                "当前 Catalog 不是 " + TaggedCatalogId +
+                "。请退出 Play Mode 后重新执行 Prepare。" );
         }
 
         if (gameManager != null &&
@@ -623,9 +906,9 @@ public static class DreamRoomRoleTagAuditR941
                 layout,
                 requireTaggedRoles: true,
                 requireUniqueTaggedRoles: true,
-                "Live Tagged Runtime",
-                errors,
-                out metrics);
+                label: "Live Tagged Runtime",
+                errors: errors,
+                metrics: out metrics);
         }
 
         GameObject generatedRoot =
@@ -641,7 +924,7 @@ public static class DreamRoomRoleTagAuditR941
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 Live Tagged Roles 失败",
+                "R9.4.1 Clean Live Tagged Roles 失败",
                 errors,
                 generator);
             return;
@@ -649,10 +932,10 @@ public static class DreamRoomRoleTagAuditR941
 
         Debug.Log(
             "[DreamRoomRoleTagAuditR941] " +
-            "R9.4.1 真实运行时 Start／Exit 标签审计通过。\n" +
+            "R9.4.1 Clean 真实运行时 Start／Exit 标签审计通过。\n" +
             FormatMetrics(
                 "Live",
-                TestCatalogId,
+                TaggedCatalogId,
                 metrics) + "\n" +
             "StartCellInTaggedRoom=True" +
             " | ExitCellInTaggedRoom=True" +
@@ -662,15 +945,15 @@ public static class DreamRoomRoleTagAuditR941
             generator);
 
         EditorUtility.DisplayDialog(
-            "R9.4.1 Live Roles Passed",
-            "Floor 1 的 StartCell 与 ExitCell 已分别落入唯一的" +
-            "标签房，且两个房间不同。",
+            "R9.4.1 Clean Live Roles Passed",
+            "Floor 1 的 Start／Exit 已分别落入唯一标签房，" +
+            "且两个房间不同。",
             "OK");
     }
 
     [MenuItem(
         MenuRoot +
-        "Restore and Save Graybox after R9.4.1",
+        "Restore and Save Graybox after R9.4.1 Clean",
         false,
         2450)]
     private static void RestoreGrayboxBaseline()
@@ -679,12 +962,14 @@ public static class DreamRoomRoleTagAuditR941
 
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {
-            errors.Add("必须先退出 Play Mode。" );
+            errors.Add(
+                "必须先退出 Play Mode。" );
         }
 
         if (PrefabStageUtility.GetCurrentPrefabStage() != null)
         {
-            errors.Add("必须先退出 Prefab Mode。" );
+            errors.Add(
+                "必须先退出 Prefab Mode。" );
         }
 
         Scene scene = SceneManager.GetActiveScene();
@@ -707,7 +992,8 @@ public static class DreamRoomRoleTagAuditR941
 
         if (generator == null)
         {
-            errors.Add("GameScene 中找不到 DungeonGenerator。" );
+            errors.Add(
+                "GameScene 中找不到 DungeonGenerator。" );
         }
 
         DreamRoomCatalog grayboxCatalog =
@@ -720,7 +1006,7 @@ public static class DreamRoomRoleTagAuditR941
         if (errors.Count > 0)
         {
             ReportFailure(
-                "R9.4.1 Graybox 恢复失败",
+                "R9.4.1 Clean Graybox 恢复失败",
                 errors,
                 generator);
             return;
@@ -737,348 +1023,209 @@ public static class DreamRoomRoleTagAuditR941
             errors.Add(
                 "Graybox 已写回内存，但 GameScene 保存失败。" );
             ReportFailure(
-                "R9.4.1 Graybox 恢复失败",
+                "R9.4.1 Clean Graybox 恢复失败",
                 errors,
                 generator);
             return;
         }
 
+        if (scene.isDirty ||
+            generator.TemplateFirstRoomCatalog !=
+            grayboxCatalog)
+        {
+            errors.Add(
+                "保存后 Scene 仍为 Dirty，或 Catalog 未保持 Graybox。" );
+            ReportFailure(
+                "R9.4.1 Clean Graybox 恢复失败",
+                errors,
+                generator);
+            return;
+        }
+
+        bool legacyFolderPresent =
+            AssetDatabase.IsValidFolder(
+                LegacyFailedRoot);
+
         Debug.Log(
             "[DreamRoomRoleTagAuditR941] " +
-            "R9.4.1 Graybox 基线已恢复并保存。\n" +
+            "R9.4.1 Clean Graybox 基线已恢复并保存。\n" +
             "Catalog=" + GrayboxCatalogId +
             " | SceneSaved=True" +
             " | RenderMode=HybridPrefabRooms" +
             " | FixedSeed=12345\n" +
-            "TestAssetsRetained=True" +
-            " | RoleTagRuntimePatchRetained=True",
+            "CleanTestAssetsRetained=True" +
+            " | RuntimePatchRetained=True" +
+            " | LegacyFailedFolderPresent=" +
+            legacyFolderPresent,
             generator);
 
         EditorUtility.DisplayDialog(
-            "R9.4.1 Graybox Restored",
-            "GameScene 已恢复 RoomCatalog_Graybox 并保存。\n" +
-            "R9.4.1 测试资产与运行时代码均保留。",
+            "R9.4.1 Clean Graybox Restored",
+            "GameScene 已恢复 RoomCatalog_Graybox 并保存。",
             "OK");
     }
 
-    private static bool TryCreateOrRefreshRolePrefab(
-        RolePrefabSpec spec,
-        out DreamRoomTemplate templateAsset,
-        List<string> errors)
+    [MenuItem(
+        MenuRoot +
+        "Remove Superseded R9.4.1 Generated Assets",
+        false,
+        2460)]
+    private static void RemoveSupersededGeneratedAssets()
     {
-        templateAsset = null;
+        SceneContext context;
+        List<string> errors;
 
-        if (AssetDatabase.LoadAssetAtPath<GameObject>(
-                GrayboxSourcePrefabPath) == null)
+        if (!TryGetCleanGrayboxSceneContext(
+                requireCleanScene: true,
+                out context,
+                out errors))
+        {
+            ReportFailure(
+                "旧 R9.4.1 隔离资产清理无法开始",
+                errors,
+                null);
+            return;
+        }
+
+        DreamRoomCatalog taggedCatalog =
+            LoadAndValidateTaggedCatalog(errors);
+
+        if (taggedCatalog == null ||
+            errors.Count > 0)
+        {
+            ReportFailure(
+                "旧 R9.4.1 隔离资产清理无法开始",
+                errors,
+                context.Generator);
+            return;
+        }
+
+        string protectedHashBefore =
+            BuildProtectedBaselineHashSignature();
+
+        bool wasPresent =
+            AssetDatabase.IsValidFolder(
+                LegacyFailedRoot);
+
+        bool removed = false;
+
+        if (wasPresent)
+        {
+            removed =
+                AssetDatabase.DeleteAsset(
+                    LegacyFailedRoot);
+
+            if (!removed)
+            {
+                errors.Add(
+                    "Unity 未能删除旧工具专用目录：" +
+                    LegacyFailedRoot);
+            }
+        }
+
+        string protectedHashAfter =
+            BuildProtectedBaselineHashSignature();
+
+        bool protectedHashUnchanged =
+            string.Equals(
+                protectedHashBefore,
+                protectedHashAfter,
+                StringComparison.Ordinal);
+
+        if (!protectedHashUnchanged)
         {
             errors.Add(
-                "找不到 Graybox 源 Prefab：" +
-                GrayboxSourcePrefabPath);
-            return false;
+                "清理旧隔离目录时受保护基线依赖哈希发生变化。" );
         }
 
-        string destinationPath =
-            TestRoomFolder + "/" + spec.FileName;
-
-        // 这些文件完全属于 R9.4.1 测试工具。每轮都从受保护源重建，
-        // 可自动清除 R9.4.1／R9.4.1a 留下的半成品或跨 Prefab 引用。
-        if (!string.IsNullOrEmpty(
-                AssetDatabase.AssetPathToGUID(
-                    destinationPath)) &&
-            !AssetDatabase.DeleteAsset(destinationPath))
+        if (errors.Count > 0)
         {
-            errors.Add(
-                "无法替换旧测试 Prefab：" +
-                destinationPath);
-            return false;
+            ReportFailure(
+                "旧 R9.4.1 隔离资产清理失败",
+                errors,
+                context.Generator);
+            return;
         }
 
-        if (!AssetDatabase.CopyAsset(
-                GrayboxSourcePrefabPath,
-                destinationPath))
-        {
-            errors.Add(
-                "无法从 Graybox 源重建测试 Prefab：" +
-                destinationPath);
-            return false;
-        }
+        Debug.Log(
+            "[DreamRoomRoleTagAuditR941] " +
+            "旧 R9.4.1 失败生成资产清理完成。\n" +
+            "Target=" + LegacyFailedRoot +
+            " | WasPresent=" + wasPresent +
+            " | Removed=" + removed +
+            " | AlreadyAbsent=" + (!wasPresent) + "\n" +
+            "CleanAssetsRetained=True" +
+            " | GameSceneChanged=False" +
+            " | ProtectedHashUnchanged=" +
+            protectedHashUnchanged,
+            taggedCatalog);
 
-        AssetDatabase.ImportAsset(
-            destinationPath,
-            ImportAssetOptions.ForceSynchronousImport |
-            ImportAssetOptions.ForceUpdate);
-
-        try
-        {
-            GameObject root =
-                AssetDatabase.LoadAssetAtPath<GameObject>(
-                    destinationPath);
-
-            if (root == null)
-            {
-                errors.Add(
-                    "无法载入测试 Prefab：" +
-                    destinationPath);
-                return false;
-            }
-
-            DreamRoomTemplate template =
-                root.GetComponent<DreamRoomTemplate>();
-
-            if (template == null)
-            {
-                errors.Add(
-                    "测试 Prefab 根节点缺少 DreamRoomTemplate：" +
-                    destinationPath);
-                return false;
-            }
-
-            Transform visualRoot =
-                root.transform.Find("Visual");
-
-            Transform socketsRoot =
-                root.transform.Find("Sockets");
-
-            Transform navigationRoot =
-                root.transform.Find("Navigation");
-
-            Transform spawnPointsRoot =
-                root.transform.Find("SpawnPoints");
-
-            if (visualRoot == null ||
-                socketsRoot == null ||
-                navigationRoot == null ||
-                spawnPointsRoot == null)
-            {
-                errors.Add(
-                    spec.TemplateId +
-                    " 无法在持久 Prefab Asset 中解析 " +
-                    "Visual／Sockets／Navigation／SpawnPoints 根节点。" );
-                return false;
-            }
-
-            DreamRoomDoorSocket[] sockets =
-                socketsRoot.GetComponentsInChildren<
-                    DreamRoomDoorSocket>(true);
-
-            DreamRoomSpawnPoint[] spawnPoints =
-                spawnPointsRoot.GetComponentsInChildren<
-                    DreamRoomSpawnPoint>(true);
-
-            if (sockets.Length != 4)
-            {
-                errors.Add(
-                    spec.TemplateId +
-                    " 应从 Graybox 源继承 4 个 Socket，实际为 " +
-                    sockets.Length + "。" );
-                return false;
-            }
-
-            SerializedObject serializedTemplate =
-                new SerializedObject(template);
-
-            serializedTemplate.Update();
-
-            SetString(
-                serializedTemplate,
-                "templateId",
-                spec.TemplateId);
-
-            SetInt(
-                serializedTemplate,
-                "randomWeight",
-                spec.RandomWeight);
-
-            SetInt(
-                serializedTemplate,
-                "minimumFloor",
-                1);
-
-            SetInt(
-                serializedTemplate,
-                "maximumFloor",
-                0);
-
-            SetInt(
-                serializedTemplate,
-                "maximumInstancesPerFloor",
-                spec.MaximumInstances);
-
-            SetInt(
-                serializedTemplate,
-                "roomTags",
-                (int)spec.Tags);
-
-            SetObjectReference(
-                serializedTemplate,
-                "visualRoot",
-                visualRoot);
-
-            SetObjectReference(
-                serializedTemplate,
-                "socketsRoot",
-                socketsRoot);
-
-            SetObjectReference(
-                serializedTemplate,
-                "navigationRoot",
-                navigationRoot);
-
-            SetObjectReference(
-                serializedTemplate,
-                "spawnPointsRoot",
-                spawnPointsRoot);
-
-            SetObjectReferenceArray(
-                serializedTemplate,
-                "doorSockets",
-                sockets);
-
-            SetObjectReferenceArray(
-                serializedTemplate,
-                "spawnPoints",
-                spawnPoints);
-
-            if (!serializedTemplate
-                    .ApplyModifiedPropertiesWithoutUndo())
-            {
-                errors.Add(
-                    spec.TemplateId +
-                    " 的持久 Prefab 参数没有产生可保存变更。" );
-                return false;
-            }
-
-            EditorUtility.SetDirty(template);
-
-            bool saveSucceeded;
-            GameObject savedRoot =
-                PrefabUtility.SavePrefabAsset(
-                    root,
-                    out saveSucceeded);
-
-            if (!saveSucceeded || savedRoot == null)
-            {
-                errors.Add(
-                    "保存持久测试 Prefab 失败：" +
-                    destinationPath);
-                return false;
-            }
-        }
-        catch (Exception exception)
-        {
-            errors.Add(
-                "写入测试 Prefab 失败：" +
-                destinationPath + "\n" + exception);
-            return false;
-        }
-
-        AssetDatabase.ImportAsset(
-            destinationPath,
-            ImportAssetOptions.ForceSynchronousImport |
-            ImportAssetOptions.ForceUpdate);
-
-        templateAsset = LoadTemplateAsset(
-            destinationPath);
-
-        if (templateAsset == null)
-        {
-            errors.Add(
-                "保存后无法重新读取 DreamRoomTemplate：" +
-                destinationPath);
-            return false;
-        }
-
-        List<string> persistentErrors =
-            templateAsset.GetValidationErrors();
-
-        if (persistentErrors.Count > 0)
-        {
-            for (int i = 0;
-                 i < persistentErrors.Count;
-                 i++)
-            {
-                errors.Add(
-                    spec.TemplateId +
-                    " 持久资产校验：" +
-                    persistentErrors[i]);
-            }
-
-            templateAsset = null;
-            return false;
-        }
-
-        return true;
+        EditorUtility.DisplayDialog(
+            "Superseded R9.4.1 Assets Removed",
+            wasPresent
+                ? "旧失败补丁专用目录已删除；Clean 静态资产保留。"
+                : "旧失败补丁专用目录原本就不存在。",
+            "OK");
     }
 
-    private static DreamRoomCatalog CreateOrRefreshTestCatalog(
-        List<DreamRoomTemplate> templates,
-        List<string> errors)
+    private static DreamRoomCatalog
+        LoadAndValidateTaggedCatalog(List<string> errors)
     {
-        if (templates == null ||
-            templates.Count != RolePrefabSpecs.Length)
-        {
-            errors.Add(
-                "测试 Catalog 需要正好 4 个模板。" );
-            return null;
-        }
-
         DreamRoomCatalog catalog =
-            AssetDatabase.LoadAssetAtPath<DreamRoomCatalog>(
-                TestCatalogPath);
+            LoadCatalog(
+                TaggedCatalogPath,
+                TaggedCatalogId,
+                "Tagged Test Catalog",
+                errors);
 
-        if (catalog == null)
+        if (catalog != null)
         {
-            catalog =
-                ScriptableObject.CreateInstance<
-                    DreamRoomCatalog>();
+            int ignoredSocketCount;
 
-            AssetDatabase.CreateAsset(
+            AppendStaticCatalogErrors(
                 catalog,
-                TestCatalogPath);
+                TaggedTemplateSpecs,
+                "Tagged Test Catalog",
+                errors,
+                out ignoredSocketCount);
         }
-
-        SerializedObject serializedCatalog =
-            new SerializedObject(catalog);
-
-        SetString(
-            serializedCatalog,
-            "catalogId",
-            TestCatalogId);
-
-        SerializedProperty roomTemplates =
-            serializedCatalog.FindProperty(
-                "roomTemplates");
-
-        if (roomTemplates == null)
-        {
-            errors.Add(
-                "DreamRoomCatalog 找不到 roomTemplates 字段。" );
-            return null;
-        }
-
-        roomTemplates.arraySize = templates.Count;
-
-        for (int i = 0; i < templates.Count; i++)
-        {
-            roomTemplates.GetArrayElementAtIndex(i).
-                objectReferenceValue = templates[i];
-        }
-
-        serializedCatalog.ApplyModifiedPropertiesWithoutUndo();
-        EditorUtility.SetDirty(catalog);
 
         return catalog;
     }
 
-    private static void AppendTestAssetValidationErrors(
-        DreamRoomCatalog catalog,
-        List<string> errors)
+    private static DreamRoomCatalog
+        LoadAndValidateUnsafeCatalog(List<string> errors)
     {
-        if (catalog == null)
+        DreamRoomCatalog catalog =
+            LoadCatalog(
+                UnsafeCatalogPath,
+                UnsafeCatalogId,
+                "Unsafe Test Catalog",
+                errors);
+
+        if (catalog != null)
         {
-            errors.Add("R9.4.1 Test Catalog 为空。" );
-            return;
+            int ignoredSocketCount;
+
+            AppendStaticCatalogErrors(
+                catalog,
+                UnsafeTemplateSpecs,
+                "Unsafe Test Catalog",
+                errors,
+                out ignoredSocketCount);
         }
+
+        return catalog;
+    }
+
+    private static void AppendStaticCatalogErrors(
+        DreamRoomCatalog catalog,
+        TemplateSpec[] expectedSpecs,
+        string label,
+        List<string> errors,
+        out int validSocketOwners)
+    {
+        validSocketOwners = 0;
 
         List<string> catalogErrors =
             catalog.GetValidationErrors();
@@ -1086,79 +1233,248 @@ public static class DreamRoomRoleTagAuditR941
         for (int i = 0; i < catalogErrors.Count; i++)
         {
             errors.Add(
-                "Test Catalog：" +
-                catalogErrors[i]);
+                label + "：" + catalogErrors[i]);
         }
 
-        int startCandidates = 0;
-        int exitCandidates = 0;
-
-        IReadOnlyList<DreamRoomTemplate> templates =
-            catalog.RoomTemplates;
-
-        for (int i = 0;
-             i < templates.Count;
-             i++)
+        if (catalog.Count != expectedSpecs.Length)
         {
-            DreamRoomTemplate template = templates[i];
+            errors.Add(
+                label + " 应包含 " +
+                expectedSpecs.Length + " 个模板，实际 " +
+                catalog.Count + "。" );
+        }
 
-            if (template == null)
+        int count = Mathf.Min(
+            catalog.Count,
+            expectedSpecs.Length);
+
+        for (int i = 0; i < count; i++)
+        {
+            TemplateSpec spec = expectedSpecs[i];
+
+            // Asset 视图只读取 Catalog 可安全访问的顶层选择数据。
+            // 任何 Transform／Socket／Spawn 层级检查都必须走下方的
+            // LoadPrefabContents 隔离 Scene。
+            DreamRoomTemplate assetTemplate =
+                AssetDatabase.LoadAssetAtPath<
+                    DreamRoomTemplate>(
+                    spec.AssetPath);
+
+            if (assetTemplate == null)
             {
+                errors.Add(
+                    label + " 找不到静态 Prefab：" +
+                    spec.AssetPath);
                 continue;
             }
 
+            if (catalog.RoomTemplates[i] != assetTemplate)
+            {
+                errors.Add(
+                    label + " 第 " + i +
+                    " 项没有引用预期静态 Prefab：" +
+                    spec.AssetPath);
+            }
+
+            if (!string.Equals(
+                    AssetDatabase.GetAssetPath(assetTemplate),
+                    spec.AssetPath,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    spec.TemplateId +
+                    " 的持久资产路径与清单不一致。" );
+            }
+
+            if (!string.Equals(
+                    assetTemplate.TemplateId,
+                    spec.TemplateId,
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    spec.AssetPath + " TemplateId 应为 " +
+                    spec.TemplateId + "，实际为 " +
+                    assetTemplate.TemplateId + "。" );
+            }
+
+            if (assetTemplate.RoomTags != spec.Tags)
+            {
+                errors.Add(
+                    spec.TemplateId + " RoomTags 应为 " +
+                    spec.Tags + "，实际为 " +
+                    assetTemplate.RoomTags + "。" );
+            }
+
+            if (assetTemplate.RandomWeight !=
+                spec.RandomWeight)
+            {
+                errors.Add(
+                    spec.TemplateId + " RandomWeight 应为 " +
+                    spec.RandomWeight + "，实际为 " +
+                    assetTemplate.RandomWeight + "。" );
+            }
+
+            if (assetTemplate.MaximumInstancesPerFloor !=
+                spec.MaximumInstancesPerFloor)
+            {
+                errors.Add(
+                    spec.TemplateId +
+                    " MaximumInstancesPerFloor 应为 " +
+                    spec.MaximumInstancesPerFloor +
+                    "，实际为 " +
+                    assetTemplate.MaximumInstancesPerFloor +
+                    "。" );
+            }
+
+            if (!assetTemplate.CanAppearOnFloor(TestFloor))
+            {
+                errors.Add(
+                    spec.TemplateId +
+                    " 不能出现在测试 Floor 1。" );
+            }
+
+            int loadedSocketOwners;
+
+            AppendLoadedPrefabHierarchyErrors(
+                spec,
+                label,
+                errors,
+                out loadedSocketOwners);
+
+            validSocketOwners += loadedSocketOwners;
+        }
+    }
+
+    private static void AppendLoadedPrefabHierarchyErrors(
+        TemplateSpec spec,
+        string label,
+        List<string> errors,
+        out int validSocketOwners)
+    {
+        validSocketOwners = 0;
+        GameObject loadedRoot = null;
+
+        try
+        {
+            loadedRoot =
+                PrefabUtility.LoadPrefabContents(
+                    spec.AssetPath);
+
+            if (loadedRoot == null)
+            {
+                errors.Add(
+                    label + " 无法完整加载 Prefab：" +
+                    spec.AssetPath);
+                return;
+            }
+
+            DreamRoomTemplate loadedTemplate =
+                loadedRoot.GetComponent<DreamRoomTemplate>();
+
+            if (loadedTemplate == null)
+            {
+                errors.Add(
+                    label + " / " + spec.TemplateId +
+                    " 的 Prefab 根节点缺少 DreamRoomTemplate。" );
+                return;
+            }
+
+            if (!string.Equals(
+                    loadedTemplate.TemplateId,
+                    spec.TemplateId,
+                    StringComparison.Ordinal) ||
+                loadedTemplate.RoomTags != spec.Tags ||
+                loadedTemplate.RandomWeight !=
+                    spec.RandomWeight ||
+                loadedTemplate.MaximumInstancesPerFloor !=
+                    spec.MaximumInstancesPerFloor)
+            {
+                errors.Add(
+                    label + " / " + spec.TemplateId +
+                    " 的 Asset 视图与完整 Prefab Contents " +
+                    "元数据不一致。" );
+            }
+
             List<string> templateErrors =
-                template.GetValidationErrors();
+                loadedTemplate.GetValidationErrors();
 
             for (int errorIndex = 0;
                  errorIndex < templateErrors.Count;
                  errorIndex++)
             {
                 errors.Add(
-                    template.TemplateId + "：" +
+                    spec.TemplateId +
+                    " / Prefab Contents：" +
                     templateErrors[errorIndex]);
             }
 
-            if (template.HasTag(
-                    DreamRoomTag.StartCandidate))
+            if (loadedTemplate.DoorSockets.Count != 4)
             {
-                startCandidates++;
-
-                if (template.MaximumInstancesPerFloor != 1)
-                {
-                    errors.Add(
-                        template.TemplateId +
-                        " 的 MaximumInstancesPerFloor 应为 1。" );
-                }
+                errors.Add(
+                    spec.TemplateId +
+                    " 应保持 4 个 Graybox Socket，实际为 " +
+                    loadedTemplate.DoorSockets.Count + "。" );
             }
 
-            if (template.HasTag(
-                    DreamRoomTag.ExitCandidate))
-            {
-                exitCandidates++;
+            validSocketOwners =
+                CountOwnedSockets(loadedTemplate);
 
-                if (template.MaximumInstancesPerFloor != 1)
-                {
-                    errors.Add(
-                        template.TemplateId +
-                        " 的 MaximumInstancesPerFloor 应为 1。" );
-                }
+            if (validSocketOwners !=
+                loadedTemplate.DoorSockets.Count)
+            {
+                errors.Add(
+                    spec.TemplateId +
+                    " 的完整 Prefab Contents Socket 归属应为 " +
+                    loadedTemplate.DoorSockets.Count + "/" +
+                    loadedTemplate.DoorSockets.Count +
+                    "，实际 " + validSocketOwners + "/" +
+                    loadedTemplate.DoorSockets.Count + "。" );
+            }
+        }
+        catch (Exception exception)
+        {
+            errors.Add(
+                label + " / " + spec.TemplateId +
+                " 完整加载时抛出异常：\n" +
+                exception);
+        }
+        finally
+        {
+            if (loadedRoot != null)
+            {
+                PrefabUtility.UnloadPrefabContents(
+                    loadedRoot);
+            }
+        }
+    }
+
+    private static int CountOwnedSockets(
+        DreamRoomTemplate template)
+    {
+        if (template == null ||
+            template.DoorSockets == null)
+        {
+            return 0;
+        }
+
+        int ownedSocketCount = 0;
+
+        for (int socketIndex = 0;
+             socketIndex < template.DoorSockets.Count;
+             socketIndex++)
+        {
+            DreamRoomDoorSocket socket =
+                template.DoorSockets[socketIndex];
+
+            if (socket != null &&
+                socket.GetComponentInParent<
+                    DreamRoomTemplate>() == template)
+            {
+                ownedSocketCount++;
             }
         }
 
-        if (startCandidates != 1)
-        {
-            errors.Add(
-                "Test Catalog 应有 1 个 StartCandidate，实际为 " +
-                startCandidates + "。" );
-        }
-
-        if (exitCandidates != 1)
-        {
-            errors.Add(
-                "Test Catalog 应有 1 个 ExitCandidate，实际为 " +
-                exitCandidates + "。" );
-        }
+        return ownedSocketCount;
     }
 
     private static bool TryGenerateForAudit(
@@ -1201,7 +1517,73 @@ public static class DreamRoomRoleTagAuditR941
                 layoutErrors[i]);
         }
 
-        return layoutErrors.Count == 0;
+        List<string> corridorErrors =
+            generator.GetSocketCorridorValidationErrors(
+                layout);
+
+        for (int i = 0; i < corridorErrors.Count; i++)
+        {
+            errors.Add(
+                label + " / SocketCorridor：" +
+                corridorErrors[i]);
+        }
+
+        return layoutErrors.Count == 0 &&
+               corridorErrors.Count == 0;
+    }
+
+    private static bool TryGenerateExpectedFailure(
+        DungeonGenerator generator,
+        out string report,
+        List<string> errors)
+    {
+        report = string.Empty;
+        DungeonLayout layout;
+
+        try
+        {
+            bool succeeded =
+                generator.TryGenerateHybridRuntimeLayout(
+                    TestFloor,
+                    out layout,
+                    out report);
+
+            if (succeeded || layout != null)
+            {
+                errors.Add(
+                    "UnsafeNoStandard Catalog 本应被拒绝，" +
+                    "但生成器返回了成功布局。" );
+                return false;
+            }
+        }
+        catch (Exception exception)
+        {
+            errors.Add(
+                "UnsafeNoStandard 应以可报告失败结束，" +
+                "不应抛出异常：\n" + exception);
+            return false;
+        }
+
+        bool hasRoleMarker =
+            report.IndexOf(
+                "R9.4.1",
+                StringComparison.Ordinal) >= 0;
+
+        bool explainsStandardFallback =
+            report.IndexOf(
+                "Standard",
+                StringComparison.OrdinalIgnoreCase) >= 0;
+
+        if (!hasRoleMarker ||
+            !explainsStandardFallback)
+        {
+            errors.Add(
+                "UnsafeNoStandard 的失败报告没有明确说明 " +
+                "R9.4.1／Standard 回退原因：\n" + report);
+            return false;
+        }
+
+        return true;
     }
 
     private static void ValidateRoleLayout(
@@ -1216,7 +1598,8 @@ public static class DreamRoomRoleTagAuditR941
 
         if (layout == null)
         {
-            errors.Add(label + " 的 Layout 为空。" );
+            errors.Add(
+                label + " 的 Layout 为空。" );
             return;
         }
 
@@ -1292,15 +1675,11 @@ public static class DreamRoomRoleTagAuditR941
                 excludeRoomIndex:
                     metrics.StartRoomIndex);
 
-        metrics.FallbackCount =
-            (metrics.StartTagged ? 0 : 1) +
-            (metrics.ExitTagged ? 0 : 1);
-
         if (metrics.RoomCount != ExpectedRoomCount)
         {
             errors.Add(
-                label + " 应生成 " + ExpectedRoomCount +
-                " 间房，实际为 " +
+                label + " 房间数应为 " +
+                ExpectedRoomCount + "，实际为 " +
                 metrics.RoomCount + "。" );
         }
 
@@ -1308,80 +1687,144 @@ public static class DreamRoomRoleTagAuditR941
             metrics.ExitRoomIndex < 0)
         {
             errors.Add(
-                label +
-                " 的 StartCell／ExitCell 未落入房间 Walkable Cells。" );
+                label + " 无法把 StartCell／ExitCell 映射回房间。" );
+            return;
         }
 
         if (metrics.StartRoomIndex ==
             metrics.ExitRoomIndex)
         {
             errors.Add(
-                label + " 的 Start 与 Exit 使用了同一房间。" );
+                label + " 的 Start 与 Exit 落在同一房间。" );
         }
 
         if (requireTaggedRoles)
         {
-            if (!metrics.StartTagged)
+            if (!metrics.StartTagged ||
+                !metrics.ExitTagged)
             {
                 errors.Add(
                     label +
-                    " 的 Start Room 没有 StartCandidate 标签。" );
+                    " 的实际 Start／Exit 没有使用对应标签房。" );
             }
 
-            if (!metrics.ExitTagged)
+            if (!string.Equals(
+                    metrics.StartTemplateId,
+                    "R941C_Start",
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    metrics.ExitTemplateId,
+                    "R941C_Exit",
+                    StringComparison.Ordinal))
+            {
+                errors.Add(
+                    label + " 的唯一角色房不正确：Start=" +
+                    metrics.StartTemplateId + "，Exit=" +
+                    metrics.ExitTemplateId + "。" );
+            }
+
+            if (requireUniqueTaggedRoles &&
+                (metrics.StartCandidateCount != 1 ||
+                 metrics.ExitCandidateCount != 1))
             {
                 errors.Add(
                     label +
-                    " 的 Exit Room 没有 ExitCandidate 标签。" );
-            }
-
-            if (metrics.FallbackCount != 0)
-            {
-                errors.Add(
-                    label + " 不应发生 Standard 回退。" );
+                    " 应各放入 1 个角色候选，实际 Start=" +
+                    metrics.StartCandidateCount + "，Exit=" +
+                    metrics.ExitCandidateCount + "。" );
             }
         }
         else
         {
-            if (metrics.StartCandidateCount != 0 ||
-                metrics.ExitCandidateCount != 0)
+            if (metrics.StartTagged ||
+                metrics.ExitTagged)
             {
                 errors.Add(
                     label +
-                    " 预期没有 Start／Exit 标签候选。" );
+                    " 本应验证无标签 Standard 回退。" );
             }
 
             if (!metrics.StartIsStandard ||
-                !metrics.ExitIsStandard)
-            {
-                errors.Add(
-                    label +
-                    " 没有把 Start／Exit 安全回退到 Standard。" );
-            }
-
-            if (metrics.StartIsSpecial ||
+                !metrics.ExitIsStandard ||
+                metrics.StartIsSpecial ||
                 metrics.ExitIsSpecial)
             {
                 errors.Add(
                     label +
-                    " 把带 Special 的房间用于了普通回退。" );
-            }
-
-            if (metrics.FallbackCount != 2)
-            {
-                errors.Add(
-                    label + " 应记录 2 个角色回退。" );
+                    " 必须回退到普通 Standard，不能使用 Special。" );
             }
         }
+    }
 
-        if (requireUniqueTaggedRoles &&
-            (metrics.StartCandidateCount != 1 ||
-             metrics.ExitCandidateCount != 1))
+    private static string BuildLayoutSignature(
+        DungeonLayout layout)
+    {
+        StringBuilder builder = new StringBuilder();
+
+        for (int i = 0;
+             i < layout.RoomPlacements.Count;
+             i++)
         {
-            errors.Add(
-                label +
-                " 应正好放置 1 个 StartCandidate 和 1 个 ExitCandidate。" );
+            DreamRoomPlacement placement =
+                layout.RoomPlacements[i];
+
+            builder.Append(i);
+            builder.Append(':');
+            builder.Append(
+                placement.Template.TemplateId);
+            builder.Append('@');
+            builder.Append(placement.MinimumCell.x);
+            builder.Append(',');
+            builder.Append(placement.MinimumCell.y);
+            builder.Append(',');
+            builder.Append(
+                placement.ClockwiseQuarterTurns);
+            builder.Append(';');
         }
+
+        for (int i = 0;
+             i < layout.Connections.Count;
+             i++)
+        {
+            DreamRoomConnection connection =
+                layout.Connections[i];
+
+            builder.Append('C');
+            builder.Append(connection.RoomAIndex);
+            builder.Append('-');
+            builder.Append(connection.RoomBIndex);
+            builder.Append(':');
+            builder.Append(connection.SocketAId);
+            builder.Append('/');
+            builder.Append(connection.SocketBId);
+            builder.Append('[');
+
+            for (int cellIndex = 0;
+                 cellIndex < connection.CorridorCells.Count;
+                 cellIndex++)
+            {
+                Vector2Int cell =
+                    connection.CorridorCells[cellIndex];
+
+                builder.Append(cell.x);
+                builder.Append(',');
+                builder.Append(cell.y);
+                builder.Append('|');
+            }
+
+            builder.Append(']');
+        }
+
+        builder.Append("S=");
+        builder.Append(layout.StartCell.x);
+        builder.Append(',');
+        builder.Append(layout.StartCell.y);
+        builder.Append(";E=");
+        builder.Append(layout.ExitCell.x);
+        builder.Append(',');
+        builder.Append(layout.ExitCell.y);
+
+        return builder.ToString();
     }
 
     private static int FindWalkableRoomIndex(
@@ -1420,6 +1863,21 @@ public static class DreamRoomRoleTagAuditR941
         return -1;
     }
 
+    private static DreamRoomTemplate GetTemplateAt(
+        DungeonLayout layout,
+        int roomIndex)
+    {
+        if (layout == null ||
+            roomIndex < 0 ||
+            roomIndex >= layout.RoomPlacements.Count ||
+            layout.RoomPlacements[roomIndex] == null)
+        {
+            return null;
+        }
+
+        return layout.RoomPlacements[roomIndex].Template;
+    }
+
     private static int CountPlacedCandidates(
         DungeonLayout layout,
         DreamRoomTag tag,
@@ -1449,100 +1907,6 @@ public static class DreamRoomRoleTagAuditR941
         return count;
     }
 
-    private static DreamRoomTemplate GetTemplateAt(
-        DungeonLayout layout,
-        int roomIndex)
-    {
-        if (layout == null ||
-            roomIndex < 0 ||
-            roomIndex >= layout.RoomPlacements.Count ||
-            layout.RoomPlacements[roomIndex] == null)
-        {
-            return null;
-        }
-
-        return layout.RoomPlacements[roomIndex].Template;
-    }
-
-    private static string BuildLayoutSignature(
-        DungeonLayout layout)
-    {
-        if (layout == null)
-        {
-            return "<null>";
-        }
-
-        StringBuilder builder = new StringBuilder();
-
-        builder.Append("Seed=");
-        builder.Append(layout.Seed);
-        builder.Append("|Start=");
-        builder.Append(layout.StartCell);
-        builder.Append("|Exit=");
-        builder.Append(layout.ExitCell);
-
-        for (int i = 0;
-             i < layout.RoomPlacements.Count;
-             i++)
-        {
-            DreamRoomPlacement placement =
-                layout.RoomPlacements[i];
-
-            builder.Append("|R");
-            builder.Append(i);
-            builder.Append('=');
-
-            if (placement == null)
-            {
-                builder.Append("<null>");
-                continue;
-            }
-
-            builder.Append(
-                FormatTemplateId(
-                    placement.Template));
-            builder.Append('@');
-            builder.Append(placement.MinimumCell);
-            builder.Append('#');
-            builder.Append(
-                DreamRoomPlacement.NormalizeQuarterTurns(
-                    placement.ClockwiseQuarterTurns));
-        }
-
-        for (int i = 0;
-             i < layout.Connections.Count;
-             i++)
-        {
-            builder.Append("|C");
-            builder.Append(i);
-            builder.Append('=');
-            builder.Append(layout.Connections[i]);
-        }
-
-        return builder.ToString();
-    }
-
-    private static string FormatMetrics(
-        string label,
-        string catalogId,
-        RoleMetrics metrics)
-    {
-        return
-            label + "Catalog=" + catalogId +
-            " | Rooms=" + metrics.RoomCount +
-            "/" + ExpectedRoomCount +
-            " | Start=" + metrics.StartTemplateId +
-            "(Tagged=" + metrics.StartTagged + ")" +
-            " | Exit=" + metrics.ExitTemplateId +
-            "(Tagged=" + metrics.ExitTagged + ")" +
-            " | StartCandidates=" +
-            metrics.StartCandidateCount +
-            " | ExitCandidates=" +
-            metrics.ExitCandidateCount +
-            " | Fallbacks=" +
-            metrics.FallbackCount;
-    }
-
     private static string FormatTemplateId(
         DreamRoomTemplate template)
     {
@@ -1556,31 +1920,38 @@ public static class DreamRoomRoleTagAuditR941
             : template.TemplateId;
     }
 
-    private static DreamRoomTemplate LoadTemplateAsset(
-        string prefabPath)
+    private static string FormatMetrics(
+        string label,
+        string catalogId,
+        RoleMetrics metrics)
     {
-        GameObject prefab =
-            AssetDatabase.LoadAssetAtPath<GameObject>(
-                prefabPath);
-
-        return prefab == null
-            ? null
-            : prefab.GetComponent<DreamRoomTemplate>();
+        return label + "Catalog=" + catalogId +
+               " | Rooms=" + metrics.RoomCount +
+               "/" + ExpectedRoomCount +
+               " | Start=" + metrics.StartTemplateId +
+               "(Tagged=" + metrics.StartTagged + ")" +
+               " | Exit=" + metrics.ExitTemplateId +
+               "(Tagged=" + metrics.ExitTagged + ")" +
+               " | StartCandidates=" +
+               metrics.StartCandidateCount +
+               " | ExitCandidates=" +
+               metrics.ExitCandidateCount;
     }
 
     private static DreamRoomCatalog LoadCatalog(
-        string path,
+        string assetPath,
         string expectedId,
         string label,
         List<string> errors)
     {
         DreamRoomCatalog catalog =
-            AssetDatabase.LoadAssetAtPath<DreamRoomCatalog>(
-                path);
+            AssetDatabase.LoadAssetAtPath<
+                DreamRoomCatalog>(assetPath);
 
         if (catalog == null)
         {
-            errors.Add(label + " 不存在：" + path);
+            errors.Add(
+                label + " 不存在：" + assetPath);
             return null;
         }
 
@@ -1590,18 +1961,9 @@ public static class DreamRoomRoleTagAuditR941
                 StringComparison.Ordinal))
         {
             errors.Add(
-                label + " 的 CatalogId 应为 " +
+                label + " CatalogId 应为 " +
                 expectedId + "，实际为 " +
                 catalog.CatalogId + "。" );
-        }
-
-        List<string> catalogErrors =
-            catalog.GetValidationErrors();
-
-        for (int i = 0; i < catalogErrors.Count; i++)
-        {
-            errors.Add(
-                label + "：" + catalogErrors[i]);
         }
 
         return catalog;
@@ -1617,13 +1979,15 @@ public static class DreamRoomRoleTagAuditR941
 
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {
-            errors.Add("必须先退出 Play Mode。" );
+            errors.Add(
+                "必须先退出 Play Mode。" );
             return false;
         }
 
         if (PrefabStageUtility.GetCurrentPrefabStage() != null)
         {
-            errors.Add("必须先退出 Prefab Mode。" );
+            errors.Add(
+                "必须先退出 Prefab Mode。" );
             return false;
         }
 
@@ -1631,7 +1995,8 @@ public static class DreamRoomRoleTagAuditR941
 
         if (!scene.IsValid() || !scene.isLoaded)
         {
-            errors.Add("当前没有有效 Scene。" );
+            errors.Add(
+                "当前没有有效 Scene。" );
             return false;
         }
 
@@ -1649,8 +2014,7 @@ public static class DreamRoomRoleTagAuditR941
         if (requireCleanScene && scene.isDirty)
         {
             errors.Add(
-                "GameScene 当前有未保存修改。请先确认 Catalog 为 Graybox，" +
-                "再保存场景。" );
+                "GameScene 当前有未保存修改。请确认 Catalog 为 Graybox 后保存。" );
         }
 
         DungeonGenerator generator =
@@ -1661,12 +2025,14 @@ public static class DreamRoomRoleTagAuditR941
 
         if (generator == null)
         {
-            errors.Add("GameScene 中找不到 DungeonGenerator。" );
+            errors.Add(
+                "GameScene 中找不到 DungeonGenerator。" );
         }
 
         if (renderer == null)
         {
-            errors.Add("GameScene 中找不到 DungeonRenderer。" );
+            errors.Add(
+                "GameScene 中找不到 DungeonRenderer。" );
         }
 
         if (generator != null &&
@@ -1736,9 +2102,7 @@ public static class DreamRoomRoleTagAuditR941
     }
 
     /// <summary>
-    /// 只供编辑器只读审计使用。直接写入并在 finally 中恢复，
-    /// 不调用 SerializedObject／SetDirty，因此不会把临时 Catalog
-    /// 记录为 Scene 修改。
+    /// 只供只读审计使用；在 finally 中恢复，不调用 SerializedObject／SetDirty。
     /// </summary>
     private static void SetGeneratorCatalogTransient(
         DungeonGenerator generator,
@@ -1788,12 +2152,14 @@ public static class DreamRoomRoleTagAuditR941
             return null;
         }
 
-        GameObject[] roots = scene.GetRootGameObjects();
+        GameObject[] roots =
+            scene.GetRootGameObjects();
 
         for (int i = 0; i < roots.Length; i++)
         {
             T component =
-                roots[i].GetComponentInChildren<T>(true);
+                roots[i].GetComponentInChildren<T>(
+                    includeInactive: true);
 
             if (component != null)
             {
@@ -1806,156 +2172,66 @@ public static class DreamRoomRoleTagAuditR941
 
     private static void RequireBool(
         UnityEngine.Object target,
-        string propertyName,
-        bool expectedValue,
+        string fieldName,
+        bool expected,
         string label,
         List<string> errors)
     {
-        SerializedObject serializedObject =
-            new SerializedObject(target);
+        FieldInfo field =
+            target.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance |
+                BindingFlags.NonPublic);
 
-        SerializedProperty property =
-            serializedObject.FindProperty(propertyName);
-
-        if (property == null)
+        if (field == null ||
+            field.FieldType != typeof(bool))
         {
-            errors.Add(label + " 字段不存在。" );
+            errors.Add(
+                "无法读取 " + label + "。" );
             return;
         }
 
-        if (property.boolValue != expectedValue)
+        bool actual =
+            (bool)field.GetValue(target);
+
+        if (actual != expected)
         {
             errors.Add(
-                label + " 应为 " + expectedValue +
-                "，实际为 " + property.boolValue + "。" );
+                label + " 应为 " + expected +
+                "，实际为 " + actual + "。" );
         }
     }
 
     private static void RequireInt(
         UnityEngine.Object target,
-        string propertyName,
-        int expectedValue,
+        string fieldName,
+        int expected,
         string label,
         List<string> errors)
     {
-        SerializedObject serializedObject =
-            new SerializedObject(target);
+        FieldInfo field =
+            target.GetType().GetField(
+                fieldName,
+                BindingFlags.Instance |
+                BindingFlags.NonPublic);
 
-        SerializedProperty property =
-            serializedObject.FindProperty(propertyName);
-
-        if (property == null)
-        {
-            errors.Add(label + " 字段不存在。" );
-            return;
-        }
-
-        if (property.intValue != expectedValue)
+        if (field == null ||
+            field.FieldType != typeof(int))
         {
             errors.Add(
-                label + " 应为 " + expectedValue +
-                "，实际为 " + property.intValue + "。" );
-        }
-    }
-
-    private static void SetString(
-        SerializedObject serializedObject,
-        string propertyName,
-        string value)
-    {
-        SerializedProperty property =
-            serializedObject.FindProperty(propertyName);
-
-        if (property == null)
-        {
-            throw new InvalidOperationException(
-                "找不到序列化字段：" + propertyName);
-        }
-
-        property.stringValue = value;
-    }
-
-    private static void SetInt(
-        SerializedObject serializedObject,
-        string propertyName,
-        int value)
-    {
-        SerializedProperty property =
-            serializedObject.FindProperty(propertyName);
-
-        if (property == null)
-        {
-            throw new InvalidOperationException(
-                "找不到序列化字段：" + propertyName);
-        }
-
-        property.intValue = value;
-    }
-
-    private static void SetObjectReference(
-        SerializedObject serializedObject,
-        string propertyName,
-        UnityEngine.Object value)
-    {
-        SerializedProperty property =
-            serializedObject.FindProperty(propertyName);
-
-        if (property == null)
-        {
-            throw new InvalidOperationException(
-                "找不到序列化字段：" + propertyName);
-        }
-
-        property.objectReferenceValue = value;
-    }
-
-    private static void SetObjectReferenceArray<T>(
-        SerializedObject serializedObject,
-        string propertyName,
-        T[] values)
-        where T : UnityEngine.Object
-    {
-        SerializedProperty property =
-            serializedObject.FindProperty(propertyName);
-
-        if (property == null)
-        {
-            throw new InvalidOperationException(
-                "找不到序列化字段：" + propertyName);
-        }
-
-        property.arraySize = values.Length;
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            property.GetArrayElementAtIndex(i)
-                .objectReferenceValue = values[i];
-        }
-    }
-
-    private static void EnsureAssetFolder(
-        string folderPath)
-    {
-        if (AssetDatabase.IsValidFolder(folderPath))
-        {
+                "无法读取 " + label + "。" );
             return;
         }
 
-        string parent =
-            folderPath.Substring(
-                0,
-                folderPath.LastIndexOf('/'));
+        int actual =
+            (int)field.GetValue(target);
 
-        string name =
-            folderPath.Substring(
-                folderPath.LastIndexOf('/') + 1);
-
-        if (!AssetDatabase.IsValidFolder(parent))
+        if (actual != expected)
         {
-            EnsureAssetFolder(parent);
+            errors.Add(
+                label + " 应为 " + expected +
+                "，实际为 " + actual + "。" );
         }
-
-        AssetDatabase.CreateFolder(parent, name);
     }
 
     private static string BuildProtectedBaselineHashSignature()
@@ -1997,17 +2273,21 @@ public static class DreamRoomRoleTagAuditR941
 
         if (errors == null || errors.Count == 0)
         {
-            builder.AppendLine("- 未提供具体错误。" );
+            builder.AppendLine(
+                "- 未提供具体错误。" );
         }
         else
         {
             for (int i = 0; i < errors.Count; i++)
             {
-                builder.AppendLine("- " + errors[i]);
+                builder.AppendLine(
+                    "- " + errors[i]);
             }
         }
 
-        Debug.LogError(builder.ToString(), context);
+        Debug.LogError(
+            builder.ToString(),
+            context);
 
         EditorUtility.DisplayDialog(
             title,
@@ -2015,26 +2295,27 @@ public static class DreamRoomRoleTagAuditR941
             "OK");
     }
 
-    private readonly struct RolePrefabSpec
+    private readonly struct TemplateSpec
     {
+        public string AssetPath { get; }
         public string TemplateId { get; }
-        public string FileName { get; }
         public DreamRoomTag Tags { get; }
         public int RandomWeight { get; }
-        public int MaximumInstances { get; }
+        public int MaximumInstancesPerFloor { get; }
 
-        public RolePrefabSpec(
+        public TemplateSpec(
+            string assetPath,
             string templateId,
-            string fileName,
             DreamRoomTag tags,
             int randomWeight,
-            int maximumInstances)
+            int maximumInstancesPerFloor)
         {
+            AssetPath = assetPath;
             TemplateId = templateId;
-            FileName = fileName;
             Tags = tags;
             RandomWeight = randomWeight;
-            MaximumInstances = maximumInstances;
+            MaximumInstancesPerFloor =
+                maximumInstancesPerFloor;
         }
     }
 
@@ -2053,7 +2334,6 @@ public static class DreamRoomRoleTagAuditR941
         public bool ExitIsSpecial;
         public int StartCandidateCount;
         public int ExitCandidateCount;
-        public int FallbackCount;
     }
 
     private readonly struct SceneContext
@@ -2070,6 +2350,47 @@ public static class DreamRoomRoleTagAuditR941
             Scene = scene;
             Generator = generator;
             Renderer = renderer;
+        }
+    }
+
+    private sealed class FallbackWarningCapture : IDisposable
+    {
+        public int Count { get; private set; }
+        public string LastMessage { get; private set; }
+
+        public FallbackWarningCapture()
+        {
+            LastMessage = string.Empty;
+            Application.logMessageReceived += OnLogMessage;
+        }
+
+        public void Reset()
+        {
+            Count = 0;
+            LastMessage = string.Empty;
+        }
+
+        public void Dispose()
+        {
+            Application.logMessageReceived -= OnLogMessage;
+        }
+
+        private void OnLogMessage(
+            string condition,
+            string stackTrace,
+            LogType type)
+        {
+            if (type != LogType.Warning ||
+                string.IsNullOrEmpty(condition) ||
+                condition.IndexOf(
+                    FallbackWarningMarker,
+                    StringComparison.Ordinal) < 0)
+            {
+                return;
+            }
+
+            Count++;
+            LastMessage = condition;
         }
     }
 }

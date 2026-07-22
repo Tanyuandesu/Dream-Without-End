@@ -1,16 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using UnityEngine;
 
 /// <summary>
 /// R9.4.1：让 StartCandidate／ExitCandidate 在房间集合形成时
-/// 正式参与选择，并为缺少标签候选的 Catalog 提供 Standard 回退。
+/// 正式参与选择，并为缺少角色标签的 Catalog 提供 Standard 回退。
 ///
-/// 阶段边界：
-/// 1. 只启用 Start／Exit 两种角色标签；
-/// 2. Rare、CoreItemCandidate、Special 留给后续 R9.4 小步；
-/// 3. 不新增楼层、权重或单层上限字段，继续复用 DreamRoomTemplate；
-/// 4. 回退只接受 Standard，避免把 Rare／Special 静默当作出生房。
+/// 本小步只启用 Start／Exit。Rare、CoreItemCandidate 与 Special 的
+/// 配额仍留给 R9.4 后续步骤；楼层、权重和单层上限继续使用模板现有字段。
 /// </summary>
 public sealed partial class DungeonGenerator
 {
@@ -38,10 +36,9 @@ public sealed partial class DungeonGenerator
     }
 
     /// <summary>
-    /// 对 R4 当前已经通过楼层、单层上限和地图尺寸筛选的候选池，
-    /// 进一步施加角色约束。Start／Exit 标签不存在时，依次回退到：
-    /// 普通 Standard、允许带 Special 的 Standard；若连 Standard 都没有，
-    /// 明确失败，不会静默选择任意特殊房。
+    /// 对 R4 已完成楼层、单层上限和地图尺寸筛选的候选池施加角色约束。
+    /// 角色标签不存在时，依次回退到普通 Standard、带 Special 的 Standard；
+    /// 若连 Standard 都没有则明确失败，不会选择 Rare／Special-only 房间。
     /// </summary>
     private static bool R941RestrictCandidatesForRole(
         R941RequiredRoomRole requiredRole,
@@ -50,101 +47,143 @@ public sealed partial class DungeonGenerator
     {
         failureReason = string.Empty;
 
-        if (requiredRole == R941RequiredRoomRole.None)
-        {
-            return candidates != null && candidates.Count > 0;
-        }
-
         if (candidates == null || candidates.Count == 0)
         {
             failureReason =
-                "楼层、Maximum Instances 与地图尺寸筛选后没有任何候选。";
+                "楼层、Maximum Instances 与地图尺寸筛选后没有候选。";
             return false;
         }
 
-        DreamRoomTag requiredTag =
-            requiredRole == R941RequiredRoomRole.Start
-                ? DreamRoomTag.StartCandidate
-                : DreamRoomTag.ExitCandidate;
+        if (requiredRole == R941RequiredRoomRole.None)
+        {
+            return true;
+        }
 
-        if (R941HasMatchingCandidate(
+        DreamRoomTag requiredTag =
+            R941GetRequiredTag(requiredRole);
+
+        if (R941KeepCandidateTemplates(
                 candidates,
                 requiredTag,
                 excludeSpecialRooms: false))
         {
-            R941KeepMatchingCandidates(
-                candidates,
-                requiredTag,
-                excludeSpecialRooms: false);
-
-            return candidates.Count > 0;
+            return true;
         }
 
-        if (R941HasMatchingCandidate(
+        if (R941KeepCandidateTemplates(
                 candidates,
                 DreamRoomTag.Standard,
                 excludeSpecialRooms: true))
         {
-            R941KeepMatchingCandidates(
-                candidates,
-                DreamRoomTag.Standard,
-                excludeSpecialRooms: true);
-
-            return candidates.Count > 0;
+            return true;
         }
 
-        if (R941HasMatchingCandidate(
+        if (R941KeepCandidateTemplates(
                 candidates,
                 DreamRoomTag.Standard,
                 excludeSpecialRooms: false))
         {
-            R941KeepMatchingCandidates(
-                candidates,
-                DreamRoomTag.Standard,
-                excludeSpecialRooms: false);
-
-            return candidates.Count > 0;
+            return true;
         }
 
         failureReason =
             "没有合格的 " + requiredTag +
-            "，同时也没有可安全回退的 Standard 模板。";
+            "，也没有可安全回退的 Standard 模板。";
 
         return false;
     }
 
-    private static bool R941HasMatchingCandidate(
+    /// <summary>
+    /// 为 R5 收集最终 Start／Exit 候选。与 R4 使用完全相同的回退层级，
+    /// 因此手工建立的 Placement Layout 也不会把 Rare／Special-only 房间
+    /// 静默选作角色房。
+    /// </summary>
+    private static bool R941CollectPlacementCandidatesForRole(
+        IReadOnlyList<DreamRoomPlacement> placements,
+        R941RequiredRoomRole requiredRole,
+        int excludeRoomIndex,
+        List<int> results)
+    {
+        results.Clear();
+
+        if (placements == null ||
+            requiredRole == R941RequiredRoomRole.None)
+        {
+            return false;
+        }
+
+        R5CollectTaggedRoomIndices(
+            placements,
+            R941GetRequiredTag(requiredRole),
+            excludeRoomIndex,
+            excludeSpecialRooms: false,
+            results: results);
+
+        if (results.Count > 0)
+        {
+            return true;
+        }
+
+        R5CollectTaggedRoomIndices(
+            placements,
+            DreamRoomTag.Standard,
+            excludeRoomIndex,
+            excludeSpecialRooms: true,
+            results: results);
+
+        if (results.Count > 0)
+        {
+            return true;
+        }
+
+        R5CollectTaggedRoomIndices(
+            placements,
+            DreamRoomTag.Standard,
+            excludeRoomIndex,
+            excludeSpecialRooms: false,
+            results: results);
+
+        return results.Count > 0;
+    }
+
+    private static DreamRoomTag R941GetRequiredTag(
+        R941RequiredRoomRole requiredRole)
+    {
+        return requiredRole == R941RequiredRoomRole.Start
+            ? DreamRoomTag.StartCandidate
+            : DreamRoomTag.ExitCandidate;
+    }
+
+    /// <summary>
+    /// 只保留指定类别。若该类别不存在，列表保持原样，方便调用方继续
+    /// 尝试下一层回退；成功时才真正缩小候选池。
+    /// </summary>
+    private static bool R941KeepCandidateTemplates(
         List<DreamRoomTemplate> candidates,
         DreamRoomTag requiredTag,
         bool excludeSpecialRooms)
     {
+        bool found = false;
+
         for (int i = 0; i < candidates.Count; i++)
         {
             DreamRoomTemplate template = candidates[i];
 
-            if (template == null ||
-                !template.HasTag(requiredTag))
+            if (template != null &&
+                template.HasTag(requiredTag) &&
+                (!excludeSpecialRooms ||
+                 !template.HasTag(DreamRoomTag.Special)))
             {
-                continue;
+                found = true;
+                break;
             }
-
-            if (excludeSpecialRooms &&
-                template.HasTag(DreamRoomTag.Special))
-            {
-                continue;
-            }
-
-            return true;
         }
 
-        return false;
-    }
+        if (!found)
+        {
+            return false;
+        }
 
-    private static void R941KeepMatchingCandidates(
-        List<DreamRoomTemplate> candidates,
-        DreamRoomTag requiredTag,
-        bool excludeSpecialRooms)
-    {
         for (int i = candidates.Count - 1; i >= 0; i--)
         {
             DreamRoomTemplate template = candidates[i];
@@ -160,11 +199,12 @@ public sealed partial class DungeonGenerator
                 candidates.RemoveAt(i);
             }
         }
+
+        return candidates.Count > 0;
     }
 
     /// <summary>
-    /// R6 最终成功后生成一次角色摘要。放在 R6 而不是 R4 输出，
-    /// 可以避免坐标重试或走廊重试产生重复警告。
+    /// R6 完整成功后才建立摘要，避免 R4/R6 重试期间刷屏。
     /// </summary>
     private static string R941BuildResolvedRoleReport(
         DungeonLayout layout,
@@ -187,29 +227,11 @@ public sealed partial class DungeonGenerator
 
         bool startTagged =
             startTemplate != null &&
-            startTemplate.HasTag(
-                DreamRoomTag.StartCandidate);
+            startTemplate.HasTag(DreamRoomTag.StartCandidate);
 
         bool exitTagged =
             exitTemplate != null &&
-            exitTemplate.HasTag(
-                DreamRoomTag.ExitCandidate);
-
-        int startCandidateCount =
-            R941CountPlacedCandidates(
-                layout,
-                DreamRoomTag.StartCandidate,
-                excludeRoomIndex: -1);
-
-        int exitCandidateCount =
-            R941CountPlacedCandidates(
-                layout,
-                DreamRoomTag.ExitCandidate,
-                excludeRoomIndex: startRoomIndex);
-
-        int fallbackCount =
-            (startTagged ? 0 : 1) +
-            (exitTagged ? 0 : 1);
+            exitTemplate.HasTag(DreamRoomTag.ExitCandidate);
 
         StringBuilder builder = new StringBuilder();
 
@@ -219,8 +241,16 @@ public sealed partial class DungeonGenerator
         builder.AppendLine(
             "Catalog=" + catalogId +
             " | Floor=" + floorNumber +
-            " | StartCandidates=" + startCandidateCount +
-            " | ExitCandidates=" + exitCandidateCount);
+            " | StartCandidates=" +
+            R941CountPlacedCandidates(
+                layout,
+                DreamRoomTag.StartCandidate,
+                excludeRoomIndex: -1) +
+            " | ExitCandidates=" +
+            R941CountPlacedCandidates(
+                layout,
+                DreamRoomTag.ExitCandidate,
+                excludeRoomIndex: startRoomIndex));
 
         builder.AppendLine(
             "StartRoom=" + startRoomIndex +
@@ -239,14 +269,16 @@ public sealed partial class DungeonGenerator
              startRoomIndex != exitRoomIndex));
 
         builder.Append(
-            "Fallbacks=" + fallbackCount +
+            "Fallbacks=" +
+            ((startTagged ? 0 : 1) +
+             (exitTagged ? 0 : 1)) +
             " | FallbackPolicy=StandardOnly");
 
         return builder.ToString();
     }
 
     /// <summary>
-    /// 返回空字符串表示无需警告；否则返回本次最终布局唯一的一条合并警告。
+    /// 返回空字符串表示无需警告；否则返回这一份最终布局唯一的合并警告。
     /// </summary>
     private static string R941BuildFallbackWarning(
         DungeonLayout layout,
@@ -267,17 +299,15 @@ public sealed partial class DungeonGenerator
         DreamRoomTemplate exitTemplate =
             R941GetTemplateAt(layout, exitRoomIndex);
 
-        bool startFallback =
-            startTemplate == null ||
-            !startTemplate.HasTag(
-                DreamRoomTag.StartCandidate);
+        bool startTagged =
+            startTemplate != null &&
+            startTemplate.HasTag(DreamRoomTag.StartCandidate);
 
-        bool exitFallback =
-            exitTemplate == null ||
-            !exitTemplate.HasTag(
-                DreamRoomTag.ExitCandidate);
+        bool exitTagged =
+            exitTemplate != null &&
+            exitTemplate.HasTag(DreamRoomTag.ExitCandidate);
 
-        if (!startFallback && !exitFallback)
+        if (startTagged && exitTagged)
         {
             return string.Empty;
         }
@@ -285,7 +315,7 @@ public sealed partial class DungeonGenerator
         StringBuilder builder = new StringBuilder();
 
         builder.AppendLine(
-            "[DungeonGenerator/R9.4.1] RoomTags 安全回退（本层仅此一条）");
+            "[DungeonGenerator/R9.4.1] RoomTags 安全回退（本布局仅此一条）");
 
         builder.AppendLine(
             "Catalog=" + catalogId +
@@ -293,24 +323,46 @@ public sealed partial class DungeonGenerator
 
         builder.Append(
             "Start=" +
-            (startFallback
-                ? "StandardFallback(" +
-                  R941FormatTemplateId(startTemplate) + ")"
-                : "Tagged(" +
-                  R941FormatTemplateId(startTemplate) + ")"));
+            R941FormatRoleResolution(
+                startTemplate,
+                DreamRoomTag.StartCandidate));
 
         builder.Append(
             " | Exit=" +
-            (exitFallback
-                ? "StandardFallback(" +
-                  R941FormatTemplateId(exitTemplate) + ")"
-                : "Tagged(" +
-                  R941FormatTemplateId(exitTemplate) + ")"));
+            R941FormatRoleResolution(
+                exitTemplate,
+                DreamRoomTag.ExitCandidate));
 
         builder.Append(
+            " | FallbackPolicy=StandardOnly" +
             " | GenerationContinued=True");
 
         return builder.ToString();
+    }
+
+    private static string R941FormatRoleResolution(
+        DreamRoomTemplate template,
+        DreamRoomTag requiredTag)
+    {
+        if (template == null)
+        {
+            return "Invalid(<missing>)";
+        }
+
+        string templateId =
+            R941FormatTemplateId(template);
+
+        if (template.HasTag(requiredTag))
+        {
+            return "Tagged(" + templateId + ")";
+        }
+
+        if (template.HasTag(DreamRoomTag.Standard))
+        {
+            return "StandardFallback(" + templateId + ")";
+        }
+
+        return "InvalidNonStandard(" + templateId + ")";
     }
 
     private static void R941ResolveRoleRoomIndices(
@@ -339,15 +391,15 @@ public sealed partial class DungeonGenerator
 
     private static int R941FindWalkableRoomIndex(
         DungeonLayout layout,
-        UnityEngine.Vector2Int cell)
+        Vector2Int cell)
     {
         if (layout == null)
         {
             return -1;
         }
 
-        List<UnityEngine.Vector2Int> walkableCells =
-            new List<UnityEngine.Vector2Int>();
+        List<Vector2Int> walkableCells =
+            new List<Vector2Int>();
 
         for (int i = 0;
              i < layout.RoomPlacements.Count;

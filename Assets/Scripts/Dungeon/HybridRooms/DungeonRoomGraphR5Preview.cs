@@ -564,10 +564,9 @@ public sealed class DungeonRoomGraphR5Preview : MonoBehaviour
                               DreamRoomTag.Standard) &&
                           !template.HasTag(
                               DreamRoomTag.Special)
-                        : hasAnyStandardCandidate
-                            ? template.HasTag(
-                                DreamRoomTag.Standard)
-                            : true);
+                        : hasAnyStandardCandidate &&
+                          template.HasTag(
+                              DreamRoomTag.Standard));
 
             if (i == metrics.StartRoomIndex ||
                 !isEligibleExitCandidate ||

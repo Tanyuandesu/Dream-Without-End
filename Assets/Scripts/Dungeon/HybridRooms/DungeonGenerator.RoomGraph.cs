@@ -508,39 +508,13 @@ public sealed partial class DungeonGenerator
     {
         List<int> candidates = new List<int>();
 
-        R5CollectTaggedRoomIndices(
+        if (!R941CollectPlacementCandidatesForRole(
             placements,
-            DreamRoomTag.StartCandidate,
+            R941RequiredRoomRole.Start,
             excludeRoomIndex: -1,
-            excludeSpecialRooms: false,
-            results: candidates);
-
-        if (candidates.Count == 0)
+            results: candidates))
         {
-            R5CollectTaggedRoomIndices(
-                placements,
-                DreamRoomTag.Standard,
-                excludeRoomIndex: -1,
-                excludeSpecialRooms: true,
-                results: candidates);
-        }
-
-        if (candidates.Count == 0)
-        {
-            R5CollectTaggedRoomIndices(
-                placements,
-                DreamRoomTag.Standard,
-                excludeRoomIndex: -1,
-                excludeSpecialRooms: false,
-                results: candidates);
-        }
-
-        if (candidates.Count == 0)
-        {
-            for (int i = 0; i < placements.Count; i++)
-            {
-                candidates.Add(i);
-            }
+            return -1;
         }
 
         System.Random startRandom =
@@ -563,42 +537,13 @@ public sealed partial class DungeonGenerator
     {
         List<int> candidates = new List<int>();
 
-        R5CollectTaggedRoomIndices(
+        if (!R941CollectPlacementCandidatesForRole(
             placements,
-            DreamRoomTag.ExitCandidate,
-            startRoomIndex,
-            excludeSpecialRooms: false,
-            results: candidates);
-
-        if (candidates.Count == 0)
+            R941RequiredRoomRole.Exit,
+            excludeRoomIndex: startRoomIndex,
+            results: candidates))
         {
-            R5CollectTaggedRoomIndices(
-                placements,
-                DreamRoomTag.Standard,
-                startRoomIndex,
-                excludeSpecialRooms: true,
-                results: candidates);
-        }
-
-        if (candidates.Count == 0)
-        {
-            R5CollectTaggedRoomIndices(
-                placements,
-                DreamRoomTag.Standard,
-                startRoomIndex,
-                excludeSpecialRooms: false,
-                results: candidates);
-        }
-
-        if (candidates.Count == 0)
-        {
-            for (int i = 0; i < placements.Count; i++)
-            {
-                if (i != startRoomIndex)
-                {
-                    candidates.Add(i);
-                }
-            }
+            return -1;
         }
 
         int selectedRoomIndex = -1;
