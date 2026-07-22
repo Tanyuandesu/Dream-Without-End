@@ -494,44 +494,6 @@ public sealed partial class DungeonGenerator
             errors.Add("Corridor Width 必须位于 1～4。");
         }
 
-        if (!Enum.IsDefined(
-                typeof(DungeonCorridorWidthMode),
-                socketCorridorWidthMode))
-        {
-            errors.Add(
-                "Corridor Width Mode 不是已知枚举值。");
-        }
-
-        if (socketCorridorWidthMode ==
-            DungeonCorridorWidthMode.Mixed1And2)
-        {
-            if (socketCorridorWidth != 2)
-            {
-                errors.Add(
-                    "Mixed1And2 要求 Corridor Width 保持为 2；" +
-                    "一格宽仅由 Profile 在安全包络内收窄。");
-            }
-
-            if (mixedCorridorDoorApronLength < 1)
-            {
-                errors.Add(
-                    "Mixed Door Apron Length 必须至少为 1。");
-            }
-
-            if (mixedCorridorCornerRadius < 0 ||
-                mixedCorridorJunctionRadius < 0)
-            {
-                errors.Add(
-                    "Mixed Corner／Junction Radius 不能小于 0。");
-            }
-
-            if (mixedCorridorMinimumNarrowRunLength < 1)
-            {
-                errors.Add(
-                    "Mixed Minimum Narrow Run Length 必须至少为 1。");
-            }
-        }
-
         if (socketCorridorMaximumLayoutAttempts < 1)
         {
             errors.Add(
@@ -633,10 +595,6 @@ public sealed partial class DungeonGenerator
         allCorridorCells = new HashSet<Vector2Int>();
         statistics = new R6RoutingStatistics();
         failureReason = string.Empty;
-
-        Dictionary<int, List<Vector2Int>>
-            routedCenterlines =
-                new Dictionary<int, List<Vector2Int>>();
 
         IReadOnlyList<DreamRoomPlacement> placements =
             graphLayout.RoomPlacements;
@@ -765,9 +723,6 @@ public sealed partial class DungeonGenerator
                 connection.SetCorridorCells(
                     expandedCells);
 
-                routedCenterlines[connectionIndex] =
-                    new List<Vector2Int>(centerline);
-
                 usedSocketKeys.Add(
                     R6BuildSocketKey(
                         connection.RoomAIndex,
@@ -831,22 +786,6 @@ public sealed partial class DungeonGenerator
 
                 return false;
             }
-        }
-
-        string widthProfileFailure;
-
-        if (!R6TryApplyCorridorWidthProfile(
-                graphLayout,
-                routedCenterlines,
-                occupiedRoomCells,
-                allCorridorCells,
-                statistics,
-                out widthProfileFailure))
-        {
-            failureReason =
-                "Corridor Width Profile 应用失败：" +
-                widthProfileFailure;
-            return false;
         }
 
         statistics.UniqueCorridorCells =
@@ -2122,24 +2061,6 @@ public sealed partial class DungeonGenerator
             " | A* Expanded States：" +
             statistics.TotalExpandedNodes);
 
-        if (statistics.WidthMode ==
-            DungeonCorridorWidthMode.Mixed1And2)
-        {
-            builder.AppendLine(
-                "Width Profile：Mixed1And2" +
-                " | PrimaryWideConnections：" +
-                statistics.PrimaryWideConnections +
-                " | MixedConnections：" +
-                statistics.MixedConnections +
-                " | WideCenterlineCells：" +
-                statistics.WideCenterlineCells +
-                " | NarrowCenterlineCells：" +
-                statistics.NarrowCenterlineCells +
-                " | JunctionCells：" +
-                statistics.JunctionCellCount +
-                " | Uniform2SafetyEnvelope=Preserved");
-        }
-
         for (int i = 0;
              i < statistics.ConnectionSummaries.Count;
              i++)
@@ -2447,12 +2368,6 @@ public sealed partial class DungeonGenerator
         public int TotalCenterlineCells;
         public int ReusedCorridorCells;
         public int UniqueCorridorCells;
-        public DungeonCorridorWidthMode WidthMode;
-        public int PrimaryWideConnections;
-        public int MixedConnections;
-        public int WideCenterlineCells;
-        public int NarrowCenterlineCells;
-        public int JunctionCellCount;
     }
 
     private struct R6ConnectionRoutingSummary

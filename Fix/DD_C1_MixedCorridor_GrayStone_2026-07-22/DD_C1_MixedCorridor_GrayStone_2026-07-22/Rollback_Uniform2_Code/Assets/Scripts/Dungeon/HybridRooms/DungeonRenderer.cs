@@ -53,12 +53,6 @@ public sealed class DungeonRenderer : MonoBehaviour
     [SerializeField] private Color wallColor =
         new Color(0.35f, 0.37f, 0.44f);
 
-    [Tooltip(
-        "可选的走廊表现层。None 时逐字保持 R7.4 平面色基线；" +
-        "临时灰石 Profile 只改变 Sprite 与颜色，不改变碰撞或 FloorCells。")]
-    [SerializeField]
-    private DungeonCorridorVisualProfile corridorVisualProfile;
-
     private Sprite whiteSprite;
 
     private const string R73MissingSocketTestId =
@@ -86,8 +80,6 @@ public sealed class DungeonRenderer : MonoBehaviour
 
     public float CellSize => cellSize;
     public DungeonRenderMode RenderMode => renderMode;
-    public DungeonCorridorVisualProfile CorridorVisualProfile =>
-        corridorVisualProfile;
 
     private void Awake()
     {
@@ -405,7 +397,6 @@ public sealed class DungeonRenderer : MonoBehaviour
             TryCreateHybridCorridorGeometry(
                 corridorFloorCells,
                 corridorWallCells,
-                layout.Seed,
                 dungeonRoot,
                 out corridorsRoot,
                 out corridorWallsRoot,
@@ -502,12 +493,7 @@ public sealed class DungeonRenderer : MonoBehaviour
             occupiedRoomCellCount +
             " | FloorSorting=-10" +
             " | WallSorting=0" +
-            " | SharedCorridorCells=Deduplicated" +
-            (corridorVisualProfile == null
-                ? string.Empty
-                : " | CorridorVisualProfile=" +
-                  corridorVisualProfile.ProfileId +
-                  " | VisualSkinSlots=CardinalMask16"),
+            " | SharedCorridorCells=Deduplicated",
             this);
     }
 
@@ -889,7 +875,6 @@ public sealed class DungeonRenderer : MonoBehaviour
     private bool TryCreateHybridCorridorGeometry(
         IReadOnlyList<Vector2Int> corridorFloorCells,
         IReadOnlyList<Vector2Int> corridorWallCells,
-        int layoutSeed,
         Transform dungeonRoot,
         out Transform corridorsRoot,
         out Transform corridorWallsRoot,
@@ -914,10 +899,6 @@ public sealed class DungeonRenderer : MonoBehaviour
             corridorsRoot.gameObject.SetActive(false);
             corridorWallsRoot.gameObject.SetActive(false);
 
-            HashSet<Vector2Int> corridorFloorSet =
-                new HashSet<Vector2Int>(
-                    corridorFloorCells);
-
             for (int floorIndex = 0;
                  floorIndex < corridorFloorCells.Count;
                  floorIndex++)
@@ -925,37 +906,15 @@ public sealed class DungeonRenderer : MonoBehaviour
                 Vector2Int floorCell =
                     corridorFloorCells[floorIndex];
 
-                int floorMask =
-                    BuildCardinalNeighbourMask(
-                        floorCell,
-                        corridorFloorSet);
-
-                Color resolvedFloorColor =
-                    corridorVisualProfile == null
-                        ? floorColor
-                        : corridorVisualProfile
-                            .EvaluateFloorColor(
-                                floorCell,
-                                floorMask,
-                                layoutSeed);
-
-                GameObject floorObject = CreateSquare(
+                CreateSquare(
                     "CorridorFloor_" +
                     floorCell.x + "_" + floorCell.y,
                     floorCell,
-                    resolvedFloorColor,
+                    floorColor,
                     corridorsRoot,
                     -10,
                     false,
                     1f);
-
-                if (corridorVisualProfile != null)
-                {
-                    ApplyOptionalSprite(
-                        floorObject,
-                        corridorVisualProfile
-                            .GetFloorSprite(floorMask));
-                }
             }
 
             for (int wallIndex = 0;
@@ -965,38 +924,15 @@ public sealed class DungeonRenderer : MonoBehaviour
                 Vector2Int wallCell =
                     corridorWallCells[wallIndex];
 
-                int adjacentFloorMask =
-                    BuildCardinalNeighbourMask(
-                        wallCell,
-                        corridorFloorSet);
-
-                Color resolvedWallColor =
-                    corridorVisualProfile == null
-                        ? wallColor
-                        : corridorVisualProfile
-                            .EvaluateWallColor(
-                                wallCell,
-                                adjacentFloorMask,
-                                layoutSeed);
-
-                GameObject wallObject = CreateSquare(
+                CreateSquare(
                     "CorridorWall_" +
                     wallCell.x + "_" + wallCell.y,
                     wallCell,
-                    resolvedWallColor,
+                    wallColor,
                     corridorWallsRoot,
                     0,
                     true,
                     1f);
-
-                if (corridorVisualProfile != null)
-                {
-                    ApplyOptionalSprite(
-                        wallObject,
-                        corridorVisualProfile
-                            .GetWallSprite(
-                                adjacentFloorMask));
-                }
             }
 
             return true;
@@ -1011,53 +947,6 @@ public sealed class DungeonRenderer : MonoBehaviour
             corridorWallsRoot = null;
             failureReason = exception.ToString();
             return false;
-        }
-    }
-
-    private static int BuildCardinalNeighbourMask(
-        Vector2Int cell,
-        HashSet<Vector2Int> neighbours)
-    {
-        int mask = 0;
-
-        if (neighbours.Contains(cell + Vector2Int.up))
-        {
-            mask |= DungeonCorridorVisualProfile.NorthBit;
-        }
-
-        if (neighbours.Contains(cell + Vector2Int.right))
-        {
-            mask |= DungeonCorridorVisualProfile.EastBit;
-        }
-
-        if (neighbours.Contains(cell + Vector2Int.down))
-        {
-            mask |= DungeonCorridorVisualProfile.SouthBit;
-        }
-
-        if (neighbours.Contains(cell + Vector2Int.left))
-        {
-            mask |= DungeonCorridorVisualProfile.WestBit;
-        }
-
-        return mask;
-    }
-
-    private static void ApplyOptionalSprite(
-        GameObject target,
-        Sprite sprite)
-    {
-        if (target == null || sprite == null)
-        {
-            return;
-        }
-
-        SpriteRenderer spriteRenderer =
-            target.GetComponent<SpriteRenderer>();
-
-        if (spriteRenderer != null)
-        {
-            spriteRenderer.sprite = sprite;
         }
     }
 
