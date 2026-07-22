@@ -1,0 +1,240 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4ed9b16fd97641c4b8a50884fa18a368, type: 3}
+  m_Name: CA1_TemporaryStickCat_8Direction
+  m_EditorClassIdentifier: 
+  directionMode: 8
+  mirrorLeftDirections: 1
+  defaultFacing: 0
+  idle:
+    south:
+      frames:
+      - {fileID: 21300000, guid: 30d3923984826c647bd0e1059c4b1c9a, type: 3}
+      framesPerSecond: 1
+      loop: 1
+    southEast:
+      frames:
+      - {fileID: 21300000, guid: 6c350b0c3fd6bb44c9f67de5bd4d66e8, type: 3}
+      framesPerSecond: 1
+      loop: 1
+    east:
+      frames:
+      - {fileID: 21300000, guid: db22ef1bd4b46d14f9230ce99ff59d99, type: 3}
+      framesPerSecond: 1
+      loop: 1
+    northEast:
+      frames:
+      - {fileID: 21300000, guid: 95e2a2f5dde518b408530511595de6d4, type: 3}
+      framesPerSecond: 1
+      loop: 1
+    north:
+      frames:
+      - {fileID: 21300000, guid: dcd4021e0fb865d4ab93746893006865, type: 3}
+      framesPerSecond: 1
+      loop: 1
+    northWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    west:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+  walk:
+    south:
+      frames:
+      - {fileID: 21300000, guid: d926c6cf095daa24589be4624ebdc277, type: 3}
+      - {fileID: 21300000, guid: 6c346b74ffe220241897a6e90f0cc54a, type: 3}
+      - {fileID: 21300000, guid: 41c0282d4189b3444a8877cc955f8eb9, type: 3}
+      - {fileID: 21300000, guid: 3f7f329f82b5775438222e3cd2844f3d, type: 3}
+      framesPerSecond: 7
+      loop: 1
+    southEast:
+      frames:
+      - {fileID: 21300000, guid: 127a9f72682f0d34f9228cb8ff684dac, type: 3}
+      - {fileID: 21300000, guid: c7c3e154e9d9e9141ad3dc7d75635862, type: 3}
+      - {fileID: 21300000, guid: 5b634913f9db0d74997edeeab30cb4d6, type: 3}
+      - {fileID: 21300000, guid: 80ef37aa919f08347a56ac467244aced, type: 3}
+      framesPerSecond: 7
+      loop: 1
+    east:
+      frames:
+      - {fileID: 21300000, guid: dbbba8bf65838b94596bdfb8096b5c30, type: 3}
+      - {fileID: 21300000, guid: 9451c018decd7774dbd0430170f67969, type: 3}
+      - {fileID: 21300000, guid: c462de0e98970374094f3e5fbc2386c6, type: 3}
+      - {fileID: 21300000, guid: 76a0928580e28744c88923bc3b9dab3a, type: 3}
+      framesPerSecond: 7
+      loop: 1
+    northEast:
+      frames:
+      - {fileID: 21300000, guid: fc9b1d1bc0e290a45ac92425430507e7, type: 3}
+      - {fileID: 21300000, guid: a0d94c43ce8911b40bb6027d11bb1cb8, type: 3}
+      - {fileID: 21300000, guid: 87d3ca2720be3464eb5f82fbd07edb42, type: 3}
+      - {fileID: 21300000, guid: 369a571716a01ca4bb7c0fa7220ee334, type: 3}
+      framesPerSecond: 7
+      loop: 1
+    north:
+      frames:
+      - {fileID: 21300000, guid: 0a0c933f840d93f4d817ab34cb1783ce, type: 3}
+      - {fileID: 21300000, guid: 0bdf1e22ac93fec4093cd8e4e48fdf16, type: 3}
+      - {fileID: 21300000, guid: f90ef07f70b9cf8408eb213e4b109847, type: 3}
+      - {fileID: 21300000, guid: ed61a180a12c7884699782e87f2606b2, type: 3}
+      framesPerSecond: 7
+      loop: 1
+    northWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    west:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+  attack:
+    south:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    east:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    north:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    west:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+  hurt:
+    south:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    east:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    north:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    west:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+  death:
+    south:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    east:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    north:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    west:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+  special:
+    south:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    east:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northEast:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    north:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    northWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    west:
+      frames: []
+      framesPerSecond: 8
+      loop: 1
+    southWest:
+      frames: []
+      framesPerSecond: 8
+      loop: 1

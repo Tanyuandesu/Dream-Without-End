@@ -10858,6 +10858,9 @@ MonoBehaviour:
   contactDamageCooldown: 0.75
   contactDamageTargets: 2
   enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
+  defaultAnimationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
+  animationProfiles:
+  - {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
   visualWorldHeight: 0.8
   visualOffset: {x: 0, y: 0}
   visualColor: {r: 1, g: 1, b: 1, a: 1}
@@ -11052,6 +11055,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerSprite: {fileID: -1333008625247902045, guid: 83ebfee57da198640912eaa26343a350, type: 3}
+  animationProfile: {fileID: 11400000, guid: 474a8b67476848842a817c79c6055d66, type: 2}
   visualWorldHeight: 0.9
   visualOffset: {x: 0, y: 0.12}
   sortingOrder: 20
