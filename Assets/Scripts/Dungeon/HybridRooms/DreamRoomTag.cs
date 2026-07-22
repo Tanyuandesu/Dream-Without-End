@@ -3,8 +3,10 @@ using System;
 /// <summary>
 /// 房间用途标签。
 /// 使用 Flags 后，一个模板可以同时承担多个候选用途。
-/// R9.4 起，StartCandidate 与 ExitCandidate 正式参与房间选择；
-/// 其余标签按阶段 9 的后续小步逐项启用。
+/// R9.4.1 起，StartCandidate 与 ExitCandidate 正式参与房间选择；
+/// R9.4.2 起，Rare 使用既有 RandomWeight 与单层 Template 上限；
+/// R9.4.3 起，CoreItemCandidate 建立保留槽与道具出生作用域；
+/// Special 按阶段 9 的后续小步启用。
 /// </summary>
 [Flags]
 public enum DreamRoomTag

@@ -186,6 +186,15 @@ public sealed partial class DungeonGenerator
             List<string> layoutErrors =
                 layout.GetValidationErrors();
 
+            R942AppendRareQuotaValidationErrors(
+                layout,
+                layoutErrors);
+
+            R943AppendCoreItemValidationErrors(
+                layout,
+                floorNumber,
+                layoutErrors);
+
             if (layoutErrors.Count > 0)
             {
                 report = R4BuildLayoutErrorReport(
@@ -296,6 +305,15 @@ public sealed partial class DungeonGenerator
 
         if (errors.Count > 0 ||
             templateFirstRoomCatalog == null)
+        {
+            return errors;
+        }
+
+        R943AppendConfigurationErrors(
+            floorNumber,
+            errors);
+
+        if (errors.Count > 0)
         {
             return errors;
         }
@@ -447,6 +465,42 @@ public sealed partial class DungeonGenerator
                         roleSelectionFailure;
 
                     return false;
+                }
+
+                if (requiredRole ==
+                        R941RequiredRoomRole.None)
+                {
+                    bool useCoreItemReservationSlot =
+                        R943ShouldUseCoreItemReservationSlot(
+                            floorNumber,
+                            roomIndex,
+                            placements);
+
+                    string slotSelectionFailure;
+
+                    bool validSlotCandidates =
+                        useCoreItemReservationSlot
+                            ? R943RestrictCandidatesForCoreItemSlot(
+                                fittingTemplates,
+                                out slotSelectionFailure)
+                            : R942RestrictCandidatesForOrdinarySlot(
+                                fittingTemplates,
+                                out slotSelectionFailure);
+
+                    if (!validSlotCandidates)
+                    {
+                        failureReason =
+                            "第 " +
+                            (roomIndex + 1) +
+                            " 个房间的 " +
+                            (useCoreItemReservationSlot
+                                ? "R9.4.3 Core Item"
+                                : "R9.4.2 普通") +
+                            "候选无效：" +
+                            slotSelectionFailure;
+
+                        return false;
+                    }
                 }
 
                 DreamRoomTemplate selectedTemplate =

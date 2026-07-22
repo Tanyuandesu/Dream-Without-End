@@ -183,7 +183,17 @@ public sealed partial class DungeonGenerator
                 R941BuildResolvedRoleReport(
                     layout,
                     floorNumber,
-                    templateFirstRoomCatalog.CatalogId);
+                    templateFirstRoomCatalog.CatalogId) +
+                "\n" +
+                R942BuildResolvedRareReport(
+                    layout,
+                    floorNumber,
+                    templateFirstRoomCatalog) +
+                "\n" +
+                R943BuildResolvedCoreItemReport(
+                    layout,
+                    floorNumber,
+                    templateFirstRoomCatalog);
 
             string roleFallbackWarning =
                 R941BuildFallbackWarning(

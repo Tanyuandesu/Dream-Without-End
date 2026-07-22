@@ -97,11 +97,25 @@ public sealed class ItemSpawner : MonoBehaviour
             itemManager.ProgressionScore,
             83);
 
+        List<int> coreItemRoomIndices =
+            new List<int>();
+
+        DungeonCoreItemRoomScopeR943
+            .CollectCandidateRoomIndices(
+                layout,
+                coreItemRoomIndices);
+
+        bool hasTaggedCoreItemScope =
+            coreItemRoomIndices.Count > 0;
+
         DungeonSpawnCellRequest request =
             new DungeonSpawnCellRequest(
                 layout,
                 DreamRoomSpawnPointKind.Item,
-                allowedRoomIndices: null,
+                allowedRoomIndices:
+                    hasTaggedCoreItemScope
+                        ? coreItemRoomIndices
+                        : null,
                 selectionSalt: selectionSalt,
                 reservedCells: requestReservations,
                 excludeStartCell: true,
@@ -111,7 +125,8 @@ public sealed class ItemSpawner : MonoBehaviour
                 minimumDistanceFromExit:
                     minimumDistanceFromExit,
                 allowWalkableFallback: true,
-                allowLayoutWideFallback: true);
+                allowLayoutWideFallback:
+                    !hasTaggedCoreItemScope);
 
         DungeonSpawnCellResult spawnResult;
         string failureReason;
@@ -130,6 +145,14 @@ public sealed class ItemSpawner : MonoBehaviour
                 " | Floor=" + floorNumber +
                 " | Seed=" + layout.Seed +
                 " | ItemId=" + definition.ItemId +
+                "\nCoreScope=" +
+                (hasTaggedCoreItemScope
+                    ? "CoreItemCandidateRooms"
+                    : "LegacyLayoutWideFallback") +
+                " | CoreCandidateRooms=" +
+                coreItemRoomIndices.Count +
+                " | LayoutWideFallbackAllowed=" +
+                !hasTaggedCoreItemScope +
                 "\nReason=" + failureReason +
                 "\nItemSpawned=None" +
                 " | LayoutMutation=None" +
@@ -186,6 +209,17 @@ public sealed class ItemSpawner : MonoBehaviour
             " | ProgressionScore=" +
             itemManager.ProgressionScore +
             " | ItemId=" + definition.ItemId +
+            "\nCoreScope=" +
+            (hasTaggedCoreItemScope
+                ? "CoreItemCandidateRooms"
+                : "LegacyLayoutWideFallback") +
+            " | CoreCandidateRooms=" +
+            coreItemRoomIndices.Count +
+            " | ResolvedInsideCoreCandidate=" +
+            (hasTaggedCoreItemScope &&
+             DungeonCoreItemRoomScopeR943.ContainsRoomIndex(
+                 coreItemRoomIndices,
+                 spawnResult.RoomIndex)) +
             "\nRoomIndex=" + spawnResult.RoomIndex +
             " | Cell=" + spawnResult.Cell +
             " | SpawnPointId=" +

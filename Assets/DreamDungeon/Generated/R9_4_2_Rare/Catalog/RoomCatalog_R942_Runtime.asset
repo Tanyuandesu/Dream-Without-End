@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c290711cbeed4db458ae245287a31c1d, type: 3}
+  m_Name: RoomCatalog_R942_Runtime
+  m_EditorClassIdentifier:
+  catalogId: RareRules_R942_Runtime
+  roomTemplates:
+  - {fileID: 1319530957827645176, guid: e04f717ac7ef1920ca6f028037b20cf4, type: 3}
+  - {fileID: 1319530957827645176, guid: 8a416475df903b902eabb9efc4cffca3, type: 3}
+  - {fileID: 1319530957827645176, guid: 0143a913c4e54d4dd06d09c841fc5da5, type: 3}
+  - {fileID: 1319530957827645176, guid: d9230561a805795899832e803c5e79f9, type: 3}
+  - {fileID: 1319530957827645176, guid: 41553f893856f94c9f067945e11f60f6, type: 3}
+  - {fileID: 1319530957827645176, guid: cfca760e0475a8aa6f6455adeac92b63, type: 3}
+  previewFloorNumber: 1
+  previewUsedTemplateId:
+  previewExistingInstances: 0
+  previewRollCount: 1000
+  previewRandomSeed: 94202
