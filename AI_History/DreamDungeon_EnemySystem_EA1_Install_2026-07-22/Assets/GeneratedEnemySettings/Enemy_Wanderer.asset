@@ -1,0 +1,57 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 90b9801fd4d552cf80789d6fc7c5d61e, type: 3}
+  m_Name: Enemy_Wanderer
+  m_EditorClassIdentifier: 
+  enemyId:
+    value: dream_wanderer
+  displayName: Wanderer
+  gameplayRole: 0
+  countsForEnding: 1
+  gameplaySummary: Standard baseline enemy for patrol, chase, search and melee.
+  maxHealth: 30
+  damageInvulnerabilityTime: 0.1
+  moveSpeed: 4.7
+  waypointTolerance: 0.035
+  stopDistance: 0.72
+  lastPositionTolerance: 0.15
+  patrolRadiusInCells: 6
+  maximumChasePathCost: 32
+  searchDuration: 3
+  detectionRadius: 20
+  loseTargetRadius: 24
+  requireLineOfSight: 0
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  viewAngle: 360
+  broadcastsAlert: 0
+  alertRadius: 0
+  attackMode: 0
+  attackDamage: 5
+  attackRange: 0.9
+  attackWindup: 0.25
+  attackRecovery: 0.45
+  attackCooldown: 0.75
+  projectileSpeed: 0
+  enableLegacyContactDamage: 1
+  legacyContactDamage: 5
+  legacyContactDamageCooldown: 0.75
+  legacyContactDamageTargets: 2
+  enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
+  animationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
+  visualWorldHeight: 0.8
+  visualOffset: {x: 0, y: 0}
+  visualColor: {r: 1, g: 1, b: 1, a: 1}
+  sortingOrder: 20
+  colliderSize: {x: 0.58, y: 0.58}
+  colliderOffset: {x: 0, y: 0}

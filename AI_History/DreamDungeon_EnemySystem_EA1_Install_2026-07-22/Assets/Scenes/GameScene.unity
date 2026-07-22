@@ -10825,8 +10825,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemySpawner: {fileID: 908851853}
-  runRecord:
-    floors: []
 --- !u!114 &908851853
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -11109,7 +11107,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1036781215}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 81f531289b036c14d9a542579b23fd6c, type: 3}
   m_Name: 
@@ -11751,13 +11749,13 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1774352367}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 48d474bb2ac47a04faa1b2a339113b99, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   controller: {fileID: 1774352369}
-  showDebugButtons: 0
+  showDebugButtons: 1
   enableKeyboardPreview: 1
   panelPosition: {x: 15, y: 15}
 --- !u!114 &1774352371
