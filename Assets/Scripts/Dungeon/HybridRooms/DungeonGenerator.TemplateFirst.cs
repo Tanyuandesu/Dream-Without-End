@@ -195,6 +195,11 @@ public sealed partial class DungeonGenerator
                 floorNumber,
                 layoutErrors);
 
+            R944AppendSpecialValidationErrors(
+                layout,
+                floorNumber,
+                layoutErrors);
+
             if (layoutErrors.Count > 0)
             {
                 report = R4BuildLayoutErrorReport(
@@ -310,6 +315,10 @@ public sealed partial class DungeonGenerator
         }
 
         R943AppendConfigurationErrors(
+            floorNumber,
+            errors);
+
+        R944AppendConfigurationErrors(
             floorNumber,
             errors);
 
@@ -440,13 +449,18 @@ public sealed partial class DungeonGenerator
                     instanceCounts,
                     fittingTemplates);
 
+                R944ApplyCommittedSpecialCap(
+                    fittingTemplates,
+                    placements);
+
                 if (fittingTemplates.Count == 0)
                 {
                     failureReason =
                         "准备第 " +
                         (roomIndex + 1) +
                         " 个房间时已经没有可用模板。" +
-                        "请检查楼层限制、Maximum Instances 与地图尺寸。";
+                        "请检查楼层限制、Maximum Instances、地图尺寸" +
+                        "与 Special 全局上限。";
 
                     return false;
                 }
@@ -476,16 +490,38 @@ public sealed partial class DungeonGenerator
                             roomIndex,
                             placements);
 
+                    bool useSpecialReservationSlot =
+                        !useCoreItemReservationSlot &&
+                        R944ShouldUseSpecialReservationSlot(
+                            floorNumber,
+                            roomIndex,
+                            placements);
+
                     string slotSelectionFailure;
 
-                    bool validSlotCandidates =
-                        useCoreItemReservationSlot
-                            ? R943RestrictCandidatesForCoreItemSlot(
-                                fittingTemplates,
-                                out slotSelectionFailure)
-                            : R942RestrictCandidatesForOrdinarySlot(
+                    bool validSlotCandidates;
+
+                    if (useCoreItemReservationSlot)
+                    {
+                        validSlotCandidates =
+                            R943RestrictCandidatesForCoreItemSlot(
                                 fittingTemplates,
                                 out slotSelectionFailure);
+                    }
+                    else if (useSpecialReservationSlot)
+                    {
+                        validSlotCandidates =
+                            R944RestrictCandidatesForSpecialSlot(
+                                fittingTemplates,
+                                out slotSelectionFailure);
+                    }
+                    else
+                    {
+                        validSlotCandidates =
+                            R942RestrictCandidatesForOrdinarySlot(
+                                fittingTemplates,
+                                out slotSelectionFailure);
+                    }
 
                     if (!validSlotCandidates)
                     {
@@ -495,7 +531,9 @@ public sealed partial class DungeonGenerator
                             " 个房间的 " +
                             (useCoreItemReservationSlot
                                 ? "R9.4.3 Core Item"
-                                : "R9.4.2 普通") +
+                                : useSpecialReservationSlot
+                                    ? "R9.4.4 Special"
+                                    : "R9.4.2 普通") +
                             "候选无效：" +
                             slotSelectionFailure;
 

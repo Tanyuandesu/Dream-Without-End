@@ -193,6 +193,11 @@ public sealed partial class DungeonGenerator
                 R943BuildResolvedCoreItemReport(
                     layout,
                     floorNumber,
+                    templateFirstRoomCatalog) +
+                "\n" +
+                R944BuildResolvedSpecialReport(
+                    layout,
+                    floorNumber,
                     templateFirstRoomCatalog);
 
             string roleFallbackWarning =

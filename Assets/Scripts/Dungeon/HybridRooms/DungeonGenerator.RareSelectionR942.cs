@@ -9,7 +9,8 @@ using System.Text;
 /// 规则边界：
 /// 1. Start／Exit 槽位继续完全由 R9.4.1 处理；
 /// 2. 其余普通槽位只接受 Standard 或 Rare；
-/// 3. CoreItemCandidate／Special 即使同时带有其他标签，也暂不进入普通槽位；
+/// 3. CoreItemCandidate／Special 即使同时带有其他标签，也不进入普通槽位，
+///    而由 R9.4.3／R9.4.4 的保留角色处理；
 /// 4. 单层计数仍只在房间成功落位后增加，不把失败尝试计入配额；
 /// 5. MaximumInstancesPerFloor 是“每个 Template”的上限，不是全部 Rare
 ///    共用一个全局上限。
@@ -66,7 +67,7 @@ public sealed partial class DungeonGenerator
 
         failureReason =
             "当前普通槽位没有 Standard／Rare 候选；" +
-            "CoreItemCandidate 与 Special 要到后续 R9.4 小步才会启用。";
+            "CoreItemCandidate 与 Special 必须由各自保留角色处理。";
 
         return false;
     }
@@ -197,7 +198,7 @@ public sealed partial class DungeonGenerator
                 StringComparer.OrdinalIgnoreCase);
 
         int rarePlacements = 0;
-        int deferredTaggedPlacements = 0;
+        int reservedRolePlacements = 0;
 
         if (layout != null)
         {
@@ -221,7 +222,7 @@ public sealed partial class DungeonGenerator
                 if (template.RoomTags.HasAny(
                         R942DeferredOrdinaryTags))
                 {
-                    deferredTaggedPlacements++;
+                    reservedRolePlacements++;
                 }
 
                 if (!template.HasTag(DreamRoomTag.Rare))
@@ -312,8 +313,8 @@ public sealed partial class DungeonGenerator
         builder.AppendLine(
             "RarePlacements=" + rarePlacements +
             " | RareCapBreaches=" + capBreaches +
-            " | DeferredTaggedPlacements=" +
-            deferredTaggedPlacements);
+            " | ReservedCoreSpecialPlacements=" +
+            reservedRolePlacements);
 
         builder.AppendLine(
             "RareUsage=" + details);
@@ -323,7 +324,7 @@ public sealed partial class DungeonGenerator
             " | CountPolicy=CommittedPlacementsOnly" +
             " | CapScope=PerTemplatePerFloor" +
             " | OrdinaryPool=Standard+Rare" +
-            " | DeferredOrdinaryTagsExcluded=True");
+            " | CoreAndSpecialExcludedFromOrdinary=True");
 
         return builder.ToString();
     }

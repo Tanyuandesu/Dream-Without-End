@@ -10,7 +10,7 @@ using System.Text;
 /// 1. Catalog 没有可用 CoreItemCandidate 时保持旧 Graybox 行为；
 /// 2. 有可用候选时，在 Start／Exit 之后保留一个 Core Item 槽位；
 /// 3. 多个候选继续复用 RandomWeight、楼层限制与 Template 单层上限；
-/// 4. 带 Special 的 Core 候选继续推迟到 R9.4.4；
+/// 4. R9.4.4 起，带 Special 的 Core 候选可由同一房间同时满足两个角色；
 /// 5. 本阶段只建立候选房与道具出生作用域，不让房间池读取道具进度。
 /// </summary>
 public sealed partial class DungeonGenerator
@@ -35,8 +35,10 @@ public sealed partial class DungeonGenerator
     }
 
     /// <summary>
-    /// 核心道具保留槽只接受当前阶段已启用的 CoreItemCandidate。
-    /// Special 即使同时带 Core 标签也不会提前进入本层。
+    /// 核心道具保留槽接受全部 CoreItemCandidate。
+    /// R9.4.4 的 Special 全局唯一过滤会在本方法之前执行，因此
+    /// CoreItemCandidate + Special 可以一次满足两个角色，但不会越过
+    /// 每层一个 Special 的上限。
     /// </summary>
     private static bool R943RestrictCandidatesForCoreItemSlot(
         List<DreamRoomTemplate> candidates,
@@ -57,8 +59,7 @@ public sealed partial class DungeonGenerator
 
             bool isEnabledCoreCandidate =
                 template != null &&
-                template.HasTag(DreamRoomTag.CoreItemCandidate) &&
-                !template.HasTag(DreamRoomTag.Special);
+                template.HasTag(DreamRoomTag.CoreItemCandidate);
 
             if (!isEnabledCoreCandidate)
             {
@@ -73,7 +74,7 @@ public sealed partial class DungeonGenerator
 
         failureReason =
             "当前 Core Item 保留槽没有可用的 CoreItemCandidate；" +
-            "带 Special 的候选要到 R9.4.4 才会启用。";
+            "请检查楼层、模板上限、地图尺寸与 Special 全局上限。";
 
         return false;
     }
@@ -158,8 +159,7 @@ public sealed partial class DungeonGenerator
     {
         return
             template != null &&
-            template.HasTag(DreamRoomTag.CoreItemCandidate) &&
-            !template.HasTag(DreamRoomTag.Special);
+            template.HasTag(DreamRoomTag.CoreItemCandidate);
     }
 
     private static int R943CountPlacedCoreItemCandidateRooms(
@@ -236,6 +236,7 @@ public sealed partial class DungeonGenerator
                 roomIndices);
 
         StringBuilder ids = new StringBuilder();
+        int specialCoreCandidateRooms = 0;
 
         for (int i = 0; i < roomIndices.Count; i++)
         {
@@ -247,6 +248,11 @@ public sealed partial class DungeonGenerator
             int roomIndex = roomIndices[i];
             DreamRoomTemplate template =
                 layout.RoomPlacements[roomIndex].Template;
+
+            if (template.HasTag(DreamRoomTag.Special))
+            {
+                specialCoreCandidateRooms++;
+            }
 
             ids.Append(roomIndex);
             ids.Append(':');
@@ -288,6 +294,8 @@ public sealed partial class DungeonGenerator
         builder.AppendLine(
             "PlacedCandidateRooms=" + roomIndices.Count +
             " | RoomIndices=" + ids +
+            " | SpecialCoreCandidateRooms=" +
+            specialCoreCandidateRooms +
             " | ReservedSlot=" +
             (usableCandidates > 0
                 ? R943CoreItemReservationRoomIndex.ToString()
@@ -298,7 +306,7 @@ public sealed partial class DungeonGenerator
             (roomIndices.Count > 0
                 ? "CoreItemCandidateRooms"
                 : "LegacyLayoutWideFallback") +
-            " | SpecialCoreCandidatesDeferred=True" +
+            " | SpecialCoreCandidatesEnabled=True" +
             " | ProgressConditionalSelectionDeferredTo=R9.6");
 
         return builder.ToString();
@@ -307,7 +315,8 @@ public sealed partial class DungeonGenerator
 
 /// <summary>
 /// 由生成器与 ItemSpawner 共用的只读作用域解析器。
-/// 只接受当前阶段启用的 CoreItemCandidate；带 Special 的组合标签仍推迟。
+/// R9.4.4 起接受全部 CoreItemCandidate；组合标签由同一布局真相同时
+/// 提供给 Special 唯一房契约与 ItemSpawner。
 /// </summary>
 public static class DungeonCoreItemRoomScopeR943
 {
@@ -341,8 +350,7 @@ public static class DungeonCoreItemRoomScopeR943
                     : placement.Template;
 
             if (template != null &&
-                template.HasTag(DreamRoomTag.CoreItemCandidate) &&
-                !template.HasTag(DreamRoomTag.Special))
+                template.HasTag(DreamRoomTag.CoreItemCandidate))
             {
                 results.Add(i);
             }
