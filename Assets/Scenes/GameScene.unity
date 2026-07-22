@@ -5709,7 +5709,7 @@ MonoBehaviour:
   maxPlacementAttempts: 250
   corridorWidth: 2
   extraConnections: 2
-  useRandomSeed: 0
+  useRandomSeed: 1
   fixedSeed: 12345
   r82InjectNoLegalPlayerCellForControlledFailure: 0
   roomGraphMinimumExtraConnections: 1
@@ -10845,6 +10845,11 @@ MonoBehaviour:
   spawnNearPlayerFirst: 1
   excludeExitRoom: 1
   r83InjectNoLegalEnemyCellForControlledFailure: 0
+  navigationTopology: 0
+  maxPathQueriesPerFrame: 2
+  maxExpandedPathNodesPerQuery: 4096
+  navigationStartRecoveryRadiusInCells: 1
+  simplifyCollinearPathWaypoints: 0
   moveSpeed: 4.7
   waypointTolerance: 0.035
   stopDistance: 0.72
