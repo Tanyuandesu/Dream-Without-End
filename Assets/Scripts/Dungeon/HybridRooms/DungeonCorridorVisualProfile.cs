@@ -61,6 +61,14 @@ public sealed class DungeonCorridorVisualProfile :
     [SerializeField]
     private float wallBrightnessVariation = 0.055f;
 
+    [Header("墙体视觉厚度（C2）")]
+    [Tooltip(
+        "只把墙体朝走廊外侧的可见部分收进；0 保持整格显示，" +
+        "0.30 表示外侧留空 30%。内侧视觉边界与整格碰撞均不移动。")]
+    [Range(0f, 0.45f)]
+    [SerializeField]
+    private float wallOuterVisualInset;
+
     [SerializeField]
     private int deterministicVariationSalt = 173;
 
@@ -95,6 +103,13 @@ public sealed class DungeonCorridorVisualProfile :
 
     public float WallBrightnessVariation =>
         wallBrightnessVariation;
+
+    /// <summary>
+    /// 墙格朝外侧留空的比例。Renderer 只把这个值应用到视觉子物体；
+    /// 墙格根物体与 BoxCollider2D 始终保持完整一格。
+    /// </summary>
+    public float WallOuterVisualInset =>
+        wallOuterVisualInset;
 
     public int DeterministicVariationSalt =>
         deterministicVariationSalt;
@@ -263,6 +278,11 @@ public sealed class DungeonCorridorVisualProfile :
             wallBrightnessVariation,
             0f,
             0.2f);
+
+        wallOuterVisualInset = Mathf.Clamp(
+            wallOuterVisualInset,
+            0f,
+            0.45f);
 
         northWallBrightness = Mathf.Clamp(
             northWallBrightness,

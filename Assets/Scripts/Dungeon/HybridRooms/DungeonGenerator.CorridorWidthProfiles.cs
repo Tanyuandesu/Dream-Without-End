@@ -55,6 +55,39 @@ public sealed partial class DungeonGenerator
     [SerializeField]
     private bool mixedCorridorKeepPrimaryRouteWide = true;
 
+    [Header("Corridor Pass C2：一／二／三格层次宽度")]
+    [Tooltip(
+        "C2 只在通过房间占格与地图边界校验的节点加入三格开阔段；" +
+        "门口仍保持两格，失败节点会局部回退为两格。")]
+    [Range(0.05f, 0.4f)]
+    [SerializeField]
+    private float layeredCorridorOpenFraction = 0.20f;
+
+    [Tooltip("一段直线至少有多少个候选节点时，才加入三格开阔段。")]
+    [Min(2)]
+    [SerializeField]
+    private int layeredCorridorMinimumOpenRunLength = 3;
+
+    [Tooltip("单个三格开阔段最多使用多少个中心线节点。")]
+    [Min(2)]
+    [SerializeField]
+    private int layeredCorridorMaximumOpenRunLength = 4;
+
+    [Tooltip(
+        "在既有两格门前区与三格开阔段之间额外保留多少个两格过渡节点。")]
+    [Min(1)]
+    [SerializeField]
+    private int layeredCorridorDoorTransitionLength = 1;
+
+    [Tooltip("允许 Start 到 Exit 主路径的长直段出现短三格开阔区。")]
+    [SerializeField]
+    private bool layeredCorridorOpenPrimaryRoute = true;
+
+    [Tooltip(
+        "允许连接中心线的交汇节点尝试扩为三格；空间不足时自动保持两格。")]
+    [SerializeField]
+    private bool layeredCorridorOpenJunctions = true;
+
     public DungeonCorridorWidthMode SocketCorridorWidthMode =>
         socketCorridorWidthMode;
 
@@ -73,6 +106,24 @@ public sealed partial class DungeonGenerator
     public bool MixedCorridorKeepPrimaryRouteWide =>
         mixedCorridorKeepPrimaryRouteWide;
 
+    public float LayeredCorridorOpenFraction =>
+        layeredCorridorOpenFraction;
+
+    public int LayeredCorridorMinimumOpenRunLength =>
+        layeredCorridorMinimumOpenRunLength;
+
+    public int LayeredCorridorMaximumOpenRunLength =>
+        layeredCorridorMaximumOpenRunLength;
+
+    public int LayeredCorridorDoorTransitionLength =>
+        layeredCorridorDoorTransitionLength;
+
+    public bool LayeredCorridorOpenPrimaryRoute =>
+        layeredCorridorOpenPrimaryRoute;
+
+    public bool LayeredCorridorOpenJunctions =>
+        layeredCorridorOpenJunctions;
+
     private bool R6TryApplyCorridorWidthProfile(
         DungeonLayout graphLayout,
         Dictionary<int, List<Vector2Int>> routedCenterlines,
@@ -89,6 +140,18 @@ public sealed partial class DungeonGenerator
             statistics.WidthMode =
                 DungeonCorridorWidthMode.Uniform2;
             return true;
+        }
+
+        if (socketCorridorWidthMode ==
+            DungeonCorridorWidthMode.Mixed1To3)
+        {
+            return R6TryApplyLayeredCorridorWidthProfile(
+                graphLayout,
+                routedCenterlines,
+                occupiedRoomCells,
+                allCorridorCells,
+                statistics,
+                out failureReason);
         }
 
         if (socketCorridorWidthMode !=
@@ -306,6 +369,585 @@ public sealed partial class DungeonGenerator
             junctionCells.Count;
 
         return true;
+    }
+
+    /// <summary>
+    /// C2 在 C1 的 1／2 格结果上加入经过逐节点空间验证的三格开阔段。
+    /// A* 仍以两格安全包络求中心线；这里只进行确定性的后处理。
+    /// </summary>
+    private bool R6TryApplyLayeredCorridorWidthProfile(
+        DungeonLayout graphLayout,
+        Dictionary<int, List<Vector2Int>> routedCenterlines,
+        HashSet<Vector2Int> occupiedRoomCells,
+        HashSet<Vector2Int> allCorridorCells,
+        R6RoutingStatistics statistics,
+        out string failureReason)
+    {
+        failureReason = string.Empty;
+
+        if (socketCorridorWidth != 2)
+        {
+            failureReason =
+                "Mixed1To3 要求 A* 安全包络与门口基准宽度为 2；" +
+                "当前 socketCorridorWidth=" +
+                socketCorridorWidth + "。";
+            return false;
+        }
+
+        if (graphLayout == null ||
+            routedCenterlines == null ||
+            routedCenterlines.Count !=
+                graphLayout.Connections.Count)
+        {
+            failureReason =
+                "Mixed1To3 缺少完整的 Connection 中心线。";
+            return false;
+        }
+
+        HashSet<int> primaryConnections;
+
+        if (!R6TryFindPrimaryRouteConnections(
+                graphLayout,
+                out primaryConnections,
+                out failureReason))
+        {
+            return false;
+        }
+
+        HashSet<Vector2Int> junctionCells =
+            R6CollectCenterlineJunctionCells(
+                routedCenterlines);
+
+        Dictionary<int, List<Vector2Int>>
+            layeredCellsByConnection =
+                new Dictionary<int, List<Vector2Int>>();
+
+        Dictionary<int, int[]> widthsByConnection =
+            new Dictionary<int, int[]>();
+
+        int openCandidateCount = 0;
+        int acceptedOpenCount = 0;
+        int fallbackOpenCount = 0;
+
+        for (int connectionIndex = 0;
+             connectionIndex < graphLayout.Connections.Count;
+             connectionIndex++)
+        {
+            List<Vector2Int> centerline;
+
+            if (!routedCenterlines.TryGetValue(
+                    connectionIndex,
+                    out centerline) ||
+                centerline == null ||
+                centerline.Count == 0)
+            {
+                failureReason =
+                    "Connection " + connectionIndex +
+                    " 没有可应用 Mixed1To3 的中心线。";
+                return false;
+            }
+
+            bool isPrimaryConnection =
+                primaryConnections.Contains(
+                    connectionIndex);
+
+            bool keepWholeConnectionWide =
+                mixedCorridorKeepPrimaryRouteWide &&
+                isPrimaryConnection;
+
+            bool[] c1WideMask =
+                R6BuildMixedWideMask(
+                    centerline,
+                    junctionCells,
+                    keepWholeConnectionWide);
+
+            int[] widths = new int[centerline.Count];
+
+            for (int i = 0; i < widths.Length; i++)
+            {
+                widths[i] = c1WideMask[i] ? 2 : 1;
+            }
+
+            bool[] doorProtected =
+                R6BuildLayeredDoorProtectedMask(
+                    centerline.Count);
+
+            List<int> openCandidates =
+                R6CollectLayeredOpenCandidates(
+                    centerline,
+                    widths,
+                    doorProtected,
+                    junctionCells,
+                    isPrimaryConnection);
+
+            openCandidateCount += openCandidates.Count;
+
+            List<Vector2Int> acceptedCells =
+                new List<Vector2Int>();
+
+            R6ExpandCenterlineWithWidthValues(
+                centerline,
+                widths,
+                acceptedCells);
+
+            if (!R6AreLayeredCellsUsable(
+                    acceptedCells,
+                    occupiedRoomCells))
+            {
+                failureReason =
+                    "Connection " + connectionIndex +
+                    " 的 C1 基础宽度已经越界或穿入房间。";
+                return false;
+            }
+
+            HashSet<Vector2Int> acceptedSet =
+                new HashSet<Vector2Int>(acceptedCells);
+
+            for (int candidateIndex = 0;
+                 candidateIndex < openCandidates.Count;
+                 candidateIndex++)
+            {
+                int centerlineIndex =
+                    openCandidates[candidateIndex];
+
+                if (!R6CanPromoteLayeredNode(
+                        widths,
+                        centerlineIndex))
+                {
+                    fallbackOpenCount++;
+                    continue;
+                }
+
+                widths[centerlineIndex] = 3;
+
+                List<Vector2Int> trialCells =
+                    new List<Vector2Int>();
+
+                R6ExpandCenterlineWithWidthValues(
+                    centerline,
+                    widths,
+                    trialCells);
+
+                HashSet<Vector2Int> trialSet =
+                    new HashSet<Vector2Int>(trialCells);
+
+                bool addsVisibleArea =
+                    R6ContainsCellOutside(
+                        trialSet,
+                        acceptedSet);
+
+                bool usable =
+                    addsVisibleArea &&
+                    R6AreLayeredCellsUsable(
+                        trialCells,
+                        occupiedRoomCells) &&
+                    trialSet.Count > 0 &&
+                    R6CountReachableCells(
+                        trialSet,
+                        R6GetFirstCell(trialSet)) ==
+                    trialSet.Count;
+
+                if (!usable)
+                {
+                    widths[centerlineIndex] = 2;
+                    fallbackOpenCount++;
+                    continue;
+                }
+
+                acceptedCells = trialCells;
+                acceptedSet = trialSet;
+                acceptedOpenCount++;
+            }
+
+            if (acceptedSet.Count == 0 ||
+                R6CountReachableCells(
+                    acceptedSet,
+                    R6GetFirstCell(acceptedSet)) !=
+                acceptedSet.Count)
+            {
+                failureReason =
+                    "Connection " + connectionIndex +
+                    " 的 Mixed1To3 Cells 不是四方向连续区域。";
+                return false;
+            }
+
+            layeredCellsByConnection.Add(
+                connectionIndex,
+                acceptedCells);
+
+            widthsByConnection.Add(
+                connectionIndex,
+                widths);
+        }
+
+        allCorridorCells.Clear();
+        statistics.ReusedCorridorCells = 0;
+        statistics.PrimaryWideConnections = 0;
+        statistics.MixedConnections = 0;
+        statistics.WideCenterlineCells = 0;
+        statistics.NarrowCenterlineCells = 0;
+        statistics.OpenCenterlineCells = 0;
+        statistics.OpenConnections = 0;
+
+        for (int connectionIndex = 0;
+             connectionIndex < graphLayout.Connections.Count;
+             connectionIndex++)
+        {
+            DreamRoomConnection connection =
+                graphLayout.Connections[connectionIndex];
+
+            List<Vector2Int> layeredCells =
+                layeredCellsByConnection[
+                    connectionIndex];
+
+            int[] widths =
+                widthsByConnection[connectionIndex];
+
+            connection.SetCorridorCells(layeredCells);
+
+            int reused = 0;
+            int narrowCount = 0;
+            int regularCount = 0;
+            int openCount = 0;
+
+            for (int cellIndex = 0;
+                 cellIndex < layeredCells.Count;
+                 cellIndex++)
+            {
+                if (!allCorridorCells.Add(
+                        layeredCells[cellIndex]))
+                {
+                    reused++;
+                }
+            }
+
+            for (int widthIndex = 0;
+                 widthIndex < widths.Length;
+                 widthIndex++)
+            {
+                switch (widths[widthIndex])
+                {
+                    case 1:
+                        narrowCount++;
+                        break;
+                    case 3:
+                        openCount++;
+                        break;
+                    default:
+                        regularCount++;
+                        break;
+                }
+            }
+
+            statistics.ReusedCorridorCells += reused;
+            statistics.NarrowCenterlineCells +=
+                narrowCount;
+            statistics.WideCenterlineCells +=
+                regularCount;
+            statistics.OpenCenterlineCells +=
+                openCount;
+
+            if (primaryConnections.Contains(
+                    connectionIndex))
+            {
+                statistics.PrimaryWideConnections++;
+            }
+
+            if (narrowCount > 0 || openCount > 0)
+            {
+                statistics.MixedConnections++;
+            }
+
+            if (openCount > 0)
+            {
+                statistics.OpenConnections++;
+            }
+
+            R6ReplaceExpandedCellCount(
+                statistics,
+                connectionIndex,
+                layeredCells.Count);
+        }
+
+        statistics.WidthMode =
+            DungeonCorridorWidthMode.Mixed1To3;
+        statistics.JunctionCellCount =
+            junctionCells.Count;
+        statistics.OpenCandidateCount =
+            openCandidateCount;
+        statistics.AcceptedOpenCount =
+            acceptedOpenCount;
+        statistics.FallbackOpenCount =
+            fallbackOpenCount;
+
+        return true;
+    }
+
+    private bool[] R6BuildLayeredDoorProtectedMask(
+        int centerlineCount)
+    {
+        bool[] protectedMask =
+            new bool[centerlineCount];
+
+        int protectedLength = Mathf.Clamp(
+            mixedCorridorDoorApronLength +
+            layeredCorridorDoorTransitionLength,
+            1,
+            centerlineCount);
+
+        for (int i = 0; i < protectedLength; i++)
+        {
+            protectedMask[i] = true;
+            protectedMask[centerlineCount - 1 - i] = true;
+        }
+
+        return protectedMask;
+    }
+
+    private List<int> R6CollectLayeredOpenCandidates(
+        List<Vector2Int> centerline,
+        int[] widths,
+        bool[] doorProtected,
+        HashSet<Vector2Int> junctionCells,
+        bool isPrimaryConnection)
+    {
+        HashSet<int> candidates = new HashSet<int>();
+
+        if (layeredCorridorOpenJunctions)
+        {
+            for (int i = 1;
+                 i < centerline.Count - 1;
+                 i++)
+            {
+                if (!doorProtected[i] &&
+                    widths[i] == 2 &&
+                    junctionCells.Contains(
+                        centerline[i]) &&
+                    R6CanPromoteLayeredNode(
+                        widths,
+                        i))
+                {
+                    candidates.Add(i);
+                }
+            }
+        }
+
+        if (layeredCorridorOpenPrimaryRoute &&
+            isPrimaryConnection)
+        {
+            int index = 1;
+
+            while (index < centerline.Count - 1)
+            {
+                if (!R6IsLayeredStraightCandidate(
+                        centerline,
+                        widths,
+                        doorProtected,
+                        junctionCells,
+                        index))
+                {
+                    index++;
+                    continue;
+                }
+
+                int first = index;
+
+                while (index < centerline.Count - 1 &&
+                       R6IsLayeredStraightCandidate(
+                           centerline,
+                           widths,
+                           doorProtected,
+                           junctionCells,
+                           index))
+                {
+                    index++;
+                }
+
+                int runLength = index - first;
+
+                if (runLength <
+                    layeredCorridorMinimumOpenRunLength)
+                {
+                    continue;
+                }
+
+                int desiredLength = Mathf.Clamp(
+                    Mathf.RoundToInt(
+                        runLength *
+                        layeredCorridorOpenFraction),
+                    layeredCorridorMinimumOpenRunLength,
+                    layeredCorridorMaximumOpenRunLength);
+
+                desiredLength = Mathf.Min(
+                    desiredLength,
+                    runLength);
+
+                int openFirst =
+                    first +
+                    (runLength - desiredLength) / 2;
+
+                for (int openIndex = openFirst;
+                     openIndex <
+                        openFirst + desiredLength;
+                     openIndex++)
+                {
+                    candidates.Add(openIndex);
+                }
+            }
+        }
+
+        List<int> ordered = new List<int>(candidates);
+        ordered.Sort();
+        return ordered;
+    }
+
+    private static bool R6IsLayeredStraightCandidate(
+        List<Vector2Int> centerline,
+        int[] widths,
+        bool[] doorProtected,
+        HashSet<Vector2Int> junctionCells,
+        int index)
+    {
+        if (index < 2 ||
+            index >= centerline.Count - 2 ||
+            doorProtected[index] ||
+            widths[index] != 2 ||
+            junctionCells.Contains(centerline[index]))
+        {
+            return false;
+        }
+
+        Vector2Int direction =
+            centerline[index] -
+            centerline[index - 1];
+
+        return
+            centerline[index - 1] -
+                centerline[index - 2] == direction &&
+            centerline[index + 1] -
+                centerline[index] == direction &&
+            centerline[index + 2] -
+                centerline[index + 1] == direction;
+    }
+
+    private static bool R6CanPromoteLayeredNode(
+        int[] widths,
+        int index)
+    {
+        return index > 0 &&
+               index < widths.Length - 1 &&
+               widths[index] == 2 &&
+               widths[index - 1] >= 2 &&
+               widths[index + 1] >= 2;
+    }
+
+    private void R6ExpandCenterlineWithWidthValues(
+        List<Vector2Int> centerline,
+        int[] widths,
+        List<Vector2Int> results)
+    {
+        results.Clear();
+
+        HashSet<Vector2Int> used =
+            new HashSet<Vector2Int>();
+
+        if (centerline.Count == 1)
+        {
+            R6CollectWidthCells(
+                centerline[0],
+                Vector2Int.right,
+                Mathf.Clamp(widths[0], 1, 3),
+                results,
+                used);
+            return;
+        }
+
+        for (int segmentIndex = 0;
+             segmentIndex < centerline.Count - 1;
+             segmentIndex++)
+        {
+            Vector2Int direction =
+                centerline[segmentIndex + 1] -
+                centerline[segmentIndex];
+
+            int width = Mathf.Clamp(
+                Mathf.Max(
+                    widths[segmentIndex],
+                    widths[segmentIndex + 1]),
+                1,
+                3);
+
+            R6CollectWidthCells(
+                centerline[segmentIndex],
+                direction,
+                width,
+                results,
+                used);
+
+            R6CollectWidthCells(
+                centerline[segmentIndex + 1],
+                direction,
+                width,
+                results,
+                used);
+        }
+
+        for (int cellIndex = 1;
+             cellIndex < centerline.Count - 1;
+             cellIndex++)
+        {
+            Vector2Int incoming =
+                centerline[cellIndex] -
+                centerline[cellIndex - 1];
+
+            Vector2Int outgoing =
+                centerline[cellIndex + 1] -
+                centerline[cellIndex];
+
+            if (incoming == outgoing)
+            {
+                continue;
+            }
+
+            R6CollectCornerCellsWithWidth(
+                centerline[cellIndex],
+                incoming,
+                outgoing,
+                Mathf.Clamp(widths[cellIndex], 1, 3),
+                results,
+                used);
+        }
+    }
+
+    private bool R6AreLayeredCellsUsable(
+        List<Vector2Int> cells,
+        HashSet<Vector2Int> occupiedRoomCells)
+    {
+        for (int i = 0; i < cells.Count; i++)
+        {
+            if (!R6IsInsideMap(cells[i]) ||
+                occupiedRoomCells.Contains(cells[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool R6ContainsCellOutside(
+        HashSet<Vector2Int> candidate,
+        HashSet<Vector2Int> baseline)
+    {
+        foreach (Vector2Int cell in candidate)
+        {
+            if (!baseline.Contains(cell))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool[] R6BuildMixedWideMask(

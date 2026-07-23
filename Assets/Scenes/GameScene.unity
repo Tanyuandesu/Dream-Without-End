@@ -5711,12 +5711,18 @@ MonoBehaviour:
   extraConnections: 2
   useRandomSeed: 0
   fixedSeed: 12345
-  socketCorridorWidthMode: 1
+  socketCorridorWidthMode: 2
   mixedCorridorDoorApronLength: 2
   mixedCorridorCornerRadius: 1
   mixedCorridorJunctionRadius: 1
   mixedCorridorMinimumNarrowRunLength: 3
   mixedCorridorKeepPrimaryRouteWide: 1
+  layeredCorridorOpenFraction: 0.2
+  layeredCorridorMinimumOpenRunLength: 3
+  layeredCorridorMaximumOpenRunLength: 4
+  layeredCorridorDoorTransitionLength: 1
+  layeredCorridorOpenPrimaryRoute: 1
+  layeredCorridorOpenJunctions: 1
   r82InjectNoLegalPlayerCellForControlledFailure: 0
   roomGraphMinimumExtraConnections: 1
   roomGraphMaximumExtraConnections: 2
@@ -5790,7 +5796,7 @@ MonoBehaviour:
   cellSize: 1
   floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
   wallColor: {r: 0.35, g: 0.37, b: 0.44, a: 1}
-  corridorVisualProfile: {fileID: 11400000, guid: fb2fe602dc0cd101cdc4cc7cc8926df3, type: 2}
+  corridorVisualProfile: {fileID: 11400000, guid: c2d7a61a3bf947a5b0b41ee7b9ce2231, type: 2}
 --- !u!114 &621725377
 MonoBehaviour:
   m_ObjectHideFlags: 0

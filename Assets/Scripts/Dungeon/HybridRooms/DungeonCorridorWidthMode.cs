@@ -7,5 +7,11 @@
 public enum DungeonCorridorWidthMode
 {
     Uniform2 = 0,
-    Mixed1And2 = 1
+    Mixed1And2 = 1,
+
+    /// <summary>
+    /// C2 的层次宽度：保留 C1 的少量一格支路，以两格为主体，
+    /// 并在通过空间校验的短开阔段加入三格宽度。
+    /// </summary>
+    Mixed1To3 = 2
 }

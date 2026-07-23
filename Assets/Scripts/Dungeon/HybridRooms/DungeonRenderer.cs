@@ -979,23 +979,43 @@ public sealed class DungeonRenderer : MonoBehaviour
                                 adjacentFloorMask,
                                 layoutSeed);
 
-                GameObject wallObject = CreateSquare(
-                    "CorridorWall_" +
-                    wallCell.x + "_" + wallCell.y,
-                    wallCell,
-                    resolvedWallColor,
-                    corridorWallsRoot,
-                    0,
-                    true,
-                    1f);
+                Sprite resolvedWallSprite =
+                    corridorVisualProfile == null
+                        ? null
+                        : corridorVisualProfile
+                            .GetWallSprite(
+                                adjacentFloorMask);
 
-                if (corridorVisualProfile != null)
+                if (corridorVisualProfile != null &&
+                    corridorVisualProfile
+                        .WallOuterVisualInset > 0f)
                 {
+                    CreateInsetCorridorWall(
+                        "CorridorWall_" +
+                        wallCell.x + "_" + wallCell.y,
+                        wallCell,
+                        resolvedWallColor,
+                        resolvedWallSprite,
+                        corridorWallsRoot,
+                        corridorFloorSet,
+                        corridorVisualProfile
+                            .WallOuterVisualInset);
+                }
+                else
+                {
+                    GameObject wallObject = CreateSquare(
+                        "CorridorWall_" +
+                        wallCell.x + "_" + wallCell.y,
+                        wallCell,
+                        resolvedWallColor,
+                        corridorWallsRoot,
+                        0,
+                        true,
+                        1f);
+
                     ApplyOptionalSprite(
                         wallObject,
-                        corridorVisualProfile
-                            .GetWallSprite(
-                                adjacentFloorMask));
+                        resolvedWallSprite);
                 }
             }
 
@@ -1059,6 +1079,127 @@ public sealed class DungeonRenderer : MonoBehaviour
         {
             spriteRenderer.sprite = sprite;
         }
+    }
+
+    /// <summary>
+    /// C2 把墙碰撞根与可见子物体分离。根物体仍占完整一格；
+    /// 子物体只从没有走廊地板的一侧收进，面向走廊的内缘不动。
+    /// </summary>
+    private GameObject CreateInsetCorridorWall(
+        string objectName,
+        Vector2Int wallCell,
+        Color color,
+        Sprite optionalSprite,
+        Transform parent,
+        HashSet<Vector2Int> corridorFloorSet,
+        float outerInset)
+    {
+        if (whiteSprite == null)
+        {
+            CreateWhiteSprite();
+        }
+
+        float inset = Mathf.Clamp(
+            outerInset,
+            0f,
+            0.45f);
+
+        GameObject wallRoot =
+            new GameObject(objectName);
+
+        wallRoot.transform.SetParent(parent);
+        wallRoot.transform.position =
+            CellToWorld(wallCell);
+        wallRoot.transform.localScale =
+            new Vector3(cellSize, cellSize, 1f);
+
+        BoxCollider2D collider =
+            wallRoot.AddComponent<BoxCollider2D>();
+
+        collider.size = Vector2.one;
+        collider.offset = Vector2.zero;
+
+        int inwardX;
+        int inwardY;
+
+        ResolveWallVisualInwardAxes(
+            wallCell,
+            corridorFloorSet,
+            out inwardX,
+            out inwardY);
+
+        float scaleX =
+            inwardX == 0 ? 1f : 1f - inset;
+        float scaleY =
+            inwardY == 0 ? 1f : 1f - inset;
+
+        GameObject visual =
+            new GameObject("WallVisual_C2");
+
+        visual.transform.SetParent(
+            wallRoot.transform,
+            false);
+
+        visual.transform.localPosition =
+            new Vector3(
+                inwardX * inset * 0.5f,
+                inwardY * inset * 0.5f,
+                0f);
+
+        visual.transform.localScale =
+            new Vector3(scaleX, scaleY, 1f);
+
+        SpriteRenderer spriteRenderer =
+            visual.AddComponent<SpriteRenderer>();
+
+        spriteRenderer.sprite =
+            optionalSprite == null
+                ? whiteSprite
+                : optionalSprite;
+
+        spriteRenderer.color = color;
+        spriteRenderer.sortingOrder = 0;
+
+        return wallRoot;
+    }
+
+    private static void ResolveWallVisualInwardAxes(
+        Vector2Int wallCell,
+        HashSet<Vector2Int> corridorFloorSet,
+        out int inwardX,
+        out int inwardY)
+    {
+        bool positiveX = false;
+        bool negativeX = false;
+        bool positiveY = false;
+        bool negativeY = false;
+
+        for (int directionIndex = 0;
+             directionIndex < EightDirections.Length;
+             directionIndex++)
+        {
+            Vector2Int direction =
+                EightDirections[directionIndex];
+
+            if (!corridorFloorSet.Contains(
+                    wallCell + direction))
+            {
+                continue;
+            }
+
+            positiveX |= direction.x > 0;
+            negativeX |= direction.x < 0;
+            positiveY |= direction.y > 0;
+            negativeY |= direction.y < 0;
+        }
+
+        inwardX = positiveX == negativeX
+            ? 0
+            : positiveX ? 1 : -1;
+
+        inwardY = positiveY == negativeY
+            ? 0
+            : positiveY ? 1 : -1;
     }
 
     private bool TryOpenResolvedConnectionSockets(

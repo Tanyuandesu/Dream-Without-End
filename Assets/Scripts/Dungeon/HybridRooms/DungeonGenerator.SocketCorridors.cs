@@ -2139,6 +2139,35 @@ public sealed partial class DungeonGenerator
                 statistics.JunctionCellCount +
                 " | Uniform2SafetyEnvelope=Preserved");
         }
+        else if (statistics.WidthMode ==
+                 DungeonCorridorWidthMode.Mixed1To3)
+        {
+            builder.AppendLine(
+                "Width Profile：Mixed1To3" +
+                " | PrimaryRouteConnections：" +
+                statistics.PrimaryWideConnections +
+                " | MixedConnections：" +
+                statistics.MixedConnections +
+                " | OpenConnections：" +
+                statistics.OpenConnections +
+                " | Width1Nodes：" +
+                statistics.NarrowCenterlineCells +
+                " | Width2Nodes：" +
+                statistics.WideCenterlineCells +
+                " | Width3Nodes：" +
+                statistics.OpenCenterlineCells +
+                " | OpenCandidates：" +
+                statistics.OpenCandidateCount +
+                " | OpenAccepted：" +
+                statistics.AcceptedOpenCount +
+                " | OpenFallbacks：" +
+                statistics.FallbackOpenCount +
+                " | JunctionCells：" +
+                statistics.JunctionCellCount +
+                " | BaseSafetyEnvelope=2" +
+                " | DoorWidth=2" +
+                " | OpenExpansion=Validated");
+        }
 
         for (int i = 0;
              i < statistics.ConnectionSummaries.Count;
@@ -2453,6 +2482,11 @@ public sealed partial class DungeonGenerator
         public int WideCenterlineCells;
         public int NarrowCenterlineCells;
         public int JunctionCellCount;
+        public int OpenCenterlineCells;
+        public int OpenConnections;
+        public int OpenCandidateCount;
+        public int AcceptedOpenCount;
+        public int FallbackOpenCount;
     }
 
     private struct R6ConnectionRoutingSummary
