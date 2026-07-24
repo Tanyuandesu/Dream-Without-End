@@ -5,7 +5,8 @@ using UnityEngine;
 /// Observable lifecycle and perception state owner for one enemy.
 ///
 /// EA3 preserves the accepted state vocabulary while replacing the old chase
-/// locomotion with EnemyNavigationAgent.
+/// locomotion with EnemyNavigationAgent. CB0 activates the formal Hit/Stunned
+/// interruption boundary without changing current baseline behaviour.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(EnemyRuntimeContext))]
@@ -26,9 +27,18 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private string lastTransitionReason =
         "Not initialized";
 
+    [Header("CB0 combat reaction contract")]
+    [SerializeField] private bool combatReactionActive;
+    [SerializeField] private CombatAttackId activeReactionAttackId;
+    [SerializeField] private CombatReactionKind activeReactionKind;
+    [SerializeField] private float combatReactionEndsAt;
+    [SerializeField] private int combatReactionStartCount;
+    [SerializeField] private int combatReactionCompleteCount;
+
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
     [SerializeField] private EnemyNavigationAgent navigationAgent;
+    [SerializeField] private EnemyMotor2D motor;
 
     [Header("Optional diagnostics")]
     [Tooltip(
@@ -48,7 +58,26 @@ public sealed class EnemyStateMachine : MonoBehaviour
     public string LastTransitionReason => lastTransitionReason;
     public EnemyRuntimeContext Context => context;
     public EnemyNavigationAgent NavigationAgent => navigationAgent;
+    public EnemyMotor2D Motor => motor;
     public bool LogsStateTransitions => logStateTransitions;
+
+    public bool IsCombatReactionActive => combatReactionActive;
+    public CombatAttackId ActiveReactionAttackId =>
+        activeReactionAttackId;
+
+    public CombatReactionKind ActiveReactionKind =>
+        activeReactionKind;
+
+    public float CombatReactionRemainingTime =>
+        combatReactionActive
+            ? Mathf.Max(0f, combatReactionEndsAt - Time.time)
+            : 0f;
+
+    public int CombatReactionStartCount =>
+        combatReactionStartCount;
+
+    public int CombatReactionCompleteCount =>
+        combatReactionCompleteCount;
 
     public event Action<
         EnemyStateMachine,
@@ -85,7 +114,9 @@ public sealed class EnemyStateMachine : MonoBehaviour
             context != null &&
             context.IsInitialized &&
             navigationAgent != null &&
-            navigationAgent.IsInitialized;
+            navigationAgent.IsInitialized &&
+            motor != null &&
+            motor.IsInitialized;
 
         previousState = EnemyRuntimeState.Spawn;
         currentState = EnemyRuntimeState.Spawn;
@@ -94,6 +125,10 @@ public sealed class EnemyStateMachine : MonoBehaviour
         lastTransitionReason = initialized
             ? "Runtime initialized"
             : "Runtime references incomplete";
+
+        ResetCombatReactionFields();
+        combatReactionStartCount = 0;
+        combatReactionCompleteCount = 0;
 
         if (!initialized)
         {
@@ -133,6 +168,89 @@ public sealed class EnemyStateMachine : MonoBehaviour
         Initialize(newContext, resolvedAgent);
     }
 
+    /// <summary>
+    /// Requests a temporary Hit or Stunned interruption. It stops navigation
+    /// but preserves the remembered target so recovery can request a fresh
+    /// route from the enemy's post-displacement position.
+    /// </summary>
+    public bool TryBeginCombatReaction(
+        CombatReactionRequest request)
+    {
+        if (!initialized ||
+            currentState == EnemyRuntimeState.Dead ||
+            !request.IsValid)
+        {
+            return false;
+        }
+
+        float requestedEndTime =
+            Time.time + request.Duration;
+
+        if (combatReactionActive &&
+            request.ExtendExistingReaction)
+        {
+            combatReactionEndsAt = Mathf.Max(
+                combatReactionEndsAt,
+                requestedEndTime);
+        }
+        else
+        {
+            combatReactionEndsAt = requestedEndTime;
+        }
+
+        combatReactionActive = true;
+        activeReactionAttackId = request.AttackId;
+        activeReactionKind = StrongerReaction(
+            activeReactionKind,
+            request.Kind);
+
+        combatReactionStartCount++;
+
+        navigationAgent.StopMovement(
+            clearLastKnownPosition: false);
+
+        TransitionTo(
+            MapReactionState(activeReactionKind),
+            string.IsNullOrWhiteSpace(request.Reason)
+                ? "Combat reaction " + activeReactionKind
+                : request.Reason);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Ends a reaction when its timer and any motor-owned displacement have
+    /// finished. Force is reserved for death or explicit teardown.
+    /// </summary>
+    public bool TryCompleteCombatReaction(
+        bool force = false,
+        string reason = null)
+    {
+        if (!combatReactionActive)
+        {
+            return false;
+        }
+
+        if (!force)
+        {
+            if (Time.time < combatReactionEndsAt)
+            {
+                return false;
+            }
+
+            if (motor != null &&
+                motor.IsCombatDisplacementActive)
+            {
+                return false;
+            }
+        }
+
+        ResetCombatReactionFields();
+        combatReactionCompleteCount++;
+        ResumeAfterCombatReaction(reason);
+        return true;
+    }
+
     private void Update()
     {
         if (!initialized ||
@@ -141,6 +259,42 @@ public sealed class EnemyStateMachine : MonoBehaviour
             return;
         }
 
+        if (combatReactionActive)
+        {
+            TryCompleteCombatReaction();
+            return;
+        }
+
+        EvaluatePerceptionState();
+    }
+
+    private void FixedUpdate()
+    {
+        if (!initialized ||
+            currentState == EnemyRuntimeState.Dead)
+        {
+            return;
+        }
+
+        navigationAgent.TickFixed(currentState);
+
+        if (combatReactionActive)
+        {
+            return;
+        }
+
+        if (currentState ==
+                EnemyRuntimeState.InvestigateLastKnownPosition &&
+            !context.HasLastKnownTargetPosition)
+        {
+            TransitionTo(
+                EnemyRuntimeState.Idle,
+                "Last known position reached");
+        }
+    }
+
+    private void EvaluatePerceptionState()
+    {
         EnemyDetection detection = context.Detection;
 
         if (detection != null &&
@@ -176,24 +330,55 @@ public sealed class EnemyStateMachine : MonoBehaviour
             "No detected or remembered target");
     }
 
-    private void FixedUpdate()
+    private void ResumeAfterCombatReaction(string reason)
     {
-        if (!initialized ||
-            currentState == EnemyRuntimeState.Dead)
+        if (currentState == EnemyRuntimeState.Dead)
         {
             return;
         }
 
-        navigationAgent.TickFixed(currentState);
+        EnemyDetection detection = context != null
+            ? context.Detection
+            : null;
 
-        if (currentState ==
-                EnemyRuntimeState.InvestigateLastKnownPosition &&
-            !context.HasLastKnownTargetPosition)
+        if (detection != null &&
+            detection.IsTargetDetected)
+        {
+            Vector2 observedPosition =
+                detection.LastKnownTargetPosition;
+
+            context.SetLastKnownTargetPosition(
+                observedPosition);
+
+            navigationAgent.ObserveDetectedTarget(
+                observedPosition);
+
+            TransitionTo(
+                EnemyRuntimeState.Chase,
+                string.IsNullOrWhiteSpace(reason)
+                    ? "Combat reaction complete; target detected"
+                    : reason);
+
+            return;
+        }
+
+        if (context != null &&
+            context.HasLastKnownTargetPosition)
         {
             TransitionTo(
-                EnemyRuntimeState.Idle,
-                "Last known position reached");
+                EnemyRuntimeState.InvestigateLastKnownPosition,
+                string.IsNullOrWhiteSpace(reason)
+                    ? "Combat reaction complete; repath to last known target"
+                    : reason);
+
+            return;
         }
+
+        TransitionTo(
+            EnemyRuntimeState.Idle,
+            string.IsNullOrWhiteSpace(reason)
+                ? "Combat reaction complete"
+                : reason);
     }
 
     private void HandleDied(Health health)
@@ -201,6 +386,14 @@ public sealed class EnemyStateMachine : MonoBehaviour
         if (!initialized)
         {
             return;
+        }
+
+        ResetCombatReactionFields();
+
+        if (motor != null)
+        {
+            motor.CancelCombatDisplacement(
+                CombatDisplacementEndReason.OwnerDied);
         }
 
         navigationAgent.StopMovement(
@@ -239,7 +432,7 @@ public sealed class EnemyStateMachine : MonoBehaviour
                 : "unknown_enemy";
 
             Debug.Log(
-                "[EnemyStateMachine/EA3] " +
+                "[EnemyStateMachine/EA3+CB0] " +
                 runtimeEnemyId +
                 " | " + oldState +
                 " -> " + nextState +
@@ -265,6 +458,13 @@ public sealed class EnemyStateMachine : MonoBehaviour
             navigationAgent =
                 GetComponent<EnemyNavigationAgent>();
         }
+
+        if (motor == null)
+        {
+            motor = navigationAgent != null
+                ? navigationAgent.Motor
+                : GetComponent<EnemyMotor2D>();
+        }
     }
 
     private void SubscribeToHealth()
@@ -287,6 +487,31 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
 
         subscribedHealth = null;
+    }
+
+    private static CombatReactionKind StrongerReaction(
+        CombatReactionKind current,
+        CombatReactionKind requested)
+    {
+        return (int)requested > (int)current
+            ? requested
+            : current;
+    }
+
+    private static EnemyRuntimeState MapReactionState(
+        CombatReactionKind kind)
+    {
+        return kind == CombatReactionKind.Stunned
+            ? EnemyRuntimeState.Stunned
+            : EnemyRuntimeState.Hit;
+    }
+
+    private void ResetCombatReactionFields()
+    {
+        combatReactionActive = false;
+        activeReactionAttackId = default(CombatAttackId);
+        activeReactionKind = CombatReactionKind.None;
+        combatReactionEndsAt = 0f;
     }
 
     private void OnDestroy()

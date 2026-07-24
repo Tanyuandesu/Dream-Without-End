@@ -110,6 +110,25 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float alertRadius = 0f;
 
+    [Header("CB0 nonlethal knockback contract")]
+    [SerializeField]
+    private KnockbackResistanceSettings knockbackResistance =
+        KnockbackResistanceSettings.CreateDefault();
+
+    [Tooltip(
+        "Duration of the temporary post-knockback pursuit speed bonus. " +
+        "CB0 stores this per enemy but does not activate it yet.")]
+    [Min(0f)]
+    [SerializeField]
+    private float postKnockbackPursuitDuration = 0.5f;
+
+    [Tooltip(
+        "Temporary pursuit speed multiplier after knockback recovery. " +
+        "1 keeps normal speed. CB0 does not activate it yet.")]
+    [Min(1f)]
+    [SerializeField]
+    private float postKnockbackPursuitSpeedMultiplier = 1.2f;
+
     [Header("Formal attack contract (activated in combat phase)")]
     [SerializeField] private EnemyAttackMode attackMode =
         EnemyAttackMode.Melee;
@@ -210,6 +229,21 @@ public sealed class EnemyDefinition : ScriptableObject
 
     public float SearchDuration => searchDuration;
 
+    public KnockbackResistanceSettings KnockbackResistance
+    {
+        get
+        {
+            EnsureKnockbackSettings();
+            return knockbackResistance;
+        }
+    }
+
+    public float PostKnockbackPursuitDuration =>
+        postKnockbackPursuitDuration;
+
+    public float PostKnockbackPursuitSpeedMultiplier =>
+        postKnockbackPursuitSpeedMultiplier;
+
     public float DetectionRadius => detectionRadius;
     public float LoseTargetRadius => loseTargetRadius;
     public bool RequireLineOfSight => requireLineOfSight;
@@ -284,6 +318,21 @@ public sealed class EnemyDefinition : ScriptableObject
             errors.Add(
                 name + ": Projectile attack requires Projectile Speed above zero.");
         }
+
+
+        EnsureKnockbackSettings();
+        knockbackResistance.CollectValidationErrors(
+            errors,
+            name);
+    }
+
+    private void EnsureKnockbackSettings()
+    {
+        if (knockbackResistance == null)
+        {
+            knockbackResistance =
+                KnockbackResistanceSettings.CreateDefault();
+        }
     }
 
     private void OnValidate()
@@ -341,6 +390,17 @@ public sealed class EnemyDefinition : ScriptableObject
             : 0.5f;
 
         searchDuration = Mathf.Max(0f, searchDuration);
+
+        EnsureKnockbackSettings();
+        knockbackResistance.EnsureValid();
+
+        postKnockbackPursuitDuration = Mathf.Max(
+            0f,
+            postKnockbackPursuitDuration);
+
+        postKnockbackPursuitSpeedMultiplier = Mathf.Max(
+            1f,
+            postKnockbackPursuitSpeedMultiplier);
 
         detectionRadius = Mathf.Max(0.1f, detectionRadius);
         loseTargetRadius = Mathf.Max(

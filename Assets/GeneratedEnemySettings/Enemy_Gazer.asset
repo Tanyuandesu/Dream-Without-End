@@ -36,6 +36,19 @@ MonoBehaviour:
   viewAngle: 170
   broadcastsAlert: 0
   alertRadius: 0
+  knockbackResistance:
+    decayBuildWindow: 0.9
+    recoveryDelay: 1.5
+    recoveryStepInterval: 0.6
+    decayTiers:
+    - distanceMultiplier: 0.75
+      staggerMultiplier: 0.6
+    - distanceMultiplier: 0.5
+      staggerMultiplier: 0.25
+    - distanceMultiplier: 0.3
+      staggerMultiplier: 0
+  postKnockbackPursuitDuration: 0.5
+  postKnockbackPursuitSpeedMultiplier: 1.2
   attackMode: 1
   attackDamage: 7
   attackRange: 8

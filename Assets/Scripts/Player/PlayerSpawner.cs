@@ -111,6 +111,8 @@ public sealed class PlayerSpawner : MonoBehaviour
             player,
             visualRenderer);
 
+        CreateCombatController(player);
+
         return player;
     }
 
@@ -165,6 +167,18 @@ public sealed class PlayerSpawner : MonoBehaviour
             player.AddComponent<RuntimeDungeonPlayer>();
 
         controller.Initialize(moveSpeed);
+    }
+
+    private void CreateCombatController(GameObject player)
+    {
+        PlayerCombatController combatController =
+            player.AddComponent<PlayerCombatController>();
+
+        combatController.Initialize(
+            player.GetComponent<RuntimeDungeonPlayer>(),
+            player.GetComponent<Rigidbody2D>(),
+            player.GetComponent<Health>(),
+            player.GetComponent<DirectionalSpriteAnimator>());
     }
 
     private SpriteRenderer CreateVisual(Transform playerRoot)
