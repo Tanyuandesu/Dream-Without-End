@@ -5,25 +5,38 @@ using UnityEngine;
 /// Rigidbody2D movement executor. It never chooses a target or requests a
 /// path; EnemyNavigationAgent supplies one movement destination at a time.
 ///
-/// CB0 adds a controlled combat-displacement channel. Callers may request a
-/// displacement but never move the Rigidbody2D directly, preserving the
-/// single-owner rule established by EA3.
+/// Combat callers submit displacement requests instead of moving the body.
+/// CB1 clips each requested displacement against solid static/kinematic 2D
+/// geometry before issuing MovePosition commands, preserving EA3's single
+/// Rigidbody2D owner and preventing wall penetration.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
 public sealed class EnemyMotor2D : MonoBehaviour
 {
+    private const float MinimumDisplacementDistance = 0.0005f;
+    private const int CastResultCapacity = 32;
+
     [Header("EA3 motor settings")]
     [Min(0.1f)]
     [SerializeField] private float moveSpeed = 3.2f;
 
-    [Header("CB0 combat displacement contract")]
+    [Header("CB1 collision-safe combat displacement")]
+    [SerializeField] private Collider2D bodyCollider;
+
+    [Tooltip(
+        "Small clearance retained between the enemy collider and blocking geometry.")]
+    [Range(0f, 0.08f)]
+    [SerializeField] private float collisionSkin = 0.015f;
+
     [SerializeField] private bool combatDisplacementActive;
     [SerializeField] private CombatDisplacementRequest activeDisplacement;
     [SerializeField] private Vector2 combatDisplacementStartPosition;
     [SerializeField] private Vector2 combatDisplacementTargetPosition;
     [SerializeField] private float combatDisplacementSpeed;
     [SerializeField] private float combatDisplacementStartedAt;
+    [SerializeField] private bool activeDisplacementWasClipped;
+    [SerializeField] private CombatDisplacementEndReason targetEndReason;
 
     [Header("Runtime diagnostics (read only during Play Mode)")]
     [SerializeField] private bool initialized;
@@ -35,11 +48,21 @@ public sealed class EnemyMotor2D : MonoBehaviour
     [SerializeField] private int combatDisplacementStartCount;
     [SerializeField] private int combatDisplacementCompleteCount;
     [SerializeField] private int combatDisplacementCancelCount;
+    [SerializeField] private int combatDisplacementBlockedCount;
+    [SerializeField] private float lastRequestedDisplacementDistance;
+    [SerializeField] private float lastSafeDisplacementDistance;
+    [SerializeField] private Collider2D lastBlockingCollider;
+    [SerializeField] private CombatDisplacementEndReason lastDisplacementEndReason;
 
     private Rigidbody2D body;
+    private ContactFilter2D solidCastFilter;
+
+    private readonly RaycastHit2D[] solidCastHits =
+        new RaycastHit2D[CastResultCapacity];
 
     public bool IsInitialized => initialized;
     public Rigidbody2D Body => body;
+    public Collider2D BodyCollider => bodyCollider;
     public float MoveSpeed => moveSpeed;
     public bool HasMovementIntent => hasMovementIntent;
     public Vector2 MovementDestination => movementDestination;
@@ -68,6 +91,20 @@ public sealed class EnemyMotor2D : MonoBehaviour
     public int CombatDisplacementCancelCount =>
         combatDisplacementCancelCount;
 
+    public int CombatDisplacementBlockedCount =>
+        combatDisplacementBlockedCount;
+
+    public float LastRequestedDisplacementDistance =>
+        lastRequestedDisplacementDistance;
+
+    public float LastSafeDisplacementDistance =>
+        lastSafeDisplacementDistance;
+
+    public Collider2D LastBlockingCollider => lastBlockingCollider;
+
+    public CombatDisplacementEndReason LastDisplacementEndReason =>
+        lastDisplacementEndReason;
+
     public event Action<
         EnemyMotor2D,
         CombatDisplacementRequest> CombatDisplacementStarted;
@@ -80,6 +117,8 @@ public sealed class EnemyMotor2D : MonoBehaviour
     private void Awake()
     {
         CacheBody();
+        CacheCollider();
+        ConfigureSolidCastFilter();
     }
 
     private void FixedUpdate()
@@ -93,6 +132,8 @@ public sealed class EnemyMotor2D : MonoBehaviour
     {
         body = newBody;
         CacheBody();
+        CacheCollider();
+        ConfigureSolidCastFilter();
         ApplySpeed(newMoveSpeed);
 
         hasMovementIntent = false;
@@ -106,8 +147,15 @@ public sealed class EnemyMotor2D : MonoBehaviour
         combatDisplacementStartCount = 0;
         combatDisplacementCompleteCount = 0;
         combatDisplacementCancelCount = 0;
+        combatDisplacementBlockedCount = 0;
+        lastRequestedDisplacementDistance = 0f;
+        lastSafeDisplacementDistance = 0f;
+        lastBlockingCollider = null;
+        lastDisplacementEndReason =
+            CombatDisplacementEndReason.Completed;
+
         ResetCombatDisplacementFields();
-        initialized = body != null;
+        initialized = body != null && bodyCollider != null;
     }
 
     public void ApplySpeed(float newMoveSpeed)
@@ -158,17 +206,31 @@ public sealed class EnemyMotor2D : MonoBehaviour
         return reachedDestination;
     }
 
-    /// <summary>
-    /// Reserves the motor for a combat displacement. The caller supplies the
-    /// desired displacement only; EnemyMotor2D remains the Rigidbody2D owner.
-    /// CB1 will add wall-aware casting before this contract is used by player
-    /// input. No current baseline system calls this method.
-    /// </summary>
     public bool TryBeginCombatDisplacement(
         CombatDisplacementRequest request,
         bool replaceExisting = false)
     {
-        if (!initialized || body == null || !request.IsValid)
+        return TryBeginCombatDisplacement(
+            request,
+            null,
+            replaceExisting);
+    }
+
+    /// <summary>
+    /// Reserves the motor for one collision-safe combat displacement.
+    /// Dynamic actor bodies are not treated as geometry blockers by the
+    /// pre-cast, allowing a fan push to move several enemies together. Static
+    /// and kinematic colliders clip the travel distance before movement starts.
+    /// </summary>
+    public bool TryBeginCombatDisplacement(
+        CombatDisplacementRequest request,
+        Collider2D ignoredSourceCollider,
+        bool replaceExisting = false)
+    {
+        if (!initialized ||
+            body == null ||
+            bodyCollider == null ||
+            !request.IsValid)
         {
             return false;
         }
@@ -184,26 +246,48 @@ public sealed class EnemyMotor2D : MonoBehaviour
                 CombatDisplacementEndReason.CancelledByReplacement);
         }
 
-        Vector2 normalizedDirection =
-            request.NormalizedDirection;
+        Vector2 normalizedDirection = request.NormalizedDirection;
+
+        float safeDistance = CalculateSafeDisplacementDistance(
+            normalizedDirection,
+            request.Distance,
+            ignoredSourceCollider,
+            out Collider2D blockingCollider);
 
         combatDisplacementActive = true;
         activeDisplacement = request;
         combatDisplacementStartPosition = body.position;
         combatDisplacementTargetPosition =
-            body.position +
-            normalizedDirection * request.Distance;
+            body.position + normalizedDirection * safeDistance;
 
         combatDisplacementSpeed =
             request.Distance / request.Duration;
 
         combatDisplacementStartedAt = Time.time;
+        activeDisplacementWasClipped =
+            safeDistance < request.Distance - MinimumDisplacementDistance;
+
+        targetEndReason = activeDisplacementWasClipped
+            ? CombatDisplacementEndReason.BlockedByCollision
+            : CombatDisplacementEndReason.Completed;
+
         hasMovementIntent = false;
         movementDestination = body.position;
         lastIssuedPosition = body.position;
         combatDisplacementStartCount++;
 
+        lastRequestedDisplacementDistance = request.Distance;
+        lastSafeDisplacementDistance = safeDistance;
+        lastBlockingCollider = blockingCollider;
+
         CombatDisplacementStarted?.Invoke(this, request);
+
+        if (safeDistance <= MinimumDisplacementDistance)
+        {
+            FinishCombatDisplacement(
+                CombatDisplacementEndReason.BlockedByCollision);
+        }
+
         return true;
     }
 
@@ -292,11 +376,100 @@ public sealed class EnemyMotor2D : MonoBehaviour
             Time.time - combatDisplacementStartedAt >=
             maximumExpectedDuration;
 
-        if (reachedTarget || exceededDuration)
+        if (reachedTarget)
+        {
+            FinishCombatDisplacement(targetEndReason);
+            return;
+        }
+
+        if (exceededDuration)
         {
             FinishCombatDisplacement(
-                CombatDisplacementEndReason.Completed);
+                CombatDisplacementEndReason.BlockedByCollision);
         }
+    }
+
+    private float CalculateSafeDisplacementDistance(
+        Vector2 direction,
+        float requestedDistance,
+        Collider2D ignoredSourceCollider,
+        out Collider2D blockingCollider)
+    {
+        blockingCollider = null;
+
+        if (bodyCollider == null || requestedDistance <= 0f)
+        {
+            return Mathf.Max(0f, requestedDistance);
+        }
+
+        float castDistance = requestedDistance + collisionSkin;
+
+        int hitCount = bodyCollider.Cast(
+            direction,
+            solidCastFilter,
+            solidCastHits,
+            castDistance,
+            ignoreSiblingColliders: true);
+
+        float nearestBlockingDistance = float.PositiveInfinity;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit2D hit = solidCastHits[i];
+            Collider2D candidate = hit.collider;
+
+            if (!IsSolidGeometryBlocker(
+                    candidate,
+                    ignoredSourceCollider))
+            {
+                continue;
+            }
+
+            if (hit.distance >= nearestBlockingDistance)
+            {
+                continue;
+            }
+
+            nearestBlockingDistance = hit.distance;
+            blockingCollider = candidate;
+        }
+
+        if (float.IsPositiveInfinity(nearestBlockingDistance))
+        {
+            return requestedDistance;
+        }
+
+        return Mathf.Clamp(
+            nearestBlockingDistance - collisionSkin,
+            0f,
+            requestedDistance);
+    }
+
+    private bool IsSolidGeometryBlocker(
+        Collider2D candidate,
+        Collider2D ignoredSourceCollider)
+    {
+        if (candidate == null ||
+            !candidate.enabled ||
+            candidate.isTrigger ||
+            candidate == bodyCollider ||
+            candidate == ignoredSourceCollider)
+        {
+            return false;
+        }
+
+        Rigidbody2D attachedBody = candidate.attachedRigidbody;
+
+        if (attachedBody == body)
+        {
+            return false;
+        }
+
+        // Dynamic bodies are actors. The physics solver may still resolve
+        // their contacts during movement, but they do not clip the initial
+        // fan displacement and therefore do not prevent group pushes.
+        return attachedBody == null ||
+               attachedBody.bodyType != RigidbodyType2D.Dynamic;
     }
 
     private void FinishCombatDisplacement(
@@ -311,10 +484,16 @@ public sealed class EnemyMotor2D : MonoBehaviour
             activeDisplacement;
 
         combatDisplacementActive = false;
+        lastDisplacementEndReason = reason;
 
         if (reason == CombatDisplacementEndReason.Completed)
         {
             combatDisplacementCompleteCount++;
+        }
+        else if (reason ==
+                 CombatDisplacementEndReason.BlockedByCollision)
+        {
+            combatDisplacementBlockedCount++;
         }
         else
         {
@@ -356,6 +535,8 @@ public sealed class EnemyMotor2D : MonoBehaviour
         combatDisplacementTargetPosition = currentPosition;
         combatDisplacementSpeed = 0f;
         combatDisplacementStartedAt = 0f;
+        activeDisplacementWasClipped = false;
+        targetEndReason = CombatDisplacementEndReason.Completed;
     }
 
     private void CacheBody()
@@ -364,6 +545,31 @@ public sealed class EnemyMotor2D : MonoBehaviour
         {
             body = GetComponent<Rigidbody2D>();
         }
+    }
+
+    private void CacheCollider()
+    {
+        if (bodyCollider == null)
+        {
+            bodyCollider = GetComponent<Collider2D>();
+        }
+    }
+
+    private void ConfigureSolidCastFilter()
+    {
+        solidCastFilter = new ContactFilter2D
+        {
+            useLayerMask = true,
+            layerMask = Physics2D.AllLayers,
+            useTriggers = false
+        };
+    }
+
+    private void OnValidate()
+    {
+        moveSpeed = Mathf.Max(0.1f, moveSpeed);
+        collisionSkin = Mathf.Clamp(collisionSkin, 0f, 0.08f);
+        CacheCollider();
     }
 
     private void OnDisable()

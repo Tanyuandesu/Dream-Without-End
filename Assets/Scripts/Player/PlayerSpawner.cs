@@ -63,6 +63,11 @@ public sealed class PlayerSpawner : MonoBehaviour
     [Min(0.1f)]
     [SerializeField] private float moveSpeed = 5f;
 
+    [Header("CB1 左键无伤害击退")]
+    [SerializeField]
+    private NonlethalPushSettings nonlethalPushSettings =
+        NonlethalPushSettings.CreateDefault();
+
     private Sprite fallbackSprite;
 
     private void OnValidate()
@@ -85,6 +90,14 @@ public sealed class PlayerSpawner : MonoBehaviour
             Mathf.Max(0f, regenerationAmountPerTick);
 
         moveSpeed = Mathf.Max(0.1f, moveSpeed);
+
+        if (nonlethalPushSettings == null)
+        {
+            nonlethalPushSettings =
+                NonlethalPushSettings.CreateDefault();
+        }
+
+        nonlethalPushSettings.EnsureValid();
     }
 
     public GameObject Spawn(
@@ -174,11 +187,21 @@ public sealed class PlayerSpawner : MonoBehaviour
         PlayerCombatController combatController =
             player.AddComponent<PlayerCombatController>();
 
+        if (nonlethalPushSettings == null)
+        {
+            nonlethalPushSettings =
+                NonlethalPushSettings.CreateDefault();
+        }
+
         combatController.Initialize(
             player.GetComponent<RuntimeDungeonPlayer>(),
             player.GetComponent<Rigidbody2D>(),
             player.GetComponent<Health>(),
-            player.GetComponent<DirectionalSpriteAnimator>());
+            player.GetComponent<DirectionalSpriteAnimator>(),
+            nonlethalPushSettings);
+
+        combatController.SetCombatInputEnabled(
+            nonlethalPushSettings.Enabled);
     }
 
     private SpriteRenderer CreateVisual(Transform playerRoot)

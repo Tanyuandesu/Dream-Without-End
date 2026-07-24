@@ -7,14 +7,15 @@ public enum CombatDisplacementEndReason
     CancelledByOwner = 10,
     CancelledByReplacement = 20,
     OwnerDied = 30,
-    ComponentDisabled = 40
+    ComponentDisabled = 40,
+    BlockedByCollision = 50
 }
 
 /// <summary>
 /// A request to move one combat target without granting the caller direct
 /// access to its Rigidbody2D. EnemyMotor2D remains the sole movement owner.
-/// Collision-safe travel is implemented in the next combat phase; CB0 fixes
-/// the ownership and lifecycle contract first.
+/// CB1 performs collision-safe travel inside EnemyMotor2D while preserving
+/// the ownership and lifecycle contract established in CB0.
 /// </summary>
 [Serializable]
 public struct CombatDisplacementRequest

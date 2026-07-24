@@ -64,8 +64,8 @@ public static class CombatCB0ContractAudit
         if (errors.Count == 0)
         {
             report.AppendLine(
-                "PASS: CB0 contracts are present and baseline combat " +
-                "input remains inactive.");
+                "PASS: CB0 combat contracts remain present. Later combat " +
+                "phases may now activate input through those contracts.");
 
             Debug.Log(report.ToString());
             return;
@@ -213,9 +213,10 @@ public static class CombatCB0ContractAudit
 
             if (controller.CombatInputEnabled)
             {
-                errors.Add(
+                notes.Add(
                     controller.gameObject.name +
-                    ": CB0 combat input must remain disabled.");
+                    ": combat input is active because CB1 or a later phase " +
+                    "is installed; the CB0 ownership contracts remain valid.");
             }
         }
 
@@ -228,8 +229,8 @@ public static class CombatCB0ContractAudit
         else
         {
             notes.Add(
-                "Player combat boundary is initialized; left/right mouse " +
-                "actions remain intentionally inactive in CB0.");
+                "Player combat boundary is initialized. Historical CB0 " +
+                "ownership checks remain valid after later phases activate input.");
         }
 
         return activeCount;

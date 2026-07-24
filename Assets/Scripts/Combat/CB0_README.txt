@@ -1,10 +1,11 @@
 DREAM DUNGEON COMBAT CB0
 ========================
 
-Purpose
--------
-CB0 establishes combat ownership and data contracts without activating player
-attacks or changing the accepted movement/AI hand feel.
+Historical contract layer
+-------------------------
+CB0 established combat ownership and data contracts without activating player
+attacks. CB1 and later phases build on these boundaries and may now activate
+input through them.
 
 Installed boundaries
 --------------------
@@ -17,23 +18,13 @@ Installed boundaries
 5. KnockbackResistanceSettings: every EnemyDefinition owns at least three
    configurable repeated-push decay tiers, with independent distance and
    stagger multipliers plus tier recovery timing.
-6. PlayerCombatController: automatically created by PlayerSpawner, initialized
-   but intentionally leaves combat input disabled in CB0.
+6. PlayerCombatController: automatically created by PlayerSpawner.
 7. CombatCB0ContractAudit:
    Tools > Dream Dungeon > Combat > Run CB0 Contract Audit
 
-Expected baseline behaviour
----------------------------
-- Left mouse: unchanged / no combat action yet.
-- Right mouse: unchanged / no combat action yet.
-- Enemy navigation and contact damage: unchanged.
-- No current runtime system calls TryBeginCombatDisplacement or
-  TryBeginCombatReaction. CB1 will connect the nonlethal push to these entries
-  after adding wall-safe displacement.
-
-CB0 acceptance
---------------
-1. Project compiles with no red Console errors.
-2. Existing floor generation and enemy chase still behave as before.
-3. In Play Mode, run the CB0 Contract Audit after enemies spawn.
-4. Audit prints PASS and confirms combat input remains disabled.
+After CB1 installation
+----------------------
+- The left mouse action is activated by CB1 through the CB0 contracts.
+- The right mouse action remains inactive.
+- The CB0 audit continues to verify ownership and wiring but no longer requires
+  combat input to remain disabled.

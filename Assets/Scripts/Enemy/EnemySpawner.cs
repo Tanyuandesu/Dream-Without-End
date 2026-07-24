@@ -555,6 +555,16 @@ public sealed class EnemySpawner : MonoBehaviour
             runtimeContext,
             navigationAgent);
 
+        EnemyCombatReceiver combatReceiver =
+            enemy.AddComponent<EnemyCombatReceiver>();
+
+        combatReceiver.Initialize(
+            runtimeContext,
+            definition,
+            enemy.GetComponent<Health>(),
+            motor,
+            stateMachine);
+
         return enemy;
     }
 
