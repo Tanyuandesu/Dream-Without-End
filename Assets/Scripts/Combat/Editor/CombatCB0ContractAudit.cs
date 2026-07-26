@@ -151,8 +151,8 @@ public static class CombatCB0ContractAudit
 
         notes.Add(
             "Every EnemyDefinition owns independent knockback decay and " +
-            "post-knockback pursuit settings. CB0 stores but does not yet " +
-            "execute those values.");
+            "post-knockback pursuit settings. CB2 executes decay while " +
+            "pursuit recovery remains reserved for a later phase.");
 
         return definitionGuids.Length;
     }

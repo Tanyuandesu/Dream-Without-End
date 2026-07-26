@@ -110,21 +110,21 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float alertRadius = 0f;
 
-    [Header("CB0 nonlethal knockback contract")]
+    [Header("CB2 nonlethal knockback resistance")]
     [SerializeField]
     private KnockbackResistanceSettings knockbackResistance =
         KnockbackResistanceSettings.CreateDefault();
 
     [Tooltip(
         "Duration of the temporary post-knockback pursuit speed bonus. " +
-        "CB0 stores this per enemy but does not activate it yet.")]
+        "Stored for a later combat phase; CB2 does not activate it.")]
     [Min(0f)]
     [SerializeField]
     private float postKnockbackPursuitDuration = 0.5f;
 
     [Tooltip(
         "Temporary pursuit speed multiplier after knockback recovery. " +
-        "1 keeps normal speed. CB0 does not activate it yet.")]
+        "1 keeps normal speed. Stored for a later combat phase.")]
     [Min(1f)]
     [SerializeField]
     private float postKnockbackPursuitSpeedMultiplier = 1.2f;

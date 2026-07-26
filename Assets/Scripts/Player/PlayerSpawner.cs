@@ -63,7 +63,7 @@ public sealed class PlayerSpawner : MonoBehaviour
     [Min(0.1f)]
     [SerializeField] private float moveSpeed = 5f;
 
-    [Header("CB1 左键无伤害击退")]
+    [Header("战斗：左键无伤害击退")]
     [SerializeField]
     private NonlethalPushSettings nonlethalPushSettings =
         NonlethalPushSettings.CreateDefault();

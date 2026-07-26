@@ -3,7 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// Player-side combat boundary.
-/// CB1 enables only the left-mouse nonlethal fan push. It deals zero damage,
+/// CB2 keeps the left-mouse nonlethal fan push and marks every accepted push
+/// for per-enemy repeated-knockback resistance. It still deals zero damage,
 /// aims toward the mouse in world space, rejects targets hidden behind solid
 /// geometry and delegates every enemy movement to EnemyMotor2D.
 /// </summary>
@@ -19,7 +20,7 @@ public sealed class PlayerCombatController : MonoBehaviour
     [SerializeField] private bool initialized;
     [SerializeField] private bool combatInputEnabled;
 
-    [Header("CB1 left-mouse nonlethal push")]
+    [Header("CB2 left-mouse nonlethal push")]
     [SerializeField] private NonlethalPushSettings nonlethalPushSettings =
         NonlethalPushSettings.CreateDefault();
 
@@ -237,7 +238,7 @@ public sealed class PlayerCombatController : MonoBehaviour
                     CombatReactionKind.Hit,
                     nonlethalPushSettings.ReactionDuration,
                     shouldExtendExistingReaction: false,
-                    newReason: "CB1 nonlethal left-mouse push");
+                    newReason: "CB2 nonlethal left-mouse push");
 
             CombatHit hit = new CombatHit(
                 attackId,
@@ -250,7 +251,7 @@ public sealed class PlayerCombatController : MonoBehaviour
                 newDamage: 0f,
                 newDisplacement: displacement,
                 newReaction: reaction,
-                shouldCountTowardKnockbackDecay: false,
+                shouldCountTowardKnockbackDecay: true,
                 shouldTriggerPursuitRecovery: false);
 
             if (candidate.Receiver.TryReceiveCombatHit(hit))

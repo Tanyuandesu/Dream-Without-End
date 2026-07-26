@@ -4,9 +4,9 @@ using UnityEngine;
 
 /// <summary>
 /// Authoring data for the player's left-mouse nonlethal push.
-/// CB1 intentionally contains no cooldown, stamina cost, decay execution or
-/// post-knockback pursuit bonus. Those balance layers are added later without
-/// changing the hit/displacement contracts established here.
+/// CB2 keeps cooldown, stamina cost and the post-knockback pursuit bonus
+/// inactive. Repeated-push decay is resolved per enemy after this base action
+/// emits its unchanged hit and displacement request.
 /// </summary>
 [Serializable]
 public sealed class NonlethalPushSettings

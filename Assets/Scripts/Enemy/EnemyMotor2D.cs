@@ -6,7 +6,7 @@ using UnityEngine;
 /// path; EnemyNavigationAgent supplies one movement destination at a time.
 ///
 /// Combat callers submit displacement requests instead of moving the body.
-/// CB1 clips each requested displacement against solid static/kinematic 2D
+/// CB1 and later phases clip each requested displacement against solid static/kinematic 2D
 /// geometry before issuing MovePosition commands, preserving EA3's single
 /// Rigidbody2D owner and preventing wall penetration.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class EnemyMotor2D : MonoBehaviour
     [Min(0.1f)]
     [SerializeField] private float moveSpeed = 3.2f;
 
-    [Header("CB1 collision-safe combat displacement")]
+    [Header("Combat collision-safe displacement")]
     [SerializeField] private Collider2D bodyCollider;
 
     [Tooltip(

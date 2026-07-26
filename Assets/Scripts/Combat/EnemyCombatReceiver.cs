@@ -5,8 +5,8 @@ using UnityEngine;
 /// Enemy-side adapter for CombatHit messages.
 /// It owns no Rigidbody2D movement and no path selection. Reactions are sent
 /// to EnemyStateMachine and displacement requests are sent to EnemyMotor2D.
-/// CB1 executes the base push only; per-enemy decay and pursuit recovery stay
-/// dormant until their dedicated balance phases.
+/// CB2 additionally owns the runtime resistance level for this enemy instance,
+/// while all editable decay ratios remain in its EnemyDefinition.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(EnemyRuntimeContext))]
@@ -16,6 +16,7 @@ using UnityEngine;
 public sealed class EnemyCombatReceiver : MonoBehaviour
 {
     private const int RememberedAttackCapacity = 32;
+    private const float MinimumScaledDuration = 0.001f;
 
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
@@ -24,7 +25,27 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
     [SerializeField] private EnemyMotor2D motor;
     [SerializeField] private EnemyStateMachine stateMachine;
 
-    [Header("CB1 runtime diagnostics")]
+    [Header("CB2 repeated-push resistance (read only during Play Mode)")]
+    [SerializeField] private bool hasAcceptedDecayPush;
+    [SerializeField] private int currentKnockbackResistanceLevel;
+    [SerializeField] private int highestKnockbackResistanceLevel;
+    [SerializeField] private float lastQualifyingPushAt = -1f;
+    [SerializeField] private float nextResistanceRecoveryAt = -1f;
+    [SerializeField] private int qualifyingDecayPushCount;
+    [SerializeField] private int fullStrengthPushCount;
+    [SerializeField] private int decayedPushCount;
+    [SerializeField] private int resistanceAdvanceCount;
+    [SerializeField] private int resistanceRecoveryStepCount;
+    [SerializeField] private float lastAppliedDistanceMultiplier = 1f;
+    [SerializeField] private float lastAppliedStaggerMultiplier = 1f;
+    [SerializeField] private float lowestAppliedDistanceMultiplier = 1f;
+    [SerializeField] private float lowestAppliedStaggerMultiplier = 1f;
+    [SerializeField] private float lastBaseDisplacementDistance;
+    [SerializeField] private float lastResolvedDisplacementDistance;
+    [SerializeField] private float lastBaseReactionDuration;
+    [SerializeField] private float lastResolvedReactionDuration;
+
+    [Header("Runtime diagnostics")]
     [SerializeField] private bool initialized;
     [SerializeField] private CombatAttackId lastAcceptedAttackId;
     [SerializeField] private CombatActionKind lastAcceptedActionKind;
@@ -58,9 +79,66 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
     public int BusyRejectCount => busyRejectCount;
     public CombatHit LastAcceptedHit => lastAcceptedHit;
 
+    public bool HasAcceptedDecayPush => hasAcceptedDecayPush;
+    public int CurrentKnockbackResistanceLevel =>
+        currentKnockbackResistanceLevel;
+
+    public int HighestKnockbackResistanceLevel =>
+        highestKnockbackResistanceLevel;
+
+    public int MaximumKnockbackResistanceLevel =>
+        GetResistanceSettings() != null
+            ? GetResistanceSettings().MaximumResistanceLevel
+            : 0;
+
+    public float LastQualifyingPushAt => lastQualifyingPushAt;
+    public float NextResistanceRecoveryAt => nextResistanceRecoveryAt;
+    public int QualifyingDecayPushCount => qualifyingDecayPushCount;
+    public int FullStrengthPushCount => fullStrengthPushCount;
+    public int DecayedPushCount => decayedPushCount;
+    public int ResistanceAdvanceCount => resistanceAdvanceCount;
+    public int ResistanceRecoveryStepCount =>
+        resistanceRecoveryStepCount;
+
+    public float LastAppliedDistanceMultiplier =>
+        lastAppliedDistanceMultiplier;
+
+    public float LastAppliedStaggerMultiplier =>
+        lastAppliedStaggerMultiplier;
+
+    public float LowestAppliedDistanceMultiplier =>
+        lowestAppliedDistanceMultiplier;
+
+    public float LowestAppliedStaggerMultiplier =>
+        lowestAppliedStaggerMultiplier;
+
+    public float LastBaseDisplacementDistance =>
+        lastBaseDisplacementDistance;
+
+    public float LastResolvedDisplacementDistance =>
+        lastResolvedDisplacementDistance;
+
+    public float LastBaseReactionDuration =>
+        lastBaseReactionDuration;
+
+    public float LastResolvedReactionDuration =>
+        lastResolvedReactionDuration;
+
     private void Awake()
     {
         CacheComponents();
+    }
+
+    private void Update()
+    {
+        if (!initialized ||
+            health == null ||
+            health.IsDead)
+        {
+            return;
+        }
+
+        TickKnockbackResistanceRecovery(Time.time);
     }
 
     public void Initialize(
@@ -78,6 +156,14 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
 
         CacheComponents();
 
+        KnockbackResistanceSettings resistance =
+            GetResistanceSettings();
+
+        if (resistance != null)
+        {
+            resistance.EnsureValid();
+        }
+
         rememberedAttackOrder.Clear();
         rememberedAttackIds.Clear();
         lastAcceptedAttackId = default(CombatAttackId);
@@ -88,9 +174,13 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         busyRejectCount = 0;
         lastAcceptedHit = default(CombatHit);
 
+        ResetKnockbackResistanceRuntime();
+
         initialized =
             context != null &&
             context.IsInitialized &&
+            definition != null &&
+            resistance != null &&
             health != null &&
             motor != null &&
             motor.IsInitialized &&
@@ -120,11 +210,21 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             return false;
         }
 
+        float acceptedAt = Time.time;
+        TickKnockbackResistanceRecovery(acceptedAt);
+
+        KnockbackResolution resolution =
+            ResolveKnockbackResistance(hit, acceptedAt);
+
+        CombatHit resolvedHit = ApplyKnockbackResolution(
+            hit,
+            resolution);
+
         bool displacementAccepted = false;
         bool reactionAccepted = false;
         bool damageAccepted = false;
 
-        if (hit.HasDisplacement)
+        if (resolvedHit.HasDisplacement)
         {
             if (motor == null ||
                 stateMachine == null ||
@@ -134,23 +234,25 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             }
             else
             {
-                reactionAccepted = !hit.HasReaction ||
+                reactionAccepted = !resolvedHit.HasReaction ||
                     stateMachine.TryBeginCombatReaction(
-                        hit.Reaction);
+                        resolvedHit.Reaction);
 
                 if (reactionAccepted)
                 {
-                    Collider2D sourceCollider = hit.Source != null
-                        ? hit.Source.GetComponent<Collider2D>()
-                        : null;
+                    Collider2D sourceCollider =
+                        resolvedHit.Source != null
+                            ? resolvedHit.Source.GetComponent<Collider2D>()
+                            : null;
 
                     displacementAccepted =
                         motor.TryBeginCombatDisplacement(
-                            hit.Displacement,
+                            resolvedHit.Displacement,
                             sourceCollider,
                             replaceExisting: false);
 
-                    if (!displacementAccepted && hit.HasReaction)
+                    if (!displacementAccepted &&
+                        resolvedHit.HasReaction)
                     {
                         stateMachine.TryCompleteCombatReaction(
                             force: true,
@@ -161,17 +263,18 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                 }
             }
         }
-        else if (hit.HasReaction && stateMachine != null)
+        else if (resolvedHit.HasReaction &&
+                 stateMachine != null)
         {
             reactionAccepted =
                 stateMachine.TryBeginCombatReaction(
-                    hit.Reaction);
+                    resolvedHit.Reaction);
         }
 
-        if (hit.HasDamage)
+        if (resolvedHit.HasDamage)
         {
             damageAccepted = health.ApplyDamage(
-                hit.ToDamageInfo());
+                resolvedHit.ToDamageInfo());
         }
 
         bool accepted =
@@ -184,20 +287,91 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             return false;
         }
 
-        RememberAttackId(hit.AttackId);
+        bool acceptedKnockbackEffect =
+            displacementAccepted || reactionAccepted;
 
-        lastAcceptedAttackId = hit.AttackId;
-        lastAcceptedActionKind = hit.ActionKind;
-        lastAcceptedHit = hit;
+        if (resolution.IsQualifying && acceptedKnockbackEffect)
+        {
+            CommitKnockbackResolution(
+                resolution,
+                hit,
+                resolvedHit,
+                acceptedAt);
+        }
+
+        RememberAttackId(resolvedHit.AttackId);
+
+        lastAcceptedAttackId = resolvedHit.AttackId;
+        lastAcceptedActionKind = resolvedHit.ActionKind;
+        lastAcceptedHit = resolvedHit;
         acceptedHitCount++;
 
-        if (hit.ActionKind == CombatActionKind.NonlethalPush &&
-            displacementAccepted)
+        if (resolvedHit.ActionKind ==
+                CombatActionKind.NonlethalPush &&
+            acceptedKnockbackEffect)
         {
             acceptedNonlethalPushCount++;
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Applies every elapsed recovery step. Recovery is time based and does
+    /// not depend on receiving another hit, so the Inspector and audit expose
+    /// the actual current resistance while the enemy is left alone.
+    /// </summary>
+    public void TickKnockbackResistanceRecovery(float now)
+    {
+        if (!hasAcceptedDecayPush ||
+            currentKnockbackResistanceLevel <= 0)
+        {
+            return;
+        }
+
+        KnockbackResistanceSettings settings =
+            GetResistanceSettings();
+
+        if (settings == null)
+        {
+            return;
+        }
+
+        settings.EnsureValid();
+
+        if (nextResistanceRecoveryAt < 0f)
+        {
+            nextResistanceRecoveryAt =
+                lastQualifyingPushAt + settings.RecoveryDelay;
+        }
+
+        if (now < nextResistanceRecoveryAt)
+        {
+            return;
+        }
+
+        float interval = Mathf.Max(
+            0.05f,
+            settings.RecoveryStepInterval);
+
+        int elapsedSteps = 1 + Mathf.FloorToInt(
+            (now - nextResistanceRecoveryAt) / interval);
+
+        int appliedSteps = Mathf.Min(
+            elapsedSteps,
+            currentKnockbackResistanceLevel);
+
+        currentKnockbackResistanceLevel -= appliedSteps;
+        resistanceRecoveryStepCount += appliedSteps;
+
+        if (currentKnockbackResistanceLevel <= 0)
+        {
+            currentKnockbackResistanceLevel = 0;
+            nextResistanceRecoveryAt = -1f;
+            return;
+        }
+
+        nextResistanceRecoveryAt += elapsedSteps * interval;
     }
 
     public void CollectValidationErrors(List<string> errors)
@@ -215,6 +389,7 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         }
 
         if (context == null ||
+            definition == null ||
             health == null ||
             motor == null ||
             stateMachine == null)
@@ -222,6 +397,23 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             errors.Add(
                 prefix +
                 "one or more combat receiver references are missing.");
+        }
+
+        KnockbackResistanceSettings resistance =
+            GetResistanceSettings();
+
+        if (resistance == null)
+        {
+            errors.Add(
+                prefix +
+                "Knockback Resistance settings are missing.");
+        }
+        else if (resistance.DecayTierCount <
+                 KnockbackResistanceSettings.MinimumDecayTierCount)
+        {
+            errors.Add(
+                prefix +
+                "Knockback Resistance has fewer than three decay tiers.");
         }
 
         if (context != null && context.Definition != definition)
@@ -244,6 +436,220 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                 prefix +
                 "combat receiver and state machine reference different EnemyMotor2D components.");
         }
+    }
+
+    private KnockbackResolution ResolveKnockbackResistance(
+        CombatHit hit,
+        float now)
+    {
+        KnockbackResistanceSettings settings =
+            GetResistanceSettings();
+
+        if (!hit.CountsTowardKnockbackDecay ||
+            settings == null)
+        {
+            return KnockbackResolution.Unmodified;
+        }
+
+        settings.EnsureValid();
+
+        int proposedLevel = currentKnockbackResistanceLevel;
+        bool advanced = false;
+
+        if (hasAcceptedDecayPush)
+        {
+            float elapsed = Mathf.Max(
+                0f,
+                now - lastQualifyingPushAt);
+
+            if (elapsed <= settings.DecayBuildWindow)
+            {
+                int advancedLevel = Mathf.Min(
+                    proposedLevel + 1,
+                    settings.MaximumResistanceLevel);
+
+                advanced = advancedLevel > proposedLevel;
+                proposedLevel = advancedLevel;
+            }
+        }
+
+        KnockbackDecayTier tier =
+            settings.GetTierForResistanceLevel(proposedLevel);
+
+        return new KnockbackResolution(
+            true,
+            proposedLevel,
+            advanced,
+            tier.DistanceMultiplier,
+            tier.StaggerMultiplier);
+    }
+
+    private static CombatHit ApplyKnockbackResolution(
+        CombatHit hit,
+        KnockbackResolution resolution)
+    {
+        if (!resolution.IsQualifying)
+        {
+            return hit;
+        }
+
+        CombatDisplacementRequest displacement =
+            default(CombatDisplacementRequest);
+
+        if (hit.HasDisplacement)
+        {
+            float resolvedDistance =
+                hit.Displacement.Distance *
+                resolution.DistanceMultiplier;
+
+            if (resolvedDistance > 0f)
+            {
+                // Scaling duration with distance keeps the original launch
+                // speed. Lower tiers travel less rather than drifting slowly.
+                float resolvedDuration = Mathf.Max(
+                    MinimumScaledDuration,
+                    hit.Displacement.Duration *
+                    resolution.DistanceMultiplier);
+
+                displacement = new CombatDisplacementRequest(
+                    hit.Displacement.AttackId,
+                    hit.Displacement.Direction,
+                    resolvedDistance,
+                    resolvedDuration);
+            }
+        }
+
+        CombatReactionRequest reaction =
+            default(CombatReactionRequest);
+
+        if (hit.HasReaction)
+        {
+            reaction = new CombatReactionRequest(
+                hit.Reaction.AttackId,
+                hit.Reaction.Kind,
+                hit.Reaction.Duration *
+                    resolution.StaggerMultiplier,
+                hit.Reaction.ExtendExistingReaction,
+                hit.Reaction.Reason);
+        }
+
+        return new CombatHit(
+            hit.AttackId,
+            hit.ActionKind,
+            hit.Source,
+            hit.SourceFaction,
+            hit.Attribution,
+            hit.HitPoint,
+            hit.Direction,
+            hit.Damage,
+            displacement,
+            reaction,
+            hit.CountsTowardKnockbackDecay,
+            hit.TriggersPursuitRecovery);
+    }
+
+    private void CommitKnockbackResolution(
+        KnockbackResolution resolution,
+        CombatHit baseHit,
+        CombatHit resolvedHit,
+        float acceptedAt)
+    {
+        KnockbackResistanceSettings settings =
+            GetResistanceSettings();
+
+        if (settings == null)
+        {
+            return;
+        }
+
+        currentKnockbackResistanceLevel =
+            resolution.ProposedLevel;
+
+        highestKnockbackResistanceLevel = Mathf.Max(
+            highestKnockbackResistanceLevel,
+            currentKnockbackResistanceLevel);
+
+        if (resolution.Advanced)
+        {
+            resistanceAdvanceCount++;
+        }
+
+        qualifyingDecayPushCount++;
+
+        if (currentKnockbackResistanceLevel <= 0)
+        {
+            fullStrengthPushCount++;
+        }
+        else
+        {
+            decayedPushCount++;
+        }
+
+        hasAcceptedDecayPush = true;
+        lastQualifyingPushAt = acceptedAt;
+        nextResistanceRecoveryAt =
+            acceptedAt + settings.RecoveryDelay;
+
+        lastAppliedDistanceMultiplier =
+            resolution.DistanceMultiplier;
+
+        lastAppliedStaggerMultiplier =
+            resolution.StaggerMultiplier;
+
+        lowestAppliedDistanceMultiplier = Mathf.Min(
+            lowestAppliedDistanceMultiplier,
+            resolution.DistanceMultiplier);
+
+        lowestAppliedStaggerMultiplier = Mathf.Min(
+            lowestAppliedStaggerMultiplier,
+            resolution.StaggerMultiplier);
+
+        lastBaseDisplacementDistance = baseHit.HasDisplacement
+            ? baseHit.Displacement.Distance
+            : 0f;
+
+        lastResolvedDisplacementDistance =
+            resolvedHit.HasDisplacement
+                ? resolvedHit.Displacement.Distance
+                : 0f;
+
+        lastBaseReactionDuration = baseHit.HasReaction
+            ? baseHit.Reaction.Duration
+            : 0f;
+
+        lastResolvedReactionDuration =
+            resolvedHit.HasReaction
+                ? resolvedHit.Reaction.Duration
+                : 0f;
+    }
+
+    private KnockbackResistanceSettings GetResistanceSettings()
+    {
+        return definition != null
+            ? definition.KnockbackResistance
+            : null;
+    }
+
+    private void ResetKnockbackResistanceRuntime()
+    {
+        hasAcceptedDecayPush = false;
+        currentKnockbackResistanceLevel = 0;
+        highestKnockbackResistanceLevel = 0;
+        lastQualifyingPushAt = -1f;
+        nextResistanceRecoveryAt = -1f;
+        qualifyingDecayPushCount = 0;
+        fullStrengthPushCount = 0;
+        decayedPushCount = 0;
+        resistanceAdvanceCount = 0;
+        resistanceRecoveryStepCount = 0;
+        lastAppliedDistanceMultiplier = 1f;
+        lastAppliedStaggerMultiplier = 1f;
+        lowestAppliedDistanceMultiplier = 1f;
+        lowestAppliedStaggerMultiplier = 1f;
+        lastBaseDisplacementDistance = 0f;
+        lastResolvedDisplacementDistance = 0f;
+        lastBaseReactionDuration = 0f;
+        lastResolvedReactionDuration = 0f;
     }
 
     private void RememberAttackId(CombatAttackId attackId)
@@ -290,6 +696,44 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         if (stateMachine == null)
         {
             stateMachine = GetComponent<EnemyStateMachine>();
+        }
+    }
+
+    private readonly struct KnockbackResolution
+    {
+        public static KnockbackResolution Unmodified =>
+            new KnockbackResolution(
+                isQualifying: false,
+                proposedLevel: 0,
+                advanced: false,
+                distanceMultiplier: 1f,
+                staggerMultiplier: 1f);
+
+        public readonly bool IsQualifying;
+        public readonly int ProposedLevel;
+        public readonly bool Advanced;
+        public readonly float DistanceMultiplier;
+        public readonly float StaggerMultiplier;
+
+        public KnockbackResolution(
+            bool isQualifying,
+            int proposedLevel,
+            bool advanced,
+            float distanceMultiplier,
+            float staggerMultiplier)
+        {
+            IsQualifying = isQualifying;
+            ProposedLevel = Mathf.Max(0, proposedLevel);
+            Advanced = advanced;
+            DistanceMultiplier = Mathf.Clamp(
+                distanceMultiplier,
+                0f,
+                2f);
+
+            StaggerMultiplier = Mathf.Clamp(
+                staggerMultiplier,
+                0f,
+                2f);
         }
     }
 }

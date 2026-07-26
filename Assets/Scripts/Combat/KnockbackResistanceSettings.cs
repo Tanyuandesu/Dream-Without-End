@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// One repeated-push decay layer. Distance and interruption deliberately use
-/// separate multipliers because spatial control and action denial are
+/// One repeated-push resistance layer. Distance and interruption deliberately
+/// use separate multipliers because spatial control and action denial are
 /// different balance axes.
 /// </summary>
 [Serializable]
@@ -52,9 +52,10 @@ public struct KnockbackDecayTier
 }
 
 /// <summary>
-/// Per-enemy repeated-knockback contract.
-/// The first accepted push always uses FullStrength. The array contains at
-/// least three later decay tiers and may be extended for special enemies.
+/// Per-enemy repeated-knockback settings used by CB2.
+/// Resistance level zero is the first full-strength push. Levels one and
+/// above index the configured decay array. The array always retains at least
+/// three independently editable levels and may be extended for special foes.
 /// </summary>
 [Serializable]
 public sealed class KnockbackResistanceSettings
@@ -62,22 +63,22 @@ public sealed class KnockbackResistanceSettings
     public const int MinimumDecayTierCount = 3;
 
     [Tooltip(
-        "A new push inside this window advances the repeated-hit tier.")]
+        "A new accepted push inside this window advances resistance by one level.")]
     [Min(0.05f)]
     [SerializeField] private float decayBuildWindow = 0.9f;
 
     [Tooltip(
-        "Time without another push before tier recovery begins.")]
+        "Time without another accepted push before resistance recovery begins.")]
     [Min(0f)]
     [SerializeField] private float recoveryDelay = 1.5f;
 
     [Tooltip(
-        "After recovery begins, one tier is removed at this interval.")]
+        "After recovery begins, one resistance level is removed at this interval.")]
     [Min(0.05f)]
     [SerializeField] private float recoveryStepInterval = 0.6f;
 
     [Tooltip(
-        "Repeated-hit tiers after the first full-strength push. " +
+        "Resistance levels after the first full-strength push. " +
         "At least three are always retained.")]
     [SerializeField] private KnockbackDecayTier[] decayTiers =
     {
@@ -92,28 +93,52 @@ public sealed class KnockbackResistanceSettings
     public int DecayTierCount =>
         decayTiers != null ? decayTiers.Length : 0;
 
+    /// <summary>
+    /// Zero is full strength. The maximum resistance level equals the number
+    /// of configured decay tiers.
+    /// </summary>
+    public int MaximumResistanceLevel
+    {
+        get
+        {
+            EnsureValid();
+            return decayTiers.Length;
+        }
+    }
+
     public static KnockbackResistanceSettings CreateDefault()
     {
         return new KnockbackResistanceSettings();
     }
 
     /// <summary>
-    /// consecutiveAcceptedPushCount is one-based. One returns full strength;
-    /// two returns the first configured decay tier. Counts beyond the array
-    /// continue using the final tier.
+    /// Legacy convenience mapping. acceptedPushCount is one-based. One uses
+    /// full strength; two uses configured resistance level one.
     /// </summary>
     public KnockbackDecayTier GetTierForPushCount(
         int consecutiveAcceptedPushCount)
     {
+        return GetTierForResistanceLevel(
+            Mathf.Max(0, consecutiveAcceptedPushCount - 1));
+    }
+
+    /// <summary>
+    /// Resolves an explicit runtime resistance level. Level zero is full
+    /// strength. Values above the configured array continue using its final
+    /// tier rather than wrapping or restoring strength.
+    /// </summary>
+    public KnockbackDecayTier GetTierForResistanceLevel(
+        int resistanceLevel)
+    {
         EnsureValid();
 
-        if (consecutiveAcceptedPushCount <= 1)
+        if (resistanceLevel <= 0)
         {
             return KnockbackDecayTier.FullStrength;
         }
 
         int index = Mathf.Clamp(
-            consecutiveAcceptedPushCount - 2,
+            resistanceLevel - 1,
             0,
             decayTiers.Length - 1);
 
