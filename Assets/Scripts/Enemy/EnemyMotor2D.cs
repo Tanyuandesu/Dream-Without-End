@@ -1,14 +1,25 @@
 using System;
 using UnityEngine;
 
+public enum TimedNavigationSpeedEndReason
+{
+    Completed = 0,
+    ReplacedByNewBoost = 10,
+    CancelledByCombatDisplacement = 20,
+    CancelledByOwner = 30,
+    OwnerDied = 40,
+    ComponentDisabled = 50
+}
+
 /// <summary>
 /// Rigidbody2D movement executor. It never chooses a target or requests a
 /// path; EnemyNavigationAgent supplies one movement destination at a time.
 ///
 /// Combat callers submit displacement requests instead of moving the body.
-/// CB1 and later phases clip each requested displacement against solid static/kinematic 2D
-/// geometry before issuing MovePosition commands, preserving EA3's single
-/// Rigidbody2D owner and preventing wall penetration.
+/// CB1 and later phases clip each requested displacement against solid
+/// static/kinematic 2D geometry before issuing MovePosition commands. CB4
+/// also applies a timed navigation-speed multiplier through this same sole
+/// Rigidbody2D owner after post-knockback pause completion.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -38,6 +49,11 @@ public sealed class EnemyMotor2D : MonoBehaviour
     [SerializeField] private bool activeDisplacementWasClipped;
     [SerializeField] private CombatDisplacementEndReason targetEndReason;
 
+    [Header("CB4 timed navigation speed recovery")]
+    [SerializeField] private bool timedNavigationSpeedActive;
+    [SerializeField] private float activeNavigationSpeedMultiplier = 1f;
+    [SerializeField] private float timedNavigationSpeedEndsAt = -1f;
+
     [Header("Runtime diagnostics (read only during Play Mode)")]
     [SerializeField] private bool initialized;
     [SerializeField] private bool hasMovementIntent;
@@ -53,6 +69,16 @@ public sealed class EnemyMotor2D : MonoBehaviour
     [SerializeField] private float lastSafeDisplacementDistance;
     [SerializeField] private Collider2D lastBlockingCollider;
     [SerializeField] private CombatDisplacementEndReason lastDisplacementEndReason;
+    [SerializeField] private float lastCombatDisplacementEndedAt = -1f;
+    [SerializeField] private int timedNavigationSpeedStartCount;
+    [SerializeField] private int timedNavigationSpeedCompleteCount;
+    [SerializeField] private int timedNavigationSpeedCancelCount;
+    [SerializeField] private int timedNavigationSpeedRejectCount;
+    [SerializeField] private float lastTimedNavigationSpeedStartedAt = -1f;
+    [SerializeField] private float lastTimedNavigationSpeedEndedAt = -1f;
+    [SerializeField] private float lastRequestedNavigationSpeedMultiplier = 1f;
+    [SerializeField] private float lastRequestedNavigationSpeedDuration;
+    [SerializeField] private TimedNavigationSpeedEndReason lastTimedNavigationSpeedEndReason;
 
     private Rigidbody2D body;
     private ContactFilter2D solidCastFilter;
@@ -64,6 +90,21 @@ public sealed class EnemyMotor2D : MonoBehaviour
     public Rigidbody2D Body => body;
     public Collider2D BodyCollider => bodyCollider;
     public float MoveSpeed => moveSpeed;
+    public float EffectiveMoveSpeed =>
+        moveSpeed * ActiveNavigationSpeedMultiplier;
+
+    public bool IsTimedNavigationSpeedActive =>
+        timedNavigationSpeedActive;
+
+    public float ActiveNavigationSpeedMultiplier =>
+        timedNavigationSpeedActive
+            ? Mathf.Max(1f, activeNavigationSpeedMultiplier)
+            : 1f;
+
+    public float TimedNavigationSpeedRemainingTime =>
+        timedNavigationSpeedActive
+            ? Mathf.Max(0f, timedNavigationSpeedEndsAt - Time.time)
+            : 0f;
     public bool HasMovementIntent => hasMovementIntent;
     public Vector2 MovementDestination => movementDestination;
     public Vector2 LastIssuedPosition => lastIssuedPosition;
@@ -105,6 +146,36 @@ public sealed class EnemyMotor2D : MonoBehaviour
     public CombatDisplacementEndReason LastDisplacementEndReason =>
         lastDisplacementEndReason;
 
+    public float LastCombatDisplacementEndedAt =>
+        lastCombatDisplacementEndedAt;
+
+    public int TimedNavigationSpeedStartCount =>
+        timedNavigationSpeedStartCount;
+
+    public int TimedNavigationSpeedCompleteCount =>
+        timedNavigationSpeedCompleteCount;
+
+    public int TimedNavigationSpeedCancelCount =>
+        timedNavigationSpeedCancelCount;
+
+    public int TimedNavigationSpeedRejectCount =>
+        timedNavigationSpeedRejectCount;
+
+    public float LastTimedNavigationSpeedStartedAt =>
+        lastTimedNavigationSpeedStartedAt;
+
+    public float LastTimedNavigationSpeedEndedAt =>
+        lastTimedNavigationSpeedEndedAt;
+
+    public float LastRequestedNavigationSpeedMultiplier =>
+        lastRequestedNavigationSpeedMultiplier;
+
+    public float LastRequestedNavigationSpeedDuration =>
+        lastRequestedNavigationSpeedDuration;
+
+    public TimedNavigationSpeedEndReason LastTimedNavigationSpeedEndReason =>
+        lastTimedNavigationSpeedEndReason;
+
     public event Action<
         EnemyMotor2D,
         CombatDisplacementRequest> CombatDisplacementStarted;
@@ -123,6 +194,7 @@ public sealed class EnemyMotor2D : MonoBehaviour
 
     private void FixedUpdate()
     {
+        TickTimedNavigationSpeed();
         TickCombatDisplacement();
     }
 
@@ -153,7 +225,19 @@ public sealed class EnemyMotor2D : MonoBehaviour
         lastBlockingCollider = null;
         lastDisplacementEndReason =
             CombatDisplacementEndReason.Completed;
+        lastCombatDisplacementEndedAt = -1f;
+        timedNavigationSpeedStartCount = 0;
+        timedNavigationSpeedCompleteCount = 0;
+        timedNavigationSpeedCancelCount = 0;
+        timedNavigationSpeedRejectCount = 0;
+        lastTimedNavigationSpeedStartedAt = -1f;
+        lastTimedNavigationSpeedEndedAt = -1f;
+        lastRequestedNavigationSpeedMultiplier = 1f;
+        lastRequestedNavigationSpeedDuration = 0f;
+        lastTimedNavigationSpeedEndReason =
+            TimedNavigationSpeedEndReason.Completed;
 
+        ResetTimedNavigationSpeedFields();
         ResetCombatDisplacementFields();
         initialized = body != null && bodyCollider != null;
     }
@@ -181,7 +265,7 @@ public sealed class EnemyMotor2D : MonoBehaviour
         }
 
         float safeTolerance = Mathf.Max(0.001f, tolerance);
-        float step = moveSpeed * Time.fixedDeltaTime;
+        float step = EffectiveMoveSpeed * Time.fixedDeltaTime;
 
         Vector2 nextPosition = Vector2.MoveTowards(
             body.position,
@@ -244,6 +328,12 @@ public sealed class EnemyMotor2D : MonoBehaviour
 
             FinishCombatDisplacement(
                 CombatDisplacementEndReason.CancelledByReplacement);
+        }
+
+        if (timedNavigationSpeedActive)
+        {
+            FinishTimedNavigationSpeed(
+                TimedNavigationSpeedEndReason.CancelledByCombatDisplacement);
         }
 
         Vector2 normalizedDirection = request.NormalizedDirection;
@@ -309,6 +399,61 @@ public sealed class EnemyMotor2D : MonoBehaviour
         return true;
     }
 
+    public bool TryBeginTimedNavigationSpeedMultiplier(
+        float multiplier,
+        float duration,
+        bool replaceExisting = true)
+    {
+        if (!initialized ||
+            body == null ||
+            multiplier <= 1f ||
+            duration <= 0f)
+        {
+            timedNavigationSpeedRejectCount++;
+            return false;
+        }
+
+        if (timedNavigationSpeedActive)
+        {
+            if (!replaceExisting)
+            {
+                timedNavigationSpeedRejectCount++;
+                return false;
+            }
+
+            FinishTimedNavigationSpeed(
+                TimedNavigationSpeedEndReason.ReplacedByNewBoost);
+        }
+
+        timedNavigationSpeedActive = true;
+        activeNavigationSpeedMultiplier = Mathf.Max(1f, multiplier);
+        timedNavigationSpeedEndsAt = Time.time + Mathf.Max(0f, duration);
+        timedNavigationSpeedStartCount++;
+        lastTimedNavigationSpeedStartedAt = Time.time;
+        lastRequestedNavigationSpeedMultiplier =
+            activeNavigationSpeedMultiplier;
+        lastRequestedNavigationSpeedDuration = duration;
+        return true;
+    }
+
+    public bool CancelTimedNavigationSpeedMultiplier(
+        TimedNavigationSpeedEndReason reason =
+            TimedNavigationSpeedEndReason.CancelledByOwner)
+    {
+        if (!timedNavigationSpeedActive)
+        {
+            return false;
+        }
+
+        if (reason == TimedNavigationSpeedEndReason.Completed)
+        {
+            reason = TimedNavigationSpeedEndReason.CancelledByOwner;
+        }
+
+        FinishTimedNavigationSpeed(reason);
+        return true;
+    }
+
     public void SnapToRecoveryCell(Vector2 position)
     {
         if (!initialized || body == null)
@@ -342,6 +487,20 @@ public sealed class EnemyMotor2D : MonoBehaviour
         {
             movementDestination = body.position;
             lastIssuedPosition = body.position;
+        }
+    }
+
+    private void TickTimedNavigationSpeed()
+    {
+        if (!timedNavigationSpeedActive)
+        {
+            return;
+        }
+
+        if (Time.time >= timedNavigationSpeedEndsAt)
+        {
+            FinishTimedNavigationSpeed(
+                TimedNavigationSpeedEndReason.Completed);
         }
     }
 
@@ -485,6 +644,7 @@ public sealed class EnemyMotor2D : MonoBehaviour
 
         combatDisplacementActive = false;
         lastDisplacementEndReason = reason;
+        lastCombatDisplacementEndedAt = Time.time;
 
         if (reason == CombatDisplacementEndReason.Completed)
         {
@@ -514,6 +674,43 @@ public sealed class EnemyMotor2D : MonoBehaviour
             this,
             completedRequest,
             reason);
+    }
+
+    private void FinishTimedNavigationSpeed(
+        TimedNavigationSpeedEndReason reason)
+    {
+        if (!timedNavigationSpeedActive)
+        {
+            return;
+        }
+
+        timedNavigationSpeedActive = false;
+        lastTimedNavigationSpeedEndedAt = Time.time;
+        lastTimedNavigationSpeedEndReason = reason;
+
+        if (reason == TimedNavigationSpeedEndReason.Completed)
+        {
+            timedNavigationSpeedCompleteCount++;
+        }
+        else
+        {
+            timedNavigationSpeedCancelCount++;
+        }
+
+        ResetTimedNavigationSpeedFields(
+            preserveActiveFlag: true);
+    }
+
+    private void ResetTimedNavigationSpeedFields(
+        bool preserveActiveFlag = false)
+    {
+        if (!preserveActiveFlag)
+        {
+            timedNavigationSpeedActive = false;
+        }
+
+        activeNavigationSpeedMultiplier = 1f;
+        timedNavigationSpeedEndsAt = -1f;
     }
 
     private void ResetCombatDisplacementFields(
@@ -578,6 +775,12 @@ public sealed class EnemyMotor2D : MonoBehaviour
         {
             FinishCombatDisplacement(
                 CombatDisplacementEndReason.ComponentDisabled);
+        }
+
+        if (timedNavigationSpeedActive)
+        {
+            FinishTimedNavigationSpeed(
+                TimedNavigationSpeedEndReason.ComponentDisabled);
         }
     }
 }

@@ -5,8 +5,9 @@ using UnityEngine;
 /// Enemy-side adapter for CombatHit messages.
 /// It owns no Rigidbody2D movement and no path selection. Reactions are sent
 /// to EnemyStateMachine and displacement requests are sent to EnemyMotor2D.
-/// CB2 additionally owns the runtime resistance level for this enemy instance,
-/// while all editable decay ratios remain in its EnemyDefinition.
+/// CB2 additionally owns the runtime resistance level for this enemy instance.
+/// CB4 resolves each enemy's post-displacement pause and queues its pursuit
+/// recovery while EnemyStateMachine and EnemyMotor2D keep state/movement ownership.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(EnemyRuntimeContext))]
@@ -44,6 +45,7 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
     [SerializeField] private float lastResolvedDisplacementDistance;
     [SerializeField] private float lastBaseReactionDuration;
     [SerializeField] private float lastResolvedReactionDuration;
+    [SerializeField] private int pursuitRecoveryTriggerCount;
 
     [Header("Runtime diagnostics")]
     [SerializeField] private bool initialized;
@@ -123,6 +125,9 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
 
     public float LastResolvedReactionDuration =>
         lastResolvedReactionDuration;
+
+    public int PursuitRecoveryTriggerCount =>
+        pursuitRecoveryTriggerCount;
 
     private void Awake()
     {
@@ -234,31 +239,34 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             }
             else
             {
-                reactionAccepted = !resolvedHit.HasReaction ||
-                    stateMachine.TryBeginCombatReaction(
-                        resolvedHit.Reaction);
+                Collider2D sourceCollider =
+                    resolvedHit.Source != null
+                        ? resolvedHit.Source.GetComponent<Collider2D>()
+                        : null;
 
-                if (reactionAccepted)
+                // Reserve the sole Rigidbody2D movement owner first. The state
+                // machine can then observe an active displacement and defer its
+                // pause timer until the motor finishes or collision-clips it.
+                displacementAccepted =
+                    motor.TryBeginCombatDisplacement(
+                        resolvedHit.Displacement,
+                        sourceCollider,
+                        replaceExisting: false);
+
+                if (displacementAccepted)
                 {
-                    Collider2D sourceCollider =
-                        resolvedHit.Source != null
-                            ? resolvedHit.Source.GetComponent<Collider2D>()
-                            : null;
+                    reactionAccepted = !resolvedHit.HasReaction ||
+                        stateMachine.TryBeginCombatReaction(
+                            resolvedHit.Reaction,
+                            resolvedHit.TriggersPursuitRecovery);
 
-                    displacementAccepted =
-                        motor.TryBeginCombatDisplacement(
-                            resolvedHit.Displacement,
-                            sourceCollider,
-                            replaceExisting: false);
-
-                    if (!displacementAccepted &&
+                    if (!reactionAccepted &&
                         resolvedHit.HasReaction)
                     {
-                        stateMachine.TryCompleteCombatReaction(
-                            force: true,
-                            reason: "Combat displacement request was rejected");
+                        motor.CancelCombatDisplacement(
+                            CombatDisplacementEndReason.CancelledByOwner);
 
-                        reactionAccepted = false;
+                        displacementAccepted = false;
                     }
                 }
             }
@@ -268,7 +276,8 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         {
             reactionAccepted =
                 stateMachine.TryBeginCombatReaction(
-                    resolvedHit.Reaction);
+                    resolvedHit.Reaction,
+                    resolvedHit.TriggersPursuitRecovery);
         }
 
         if (resolvedHit.HasDamage)
@@ -297,6 +306,12 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                 hit,
                 resolvedHit,
                 acceptedAt);
+        }
+
+        if (resolvedHit.TriggersPursuitRecovery &&
+            acceptedKnockbackEffect)
+        {
+            pursuitRecoveryTriggerCount++;
         }
 
         RememberAttackId(resolvedHit.AttackId);
@@ -484,11 +499,12 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             tier.StaggerMultiplier);
     }
 
-    private static CombatHit ApplyKnockbackResolution(
+    private CombatHit ApplyKnockbackResolution(
         CombatHit hit,
         KnockbackResolution resolution)
     {
-        if (!resolution.IsQualifying)
+        if (!resolution.IsQualifying &&
+            !hit.TriggersPursuitRecovery)
         {
             return hit;
         }
@@ -524,11 +540,17 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
 
         if (hit.HasReaction)
         {
+            float basePauseDuration =
+                ResolveBaseReactionDuration(hit);
+
+            float pauseMultiplier = resolution.IsQualifying
+                ? resolution.StaggerMultiplier
+                : 1f;
+
             reaction = new CombatReactionRequest(
                 hit.Reaction.AttackId,
                 hit.Reaction.Kind,
-                hit.Reaction.Duration *
-                    resolution.StaggerMultiplier,
+                basePauseDuration * pauseMultiplier,
                 hit.Reaction.ExtendExistingReaction,
                 hit.Reaction.Reason);
         }
@@ -614,13 +636,25 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                 : 0f;
 
         lastBaseReactionDuration = baseHit.HasReaction
-            ? baseHit.Reaction.Duration
+            ? ResolveBaseReactionDuration(baseHit)
             : 0f;
 
         lastResolvedReactionDuration =
             resolvedHit.HasReaction
                 ? resolvedHit.Reaction.Duration
                 : 0f;
+    }
+
+    private float ResolveBaseReactionDuration(CombatHit hit)
+    {
+        if (hit.TriggersPursuitRecovery && definition != null)
+        {
+            return definition.PostKnockbackPauseDuration;
+        }
+
+        return hit.HasReaction
+            ? Mathf.Max(0f, hit.Reaction.Duration)
+            : 0f;
     }
 
     private KnockbackResistanceSettings GetResistanceSettings()
@@ -650,6 +684,7 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         lastResolvedDisplacementDistance = 0f;
         lastBaseReactionDuration = 0f;
         lastResolvedReactionDuration = 0f;
+        pursuitRecoveryTriggerCount = 0;
     }
 
     private void RememberAttackId(CombatAttackId attackId)

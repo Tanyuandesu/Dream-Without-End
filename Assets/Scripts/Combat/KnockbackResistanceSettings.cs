@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// One repeated-push resistance layer. Distance and interruption deliberately
-/// use separate multipliers because spatial control and action denial are
-/// different balance axes.
+/// One repeated-push resistance layer. Distance and post-displacement pause
+/// deliberately use separate multipliers because spatial control and action
+/// denial are different balance axes.
 /// </summary>
 [Serializable]
 public struct KnockbackDecayTier
@@ -13,6 +13,9 @@ public struct KnockbackDecayTier
     [Range(0f, 2f)]
     [SerializeField] private float distanceMultiplier;
 
+    [Tooltip(
+        "Scales the enemy's configured pause after knockback movement ends. " +
+        "Zero keeps the displacement but removes the post-knockback pause.")]
     [Range(0f, 2f)]
     [SerializeField] private float staggerMultiplier;
 

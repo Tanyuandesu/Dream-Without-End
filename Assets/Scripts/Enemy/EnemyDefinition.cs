@@ -110,24 +110,34 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float alertRadius = 0f;
 
-    [Header("CB2 nonlethal knockback resistance")]
+    [Header("CB4 nonlethal knockback response")]
     [SerializeField]
     private KnockbackResistanceSettings knockbackResistance =
         KnockbackResistanceSettings.CreateDefault();
 
     [Tooltip(
-        "Duration of the temporary post-knockback pursuit speed bonus. " +
-        "Stored for a later combat phase; CB2 does not activate it.")]
+        "Base pause after collision-safe knockback movement finishes. " +
+        "Each resistance tier scales this value with its Stagger Multiplier.")]
+    [Min(0f)]
+    [SerializeField]
+    private float postKnockbackPauseDuration = 0.22f;
+
+    [Tooltip(
+        "Duration of the temporary navigation speed bonus after the " +
+        "post-knockback pause completes. Zero disables the bonus.")]
     [Min(0f)]
     [SerializeField]
     private float postKnockbackPursuitDuration = 0.5f;
 
     [Tooltip(
-        "Temporary pursuit speed multiplier after knockback recovery. " +
-        "1 keeps normal speed. Stored for a later combat phase.")]
+        "Temporary navigation speed multiplier after the pause. " +
+        "One disables acceleration without changing the rest of the sequence.")]
     [Min(1f)]
     [SerializeField]
     private float postKnockbackPursuitSpeedMultiplier = 1.2f;
+
+    [SerializeField, HideInInspector]
+    private bool cb4KnockbackRecoveryInitialized;
 
     [Header("Formal attack contract (activated in combat phase)")]
     [SerializeField] private EnemyAttackMode attackMode =
@@ -238,11 +248,32 @@ public sealed class EnemyDefinition : ScriptableObject
         }
     }
 
-    public float PostKnockbackPursuitDuration =>
-        postKnockbackPursuitDuration;
+    public float PostKnockbackPauseDuration
+    {
+        get
+        {
+            EnsureKnockbackRecoverySettings();
+            return postKnockbackPauseDuration;
+        }
+    }
 
-    public float PostKnockbackPursuitSpeedMultiplier =>
-        postKnockbackPursuitSpeedMultiplier;
+    public float PostKnockbackPursuitDuration
+    {
+        get
+        {
+            EnsureKnockbackRecoverySettings();
+            return postKnockbackPursuitDuration;
+        }
+    }
+
+    public float PostKnockbackPursuitSpeedMultiplier
+    {
+        get
+        {
+            EnsureKnockbackRecoverySettings();
+            return postKnockbackPursuitSpeedMultiplier;
+        }
+    }
 
     public float DetectionRadius => detectionRadius;
     public float LoseTargetRadius => loseTargetRadius;
@@ -321,6 +352,7 @@ public sealed class EnemyDefinition : ScriptableObject
 
 
         EnsureKnockbackSettings();
+        EnsureKnockbackRecoverySettings();
         knockbackResistance.CollectValidationErrors(
             errors,
             name);
@@ -333,6 +365,35 @@ public sealed class EnemyDefinition : ScriptableObject
             knockbackResistance =
                 KnockbackResistanceSettings.CreateDefault();
         }
+    }
+
+
+    private void EnsureKnockbackRecoverySettings()
+    {
+        if (!cb4KnockbackRecoveryInitialized)
+        {
+            // Older EnemyDefinition assets had no post-displacement pause.
+            // Give them CB4's safe default while preserving any pursuit values
+            // already authored during CB2/CB3.
+            if (postKnockbackPauseDuration <= 0f)
+            {
+                postKnockbackPauseDuration = 0.22f;
+            }
+
+            cb4KnockbackRecoveryInitialized = true;
+        }
+
+        postKnockbackPauseDuration = Mathf.Max(
+            0f,
+            postKnockbackPauseDuration);
+
+        postKnockbackPursuitDuration = Mathf.Max(
+            0f,
+            postKnockbackPursuitDuration);
+
+        postKnockbackPursuitSpeedMultiplier = Mathf.Max(
+            1f,
+            postKnockbackPursuitSpeedMultiplier);
     }
 
     private void OnValidate()
@@ -393,14 +454,7 @@ public sealed class EnemyDefinition : ScriptableObject
 
         EnsureKnockbackSettings();
         knockbackResistance.EnsureValid();
-
-        postKnockbackPursuitDuration = Mathf.Max(
-            0f,
-            postKnockbackPursuitDuration);
-
-        postKnockbackPursuitSpeedMultiplier = Mathf.Max(
-            1f,
-            postKnockbackPursuitSpeedMultiplier);
+        EnsureKnockbackRecoverySettings();
 
         detectionRadius = Mathf.Max(0.1f, detectionRadius);
         loseTargetRadius = Mathf.Max(

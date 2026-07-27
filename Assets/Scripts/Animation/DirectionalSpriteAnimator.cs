@@ -3,8 +3,11 @@ using UnityEngine;
 /// <summary>
 /// 根据角色根物件的实际位移播放方向 Sprite 动画。
 ///
-/// 不读取或修改玩家输入、敌人 AI、A* 路径与 Rigidbody2D 参数。
-/// 因此玩家现有连续移动和敌人现有混合移动会原样保留。
+/// CB3.5 additionally accepts an optional ICharacterFacingSource on the same
+/// root. The player supplies one authoritative eight-direction facing shared
+/// by movement, animation and combat. Enemies have no such source and retain
+/// the original displacement-derived facing behaviour. This component never
+/// reads input or moves a Rigidbody2D.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class DirectionalSpriteAnimator : MonoBehaviour
@@ -43,9 +46,11 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
 
     private SpriteAnimationSequence activeSequence;
     private bool activeFlipX;
+    private ICharacterFacingSource facingSource;
 
     public CharacterAnimationProfile Profile => profile;
     public CharacterFacingDirection Facing => facing;
+    public bool HasAuthoritativeFacingSource => facingSource != null;
 
     public CharacterAnimationState CurrentState =>
         actionActive ? actionState : locomotionState;
@@ -56,6 +61,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
     private void Awake()
     {
         CacheRenderer();
+        CacheFacingSource();
 
         facing = profile != null
             ? profile.DefaultFacing
@@ -66,6 +72,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
 
     private void OnEnable()
     {
+        CacheFacingSource();
         ResetTracking();
         RefreshSequence(true);
     }
@@ -89,6 +96,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
 
         if (displacement.sqrMagnitude > teleportDistanceSquared)
         {
+            TryApplyAuthoritativeFacing();
             locomotionState = CharacterAnimationState.Idle;
             timeWithoutMovement = idleDelay;
             RefreshSequence(false);
@@ -99,11 +107,18 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         float epsilonSquared =
             movementEpsilon * movementEpsilon;
 
+        bool hasAuthoritativeFacing =
+            TryApplyAuthoritativeFacing();
+
         if (displacement.sqrMagnitude > epsilonSquared)
         {
             timeWithoutMovement = 0f;
             locomotionState = CharacterAnimationState.Walk;
-            facing = QuantizeDirection(displacement);
+
+            if (!hasAuthoritativeFacing)
+            {
+                facing = QuantizeDirection(displacement);
+            }
         }
         else
         {
@@ -127,6 +142,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         profile = newProfile;
         spriteRenderer = targetRenderer;
         visualWorldHeight = Mathf.Max(0.05f, targetWorldHeight);
+        CacheFacingSource();
 
         facing = profile != null
             ? profile.DefaultFacing
@@ -217,6 +233,51 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         frameTimer = 0f;
         frameIndex = 0;
         activeSequence = null;
+    }
+
+    private bool TryApplyAuthoritativeFacing()
+    {
+        if (facingSource == null)
+        {
+            CacheFacingSource();
+        }
+
+        if (facingSource == null)
+        {
+            return false;
+        }
+
+        facing = facingSource.CurrentFacing;
+        return true;
+    }
+
+    private void CacheFacingSource()
+    {
+        if (facingSource != null)
+        {
+            return;
+        }
+
+        MonoBehaviour[] behaviours = GetComponents<MonoBehaviour>();
+
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            MonoBehaviour behaviour = behaviours[i];
+
+            if (behaviour == null || object.ReferenceEquals(behaviour, this))
+            {
+                continue;
+            }
+
+            ICharacterFacingSource candidate =
+                behaviour as ICharacterFacingSource;
+
+            if (candidate != null)
+            {
+                facingSource = candidate;
+                return;
+            }
+        }
     }
 
     private void CacheRenderer()

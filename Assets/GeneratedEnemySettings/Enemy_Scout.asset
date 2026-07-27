@@ -47,8 +47,10 @@ MonoBehaviour:
       staggerMultiplier: 0.25
     - distanceMultiplier: 0.3
       staggerMultiplier: 0
+  postKnockbackPauseDuration: 0.22
   postKnockbackPursuitDuration: 0.5
   postKnockbackPursuitSpeedMultiplier: 1.2
+  cb4KnockbackRecoveryInitialized: 1
   attackMode: 0
   attackDamage: 3
   attackRange: 0.85

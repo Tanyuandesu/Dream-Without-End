@@ -77,7 +77,7 @@ public static class CombatCB1RuntimeAudit
         if (errors.Count == 0)
         {
             report.AppendLine(
-                "PASS: CB1 left-mouse zero-damage push is wired through " +
+                "PASS: CB1 zero-damage push is wired through " +
                 "EnemyCombatReceiver, EnemyStateMachine and the sole " +
                 "EnemyMotor2D movement owner.");
 
@@ -158,13 +158,13 @@ public static class CombatCB1RuntimeAudit
         if (activeCount == 1 && issuedActions == 0)
         {
             notes.Add(
-                "No left-click action has been observed yet. Aim the mouse " +
-                "toward a nearby enemy, click once, then rerun the audit.");
+                "No nonlethal-push action has been observed yet. Face " +
+                "a nearby enemy, use any enabled push binding, then rerun the audit.");
         }
         else if (issuedActions > 0 && successfulActions == 0)
         {
             notes.Add(
-                "Left-click input was observed, but no enemy accepted a push. " +
+                "Push input was observed, but no enemy accepted a push. " +
                 "Check range, fan direction and wall line-of-sight.");
         }
 

@@ -63,10 +63,18 @@ public sealed class PlayerSpawner : MonoBehaviour
     [Min(0.1f)]
     [SerializeField] private float moveSpeed = 5f;
 
-    [Header("战斗：左键无伤害击退")]
+    [Header("战斗：CB4 八方向非致命击退与动作节奏")]
     [SerializeField]
     private NonlethalPushSettings nonlethalPushSettings =
         NonlethalPushSettings.CreateDefault();
+
+    [Header("战斗：CB4.5 鼠标与全键盘输入")]
+    [SerializeField]
+    private PlayerCombatInputBindings combatInputBindings =
+        PlayerCombatInputBindings.CreateDefault();
+
+    public PlayerCombatInputBindings CombatInputBindings =>
+        combatInputBindings;
 
     private Sprite fallbackSprite;
 
@@ -98,6 +106,14 @@ public sealed class PlayerSpawner : MonoBehaviour
         }
 
         nonlethalPushSettings.EnsureValid();
+
+        if (combatInputBindings == null)
+        {
+            combatInputBindings =
+                PlayerCombatInputBindings.CreateDefault();
+        }
+
+        combatInputBindings.EnsureValid();
     }
 
     public GameObject Spawn(
@@ -193,15 +209,22 @@ public sealed class PlayerSpawner : MonoBehaviour
                 NonlethalPushSettings.CreateDefault();
         }
 
+        if (combatInputBindings == null)
+        {
+            combatInputBindings =
+                PlayerCombatInputBindings.CreateDefault();
+        }
+
         combatController.Initialize(
             player.GetComponent<RuntimeDungeonPlayer>(),
             player.GetComponent<Rigidbody2D>(),
             player.GetComponent<Health>(),
             player.GetComponent<DirectionalSpriteAnimator>(),
-            nonlethalPushSettings);
+            nonlethalPushSettings,
+            combatInputBindings);
 
         combatController.SetCombatInputEnabled(
-            nonlethalPushSettings.Enabled);
+            combatInputBindings.HasAnyEnabledBinding);
     }
 
     private SpriteRenderer CreateVisual(Transform playerRoot)
