@@ -46,6 +46,7 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private int pursuitRecoverySkippedCount;
     [SerializeField] private float lastPostDisplacementPauseStartedAt = -1f;
     [SerializeField] private float lastPostDisplacementPauseCompletedAt = -1f;
+    [SerializeField] private float lastPursuitRecoveryPauseCompletedAt = -1f;
     [SerializeField] private float lastPostDisplacementPauseDuration;
     [SerializeField] private float lastPursuitRecoveryRequestedAt = -1f;
     [SerializeField] private float lastPursuitRecoverySpeedMultiplier = 1f;
@@ -131,6 +132,9 @@ public sealed class EnemyStateMachine : MonoBehaviour
     public float LastPostDisplacementPauseCompletedAt =>
         lastPostDisplacementPauseCompletedAt;
 
+    public float LastPursuitRecoveryPauseCompletedAt =>
+        lastPursuitRecoveryPauseCompletedAt;
+
     public float LastPostDisplacementPauseDuration =>
         lastPostDisplacementPauseDuration;
 
@@ -200,6 +204,7 @@ public sealed class EnemyStateMachine : MonoBehaviour
         pursuitRecoverySkippedCount = 0;
         lastPostDisplacementPauseStartedAt = -1f;
         lastPostDisplacementPauseCompletedAt = -1f;
+        lastPursuitRecoveryPauseCompletedAt = -1f;
         lastPostDisplacementPauseDuration = 0f;
         lastPursuitRecoveryRequestedAt = -1f;
         lastPursuitRecoverySpeedMultiplier = 1f;
@@ -267,7 +272,9 @@ public sealed class EnemyStateMachine : MonoBehaviour
             return false;
         }
 
-        if (motor != null && motor.IsTimedNavigationSpeedActive)
+        if (request.CancelTimedNavigationSpeed &&
+            motor != null &&
+            motor.IsTimedNavigationSpeedActive)
         {
             motor.CancelTimedNavigationSpeedMultiplier(
                 TimedNavigationSpeedEndReason.CancelledByOwner);
@@ -359,6 +366,13 @@ public sealed class EnemyStateMachine : MonoBehaviour
         float pursuitDuration = queuedPursuitDuration;
 
         lastPostDisplacementPauseCompletedAt = Time.time;
+
+        if (shouldStartPursuitRecovery)
+        {
+            lastPursuitRecoveryPauseCompletedAt =
+                lastPostDisplacementPauseCompletedAt;
+        }
+
         postDisplacementPauseCompleteCount++;
 
         ResetCombatReactionFields();

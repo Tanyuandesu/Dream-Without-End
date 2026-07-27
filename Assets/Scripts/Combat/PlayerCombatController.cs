@@ -3,10 +3,11 @@ using UnityEngine;
 
 /// <summary>
 /// Player-side combat boundary.
-/// CB4.5 keeps the complete CB4 nonlethal-push pipeline and adds configurable
-/// mouse/keyboard bindings. Every push input enters the same action method.
-/// Direct-attack inputs are captured through a reserved common entry point,
-/// but do not yet issue attack ids, damage, cooldown or recovery.
+/// CB8 keeps the complete nonlethal-push and direct-damage pipelines while
+/// adding one explicit action-arbitration boundary. Same-frame dual input is
+/// resolved deterministically, each action keeps its own cooldown, and one
+/// action may not silently overlap the other action's afterlag unless the
+/// authored arbitration policy explicitly allows cancellation.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
@@ -24,9 +25,18 @@ public sealed class PlayerCombatController : MonoBehaviour
     [SerializeField] private NonlethalPushSettings nonlethalPushSettings =
         NonlethalPushSettings.CreateDefault();
 
+    [Header("CB5 facing-based direct damage attack")]
+    [SerializeField] private DirectAttackSettings directAttackSettings =
+        DirectAttackSettings.CreateDefault();
+
     [Header("CB4.5 mouse and keyboard input bindings")]
     [SerializeField] private PlayerCombatInputBindings inputBindings =
         PlayerCombatInputBindings.CreateDefault();
+
+    [Header("CB8 dual-action arbitration")]
+    [SerializeField]
+    private CombatActionArbitrationSettings actionArbitrationSettings =
+        CombatActionArbitrationSettings.CreateDefault();
 
     [Header("Runtime references")]
     [SerializeField] private RuntimeDungeonPlayer movement;
@@ -63,6 +73,30 @@ public sealed class PlayerCombatController : MonoBehaviour
     [SerializeField] private float actionRecoveryEndsAt = -1f;
     [SerializeField] private float nextLeftPushReadyAt = -1f;
 
+    [Header("CB5 direct-attack diagnostics")]
+    [SerializeField] private int issuedNonlethalPushAttackCount;
+    [SerializeField] private int issuedDirectAttackCount;
+    [SerializeField] private int startedDirectAttackActionCount;
+    [SerializeField] private int successfulDirectAttackActionCount;
+    [SerializeField] private int acceptedDirectAttackTargetCount;
+    [SerializeField] private int lastAcceptedDirectAttackTargetCount;
+    [SerializeField] private int directAttackRecoveryRejectCount;
+    [SerializeField] private int directAttackCooldownRejectCount;
+    [SerializeField] private int directAttackAfterlagMovementStartCount;
+    [SerializeField] private int directAttackAfterlagMovementRejectCount;
+    [SerializeField] private int directAttackArcRejectedTargetCount;
+    [SerializeField] private int lastDirectAttackArcRejectedTargetCount;
+    [SerializeField] private int directAttackFacingSnapshotCount;
+    [SerializeField] private int directAttackSameFrameTurnCount;
+    [SerializeField] private int directAttackObservedFacingMask;
+    [SerializeField] private int directAttackVisualFacingSyncCount;
+    [SerializeField] private float lastDirectAttackStartedAt = -1f;
+    [SerializeField] private float directAttackRecoveryEndsAt = -1f;
+    [SerializeField] private float nextDirectAttackReadyAt = -1f;
+    [SerializeField] private Vector2 lastDirectAttackAimDirection = Vector2.down;
+    [SerializeField] private CharacterFacingDirection lastDirectAttackFacing =
+        CharacterFacingDirection.South;
+
     [Header("CB4.5 multi-input diagnostics")]
     [SerializeField] private int mousePushInputCount;
     [SerializeField] private int primaryKeyPushInputCount;
@@ -81,6 +115,31 @@ public sealed class PlayerCombatController : MonoBehaviour
     [SerializeField] private int coalescedDirectAttackInputFrameCount;
     [SerializeField] private int reservedDirectAttackRequestCount;
     [SerializeField] private int executedDirectAttackActionCount;
+    [SerializeField] private int mouseDirectAttackStartedActionCount;
+    [SerializeField] private int primaryKeyDirectAttackStartedActionCount;
+    [SerializeField] private int secondaryKeyDirectAttackStartedActionCount;
+    [SerializeField] private int mouseDirectAttackSuccessfulActionCount;
+    [SerializeField] private int primaryKeyDirectAttackSuccessfulActionCount;
+    [SerializeField] private int secondaryKeyDirectAttackSuccessfulActionCount;
+
+    [Header("CB8 action arbitration diagnostics")]
+    [SerializeField] private int simultaneousActionInputFrameCount;
+    [SerializeField] private int simultaneousPushPriorityResolutionCount;
+    [SerializeField] private int simultaneousDirectPriorityResolutionCount;
+    [SerializeField] private int simultaneousRejectBothCount;
+    [SerializeField] private int suppressedPushInputFrameCount;
+    [SerializeField] private int suppressedDirectAttackInputFrameCount;
+    [SerializeField] private int pushBlockedByDirectRecoveryCount;
+    [SerializeField] private int directBlockedByPushRecoveryCount;
+    [SerializeField] private int pushCancelledDirectRecoveryCount;
+    [SerializeField] private int directCancelledPushRecoveryCount;
+    [SerializeField] private int pushStartedWhileDirectCooldownActiveCount;
+    [SerializeField] private int directStartedWhilePushCooldownActiveCount;
+    [SerializeField] private int dualActionStartFrameViolationCount;
+    [SerializeField] private int lastPushActionStartFrame = -1;
+    [SerializeField] private int lastDirectActionStartFrame = -1;
+    [SerializeField] private CombatActionKind lastStartedActionKind =
+        CombatActionKind.Unspecified;
 
     private ContactFilter2D combatQueryFilter;
 
@@ -96,6 +155,9 @@ public sealed class PlayerCombatController : MonoBehaviour
     private readonly List<PushCandidate> pushCandidates =
         new List<PushCandidate>(16);
 
+    private readonly List<PushCandidate> directAttackCandidates =
+        new List<PushCandidate>(16);
+
     public bool IsInitialized => initialized;
     public bool CombatInputEnabled => combatInputEnabled;
     public RuntimeDungeonPlayer Movement => movement;
@@ -104,7 +166,11 @@ public sealed class PlayerCombatController : MonoBehaviour
     public DirectionalSpriteAnimator VisualAnimator => visualAnimator;
     public NonlethalPushSettings PushSettings =>
         nonlethalPushSettings;
+    public DirectAttackSettings DirectAttackSettings =>
+        directAttackSettings;
     public PlayerCombatInputBindings InputBindings => inputBindings;
+    public CombatActionArbitrationSettings ActionArbitrationSettings =>
+        actionArbitrationSettings;
 
     public int IssuedAttackCount => issuedAttackCount;
     public CombatAttackId LastIssuedAttackId => lastIssuedAttackId;
@@ -189,6 +255,94 @@ public sealed class PlayerCombatController : MonoBehaviour
         reservedDirectAttackRequestCount;
     public int ExecutedDirectAttackActionCount =>
         executedDirectAttackActionCount;
+    public int IssuedNonlethalPushAttackCount =>
+        issuedNonlethalPushAttackCount;
+    public int IssuedDirectAttackCount => issuedDirectAttackCount;
+    public int StartedDirectAttackActionCount =>
+        startedDirectAttackActionCount;
+    public int SuccessfulDirectAttackActionCount =>
+        successfulDirectAttackActionCount;
+    public int AcceptedDirectAttackTargetCount =>
+        acceptedDirectAttackTargetCount;
+    public int LastAcceptedDirectAttackTargetCount =>
+        lastAcceptedDirectAttackTargetCount;
+    public int DirectAttackRecoveryRejectCount =>
+        directAttackRecoveryRejectCount;
+    public int DirectAttackCooldownRejectCount =>
+        directAttackCooldownRejectCount;
+    public int DirectAttackAfterlagMovementStartCount =>
+        directAttackAfterlagMovementStartCount;
+    public int DirectAttackAfterlagMovementRejectCount =>
+        directAttackAfterlagMovementRejectCount;
+    public int DirectAttackArcRejectedTargetCount =>
+        directAttackArcRejectedTargetCount;
+    public int LastDirectAttackArcRejectedTargetCount =>
+        lastDirectAttackArcRejectedTargetCount;
+    public int DirectAttackFacingSnapshotCount =>
+        directAttackFacingSnapshotCount;
+    public int DirectAttackSameFrameTurnCount =>
+        directAttackSameFrameTurnCount;
+    public int DirectAttackObservedFacingMask =>
+        directAttackObservedFacingMask;
+    public int DirectAttackVisualFacingSyncCount =>
+        directAttackVisualFacingSyncCount;
+    public int DirectAttackObservedFacingCount =>
+        CountObservedFacingDirections(directAttackObservedFacingMask);
+    public float LastDirectAttackStartedAt => lastDirectAttackStartedAt;
+    public float DirectAttackRecoveryEndsAt => directAttackRecoveryEndsAt;
+    public float NextDirectAttackReadyAt => nextDirectAttackReadyAt;
+    public Vector2 LastDirectAttackAimDirection =>
+        lastDirectAttackAimDirection;
+    public CharacterFacingDirection LastDirectAttackFacing =>
+        lastDirectAttackFacing;
+    public bool IsDirectAttackRecoveryActive =>
+        directAttackRecoveryEndsAt >= 0f &&
+        Time.time < directAttackRecoveryEndsAt;
+    public bool IsDirectAttackCooldownActive =>
+        nextDirectAttackReadyAt >= 0f &&
+        Time.time < nextDirectAttackReadyAt;
+    public int MouseDirectAttackStartedActionCount =>
+        mouseDirectAttackStartedActionCount;
+    public int PrimaryKeyDirectAttackStartedActionCount =>
+        primaryKeyDirectAttackStartedActionCount;
+    public int SecondaryKeyDirectAttackStartedActionCount =>
+        secondaryKeyDirectAttackStartedActionCount;
+    public int MouseDirectAttackSuccessfulActionCount =>
+        mouseDirectAttackSuccessfulActionCount;
+    public int PrimaryKeyDirectAttackSuccessfulActionCount =>
+        primaryKeyDirectAttackSuccessfulActionCount;
+    public int SecondaryKeyDirectAttackSuccessfulActionCount =>
+        secondaryKeyDirectAttackSuccessfulActionCount;
+
+    public int SimultaneousActionInputFrameCount =>
+        simultaneousActionInputFrameCount;
+    public int SimultaneousPushPriorityResolutionCount =>
+        simultaneousPushPriorityResolutionCount;
+    public int SimultaneousDirectPriorityResolutionCount =>
+        simultaneousDirectPriorityResolutionCount;
+    public int SimultaneousRejectBothCount => simultaneousRejectBothCount;
+    public int SuppressedPushInputFrameCount => suppressedPushInputFrameCount;
+    public int SuppressedDirectAttackInputFrameCount =>
+        suppressedDirectAttackInputFrameCount;
+    public int PushBlockedByDirectRecoveryCount =>
+        pushBlockedByDirectRecoveryCount;
+    public int DirectBlockedByPushRecoveryCount =>
+        directBlockedByPushRecoveryCount;
+    public int PushCancelledDirectRecoveryCount =>
+        pushCancelledDirectRecoveryCount;
+    public int DirectCancelledPushRecoveryCount =>
+        directCancelledPushRecoveryCount;
+    public int PushStartedWhileDirectCooldownActiveCount =>
+        pushStartedWhileDirectCooldownActiveCount;
+    public int DirectStartedWhilePushCooldownActiveCount =>
+        directStartedWhilePushCooldownActiveCount;
+    public int DualActionStartFrameViolationCount =>
+        dualActionStartFrameViolationCount;
+    public int LastPushActionStartFrame => lastPushActionStartFrame;
+    public int LastDirectActionStartFrame => lastDirectActionStartFrame;
+    public CombatActionKind LastStartedActionKind => lastStartedActionKind;
+    public bool HasOverlappingActionRecovery =>
+        IsActionRecoveryActive && IsDirectAttackRecoveryActive;
 
     private void Awake()
     {
@@ -207,13 +361,19 @@ public sealed class PlayerCombatController : MonoBehaviour
             return;
         }
 
-        CaptureReservedDirectAttackInputs();
+        CombatInputFrame pushInput =
+            nonlethalPushSettings != null &&
+            nonlethalPushSettings.Enabled
+                ? ReadNonlethalPushInputs()
+                : default(CombatInputFrame);
 
-        if (nonlethalPushSettings != null &&
-            nonlethalPushSettings.Enabled)
-        {
-            CaptureNonlethalPushInputs();
-        }
+        CombatInputFrame directInput =
+            directAttackSettings != null &&
+            directAttackSettings.Enabled
+                ? ReadDirectAttackInputs()
+                : default(CombatInputFrame);
+
+        ResolveCombatInputFrame(pushInput, directInput);
     }
 
     public void Initialize(
@@ -228,7 +388,9 @@ public sealed class PlayerCombatController : MonoBehaviour
             newHealth,
             newVisualAnimator,
             NonlethalPushSettings.CreateDefault(),
-            PlayerCombatInputBindings.CreateDefault());
+            DirectAttackSettings.CreateDefault(),
+            PlayerCombatInputBindings.CreateDefault(),
+            CombatActionArbitrationSettings.CreateDefault());
     }
 
     public void Initialize(
@@ -244,7 +406,9 @@ public sealed class PlayerCombatController : MonoBehaviour
             newHealth,
             newVisualAnimator,
             newNonlethalPushSettings,
-            PlayerCombatInputBindings.CreateDefault());
+            DirectAttackSettings.CreateDefault(),
+            PlayerCombatInputBindings.CreateDefault(),
+            CombatActionArbitrationSettings.CreateDefault());
     }
 
     public void Initialize(
@@ -255,6 +419,47 @@ public sealed class PlayerCombatController : MonoBehaviour
         NonlethalPushSettings newNonlethalPushSettings,
         PlayerCombatInputBindings newInputBindings)
     {
+        Initialize(
+            newMovement,
+            newBody,
+            newHealth,
+            newVisualAnimator,
+            newNonlethalPushSettings,
+            DirectAttackSettings.CreateDefault(),
+            newInputBindings,
+            CombatActionArbitrationSettings.CreateDefault());
+    }
+
+    public void Initialize(
+        RuntimeDungeonPlayer newMovement,
+        Rigidbody2D newBody,
+        Health newHealth,
+        DirectionalSpriteAnimator newVisualAnimator,
+        NonlethalPushSettings newNonlethalPushSettings,
+        DirectAttackSettings newDirectAttackSettings,
+        PlayerCombatInputBindings newInputBindings)
+    {
+        Initialize(
+            newMovement,
+            newBody,
+            newHealth,
+            newVisualAnimator,
+            newNonlethalPushSettings,
+            newDirectAttackSettings,
+            newInputBindings,
+            CombatActionArbitrationSettings.CreateDefault());
+    }
+
+    public void Initialize(
+        RuntimeDungeonPlayer newMovement,
+        Rigidbody2D newBody,
+        Health newHealth,
+        DirectionalSpriteAnimator newVisualAnimator,
+        NonlethalPushSettings newNonlethalPushSettings,
+        DirectAttackSettings newDirectAttackSettings,
+        PlayerCombatInputBindings newInputBindings,
+        CombatActionArbitrationSettings newActionArbitrationSettings)
+    {
         movement = newMovement;
         body = newBody;
         health = newHealth;
@@ -262,15 +467,23 @@ public sealed class PlayerCombatController : MonoBehaviour
         nonlethalPushSettings = newNonlethalPushSettings != null
             ? newNonlethalPushSettings.CreateRuntimeCopy()
             : NonlethalPushSettings.CreateDefault();
+        directAttackSettings = newDirectAttackSettings != null
+            ? newDirectAttackSettings.CreateRuntimeCopy()
+            : DirectAttackSettings.CreateDefault();
         inputBindings = newInputBindings != null
             ? newInputBindings.CreateRuntimeCopy()
             : PlayerCombatInputBindings.CreateDefault();
+        actionArbitrationSettings = newActionArbitrationSettings != null
+            ? newActionArbitrationSettings.CreateRuntimeCopy()
+            : CombatActionArbitrationSettings.CreateDefault();
 
         CacheComponents();
         ConfigureQueryFilter();
 
         combatInputEnabled = false;
         issuedAttackCount = 0;
+        issuedNonlethalPushAttackCount = 0;
+        issuedDirectAttackCount = 0;
         lastIssuedAttackId = default(CombatAttackId);
         leftPushInputCount = 0;
         successfulLeftPushActionCount = 0;
@@ -296,6 +509,29 @@ public sealed class PlayerCombatController : MonoBehaviour
         lastLeftPushStartedAt = -1f;
         actionRecoveryEndsAt = -1f;
         nextLeftPushReadyAt = -1f;
+        startedDirectAttackActionCount = 0;
+        successfulDirectAttackActionCount = 0;
+        acceptedDirectAttackTargetCount = 0;
+        lastAcceptedDirectAttackTargetCount = 0;
+        directAttackRecoveryRejectCount = 0;
+        directAttackCooldownRejectCount = 0;
+        directAttackAfterlagMovementStartCount = 0;
+        directAttackAfterlagMovementRejectCount = 0;
+        directAttackArcRejectedTargetCount = 0;
+        lastDirectAttackArcRejectedTargetCount = 0;
+        directAttackFacingSnapshotCount = 0;
+        directAttackSameFrameTurnCount = 0;
+        directAttackObservedFacingMask = 0;
+        directAttackVisualFacingSyncCount = 0;
+        lastDirectAttackStartedAt = -1f;
+        directAttackRecoveryEndsAt = -1f;
+        nextDirectAttackReadyAt = -1f;
+        lastDirectAttackFacing = movement != null
+            ? movement.CurrentFacing
+            : CharacterFacingDirection.South;
+        lastDirectAttackAimDirection = movement != null
+            ? movement.FacingVector
+            : Vector2.down;
         mousePushInputCount = 0;
         primaryKeyPushInputCount = 0;
         secondaryKeyPushInputCount = 0;
@@ -313,13 +549,37 @@ public sealed class PlayerCombatController : MonoBehaviour
         coalescedDirectAttackInputFrameCount = 0;
         reservedDirectAttackRequestCount = 0;
         executedDirectAttackActionCount = 0;
+        mouseDirectAttackStartedActionCount = 0;
+        primaryKeyDirectAttackStartedActionCount = 0;
+        secondaryKeyDirectAttackStartedActionCount = 0;
+        mouseDirectAttackSuccessfulActionCount = 0;
+        primaryKeyDirectAttackSuccessfulActionCount = 0;
+        secondaryKeyDirectAttackSuccessfulActionCount = 0;
+        simultaneousActionInputFrameCount = 0;
+        simultaneousPushPriorityResolutionCount = 0;
+        simultaneousDirectPriorityResolutionCount = 0;
+        simultaneousRejectBothCount = 0;
+        suppressedPushInputFrameCount = 0;
+        suppressedDirectAttackInputFrameCount = 0;
+        pushBlockedByDirectRecoveryCount = 0;
+        directBlockedByPushRecoveryCount = 0;
+        pushCancelledDirectRecoveryCount = 0;
+        directCancelledPushRecoveryCount = 0;
+        pushStartedWhileDirectCooldownActiveCount = 0;
+        directStartedWhilePushCooldownActiveCount = 0;
+        dualActionStartFrameViolationCount = 0;
+        lastPushActionStartFrame = -1;
+        lastDirectActionStartFrame = -1;
+        lastStartedActionKind = CombatActionKind.Unspecified;
 
         initialized =
             movement != null &&
             body != null &&
             health != null &&
             nonlethalPushSettings != null &&
-            inputBindings != null;
+            directAttackSettings != null &&
+            inputBindings != null &&
+            actionArbitrationSettings != null;
     }
 
     public void SetCombatInputEnabled(bool shouldEnable)
@@ -333,6 +593,11 @@ public sealed class PlayerCombatController : MonoBehaviour
     /// </summary>
     public CombatAttackId IssueAttackId()
     {
+        return IssueAttackId(CombatActionKind.Unspecified);
+    }
+
+    private CombatAttackId IssueAttackId(CombatActionKind actionKind)
+    {
         if (!initialized)
         {
             return default(CombatAttackId);
@@ -340,68 +605,171 @@ public sealed class PlayerCombatController : MonoBehaviour
 
         lastIssuedAttackId = CombatAttackIdGenerator.Next();
         issuedAttackCount++;
+
+        if (actionKind == CombatActionKind.NonlethalPush)
+        {
+            issuedNonlethalPushAttackCount++;
+        }
+        else if (actionKind == CombatActionKind.DirectAttack)
+        {
+            issuedDirectAttackCount++;
+        }
+
         return lastIssuedAttackId;
     }
 
-    private void CaptureNonlethalPushInputs()
+    private CombatInputFrame ReadNonlethalPushInputs()
     {
-        bool mousePressed =
+        return new CombatInputFrame(
             inputBindings.EnableMouseNonlethalPush &&
-            Input.GetMouseButtonDown(0);
+            Input.GetMouseButtonDown(0),
+            IsKeyPressedThisFrame(
+                inputBindings.NonlethalPushPrimaryKey),
+            IsKeyPressedThisFrame(
+                inputBindings.NonlethalPushSecondaryKey));
+    }
 
-        bool primaryPressed = IsKeyPressedThisFrame(
-            inputBindings.NonlethalPushPrimaryKey);
+    private CombatInputFrame ReadDirectAttackInputs()
+    {
+        return new CombatInputFrame(
+            inputBindings.EnableMouseDirectAttack &&
+            Input.GetMouseButtonDown(1),
+            IsKeyPressedThisFrame(
+                inputBindings.DirectAttackPrimaryKey),
+            IsKeyPressedThisFrame(
+                inputBindings.DirectAttackSecondaryKey));
+    }
 
-        bool secondaryPressed = IsKeyPressedThisFrame(
-            inputBindings.NonlethalPushSecondaryKey);
+    private void ResolveCombatInputFrame(
+        CombatInputFrame pushInput,
+        CombatInputFrame directInput)
+    {
+        RecordPushInputFrame(pushInput);
+        RecordDirectAttackInputFrame(directInput);
 
-        int sourceCount =
-            (mousePressed ? 1 : 0) +
-            (primaryPressed ? 1 : 0) +
-            (secondaryPressed ? 1 : 0);
-
-        if (sourceCount <= 0)
+        if (!pushInput.AnyPressed && !directInput.AnyPressed)
         {
             return;
         }
 
-        if (mousePressed)
+        if (pushInput.AnyPressed && directInput.AnyPressed &&
+            actionArbitrationSettings != null &&
+            actionArbitrationSettings.Enabled)
+        {
+            simultaneousActionInputFrameCount++;
+
+            switch (actionArbitrationSettings.SimultaneousInputPolicy)
+            {
+                case SimultaneousCombatActionPolicy.PreferNonlethalPush:
+                    simultaneousPushPriorityResolutionCount++;
+                    suppressedDirectAttackInputFrameCount++;
+                    ProcessNonlethalPushInput(pushInput);
+                    return;
+
+                case SimultaneousCombatActionPolicy.PreferDirectAttack:
+                    simultaneousDirectPriorityResolutionCount++;
+                    suppressedPushInputFrameCount++;
+                    ProcessDirectAttackInput(directInput);
+                    return;
+
+                case SimultaneousCombatActionPolicy.RejectBoth:
+                    simultaneousRejectBothCount++;
+                    suppressedPushInputFrameCount++;
+                    suppressedDirectAttackInputFrameCount++;
+                    return;
+            }
+        }
+
+        // Legacy/disabled arbitration retains deterministic processing order.
+        // With CB8 enabled, only one of these paths is reached per dual frame.
+        if (directInput.AnyPressed)
+        {
+            ProcessDirectAttackInput(directInput);
+        }
+
+        if (pushInput.AnyPressed)
+        {
+            ProcessNonlethalPushInput(pushInput);
+        }
+    }
+
+    private void RecordPushInputFrame(CombatInputFrame inputFrame)
+    {
+        if (!inputFrame.AnyPressed)
+        {
+            return;
+        }
+
+        if (inputFrame.MousePressed)
         {
             mousePushInputCount++;
         }
 
-        if (primaryPressed)
+        if (inputFrame.PrimaryPressed)
         {
             primaryKeyPushInputCount++;
         }
 
-        if (secondaryPressed)
+        if (inputFrame.SecondaryPressed)
         {
             secondaryKeyPushInputCount++;
         }
 
-        if (sourceCount > 1)
+        if (inputFrame.SourceCount > 1)
         {
             coalescedPushInputFrameCount++;
         }
+    }
 
+    private void RecordDirectAttackInputFrame(CombatInputFrame inputFrame)
+    {
+        if (!inputFrame.AnyPressed)
+        {
+            return;
+        }
+
+        directAttackInputFrameCount++;
+
+        if (inputFrame.MousePressed)
+        {
+            mouseDirectAttackInputCount++;
+        }
+
+        if (inputFrame.PrimaryPressed)
+        {
+            primaryKeyDirectAttackInputCount++;
+        }
+
+        if (inputFrame.SecondaryPressed)
+        {
+            secondaryKeyDirectAttackInputCount++;
+        }
+
+        if (inputFrame.SourceCount > 1)
+        {
+            coalescedDirectAttackInputFrameCount++;
+        }
+    }
+
+    private void ProcessNonlethalPushInput(CombatInputFrame inputFrame)
+    {
         int startedBefore = startedLeftPushActionCount;
         bool successful = TryPerformNonlethalPush();
         bool actionStarted = startedLeftPushActionCount > startedBefore;
 
         if (actionStarted)
         {
-            if (mousePressed)
+            if (inputFrame.MousePressed)
             {
                 mousePushStartedActionCount++;
             }
 
-            if (primaryPressed)
+            if (inputFrame.PrimaryPressed)
             {
                 primaryKeyPushStartedActionCount++;
             }
 
-            if (secondaryPressed)
+            if (inputFrame.SecondaryPressed)
             {
                 secondaryKeyPushStartedActionCount++;
             }
@@ -412,78 +780,79 @@ public sealed class PlayerCombatController : MonoBehaviour
             return;
         }
 
-        if (mousePressed)
+        if (inputFrame.MousePressed)
         {
             mousePushSuccessfulActionCount++;
         }
 
-        if (primaryPressed)
+        if (inputFrame.PrimaryPressed)
         {
             primaryKeyPushSuccessfulActionCount++;
         }
 
-        if (secondaryPressed)
+        if (inputFrame.SecondaryPressed)
         {
             secondaryKeyPushSuccessfulActionCount++;
         }
     }
 
-    private void CaptureReservedDirectAttackInputs()
+    private void ProcessDirectAttackInput(CombatInputFrame inputFrame)
     {
-        bool mousePressed =
-            inputBindings.EnableMouseDirectAttack &&
-            Input.GetMouseButtonDown(1);
+        int startedBefore = startedDirectAttackActionCount;
+        bool successful = TryPerformDirectAttack();
+        bool actionStarted =
+            startedDirectAttackActionCount > startedBefore;
 
-        bool primaryPressed = IsKeyPressedThisFrame(
-            inputBindings.DirectAttackPrimaryKey);
+        if (actionStarted)
+        {
+            if (inputFrame.MousePressed)
+            {
+                mouseDirectAttackStartedActionCount++;
+            }
 
-        bool secondaryPressed = IsKeyPressedThisFrame(
-            inputBindings.DirectAttackSecondaryKey);
+            if (inputFrame.PrimaryPressed)
+            {
+                primaryKeyDirectAttackStartedActionCount++;
+            }
 
-        int sourceCount =
-            (mousePressed ? 1 : 0) +
-            (primaryPressed ? 1 : 0) +
-            (secondaryPressed ? 1 : 0);
+            if (inputFrame.SecondaryPressed)
+            {
+                secondaryKeyDirectAttackStartedActionCount++;
+            }
+        }
 
-        if (sourceCount <= 0)
+        if (!successful)
         {
             return;
         }
 
-        directAttackInputFrameCount++;
-
-        if (mousePressed)
+        if (inputFrame.MousePressed)
         {
-            mouseDirectAttackInputCount++;
+            mouseDirectAttackSuccessfulActionCount++;
         }
 
-        if (primaryPressed)
+        if (inputFrame.PrimaryPressed)
         {
-            primaryKeyDirectAttackInputCount++;
+            primaryKeyDirectAttackSuccessfulActionCount++;
         }
 
-        if (secondaryPressed)
+        if (inputFrame.SecondaryPressed)
         {
-            secondaryKeyDirectAttackInputCount++;
+            secondaryKeyDirectAttackSuccessfulActionCount++;
         }
-
-        if (sourceCount > 1)
-        {
-            coalescedDirectAttackInputFrameCount++;
-        }
-
-        TryPerformDirectAttack();
     }
 
     /// <summary>
-    /// Stable direct-attack entry point reserved by CB4.5. The next combat
-    /// phase will implement damage through this method. Until then, requests
-    /// are observed without issuing attack ids or changing action timing.
+    /// Executes the facing-based damage action. CB7 adds a small collision-safe
+    /// nudge and Hit pause, while explicitly keeping nonlethal knockback decay
+    /// and post-knockback pursuit recovery isolated.
     /// </summary>
     public bool TryPerformDirectAttack()
     {
         if (!initialized ||
             !combatInputEnabled ||
+            directAttackSettings == null ||
+            !directAttackSettings.Enabled ||
             body == null ||
             health == null ||
             health.IsDead)
@@ -492,6 +861,157 @@ public sealed class PlayerCombatController : MonoBehaviour
         }
 
         reservedDirectAttackRequestCount++;
+
+        float actionStartedAt = Time.time;
+
+        if (directAttackRecoveryEndsAt >= 0f &&
+            actionStartedAt < directAttackRecoveryEndsAt)
+        {
+            directAttackRecoveryRejectCount++;
+            return false;
+        }
+
+        if (nextDirectAttackReadyAt >= 0f &&
+            actionStartedAt < nextDirectAttackReadyAt)
+        {
+            directAttackCooldownRejectCount++;
+            return false;
+        }
+
+        if (!ResolveDirectAttackAgainstPushRecovery(actionStartedAt))
+        {
+            return false;
+        }
+
+        if (nextLeftPushReadyAt >= 0f &&
+            actionStartedAt < nextLeftPushReadyAt)
+        {
+            directStartedWhilePushCooldownActiveCount++;
+        }
+
+        BeginDirectAttackActionTiming(actionStartedAt);
+
+        bool facingChangedThisFrame =
+            movement.RefreshInputAndFacingForCombat();
+
+        Vector2 origin = body.position;
+        CharacterFacingDirection actionFacing = movement.CurrentFacing;
+        Vector2 aimDirection = movement.FacingVector;
+
+        if (aimDirection.sqrMagnitude < MinimumAimMagnitude)
+        {
+            aimDirection = Vector2.down;
+            actionFacing = CharacterFacingDirection.South;
+        }
+
+        aimDirection.Normalize();
+        lastDirectAttackAimDirection = aimDirection;
+        lastDirectAttackFacing = actionFacing;
+        directAttackFacingSnapshotCount++;
+        directAttackObservedFacingMask |= 1 << (int)actionFacing;
+
+        if (facingChangedThisFrame)
+        {
+            directAttackSameFrameTurnCount++;
+        }
+
+        if (visualAnimator != null)
+        {
+            visualAnimator.SetFacingDirection(actionFacing);
+            directAttackVisualFacingSyncCount++;
+        }
+
+        CollectDirectAttackCandidates(origin, aimDirection);
+
+        CombatAttackId attackId = IssueAttackId(
+            CombatActionKind.DirectAttack);
+
+        int acceptedTargetCount = 0;
+        int targetLimit = Mathf.Min(
+            directAttackSettings.MaximumTargets,
+            directAttackCandidates.Count);
+
+        for (int i = 0; i < targetLimit; i++)
+        {
+            PushCandidate candidate = directAttackCandidates[i];
+
+            if (candidate.Receiver == null ||
+                candidate.Collider == null)
+            {
+                continue;
+            }
+
+            Vector2 targetPosition =
+                candidate.Receiver.Motor != null &&
+                candidate.Receiver.Motor.Body != null
+                    ? candidate.Receiver.Motor.Body.position
+                    : (Vector2)candidate.Receiver.transform.position;
+
+            Vector2 hitDirection = targetPosition - origin;
+
+            if (hitDirection.sqrMagnitude < MinimumAimMagnitude)
+            {
+                hitDirection = aimDirection;
+            }
+
+            hitDirection.Normalize();
+
+            CombatDisplacementRequest weakDisplacement =
+                default(CombatDisplacementRequest);
+
+            if (directAttackSettings.WeakDisplacementDistance > 0f)
+            {
+                weakDisplacement = new CombatDisplacementRequest(
+                    attackId,
+                    hitDirection,
+                    directAttackSettings.WeakDisplacementDistance,
+                    directAttackSettings.WeakDisplacementDuration,
+                    shouldCancelTimedNavigationSpeed: false);
+            }
+
+            CombatReactionRequest weakReaction =
+                default(CombatReactionRequest);
+
+            if (directAttackSettings.WeakHitPauseDuration > 0f)
+            {
+                weakReaction = new CombatReactionRequest(
+                    attackId,
+                    CombatReactionKind.Hit,
+                    directAttackSettings.WeakHitPauseDuration,
+                    shouldExtendExistingReaction: false,
+                    shouldCancelTimedNavigationSpeed: false,
+                    newReason: "CB7 direct attack weak hit reaction");
+            }
+
+            CombatHit hit = new CombatHit(
+                attackId,
+                CombatActionKind.DirectAttack,
+                gameObject,
+                DamageFaction.Player,
+                DamageAttribution.Player,
+                candidate.HitPoint,
+                hitDirection,
+                directAttackSettings.Damage,
+                weakDisplacement,
+                weakReaction,
+                shouldCountTowardKnockbackDecay: false,
+                shouldTriggerPursuitRecovery: false);
+
+            if (candidate.Receiver.TryReceiveCombatHit(hit))
+            {
+                acceptedTargetCount++;
+            }
+        }
+
+        lastAcceptedDirectAttackTargetCount = acceptedTargetCount;
+        acceptedDirectAttackTargetCount += acceptedTargetCount;
+
+        if (acceptedTargetCount > 0)
+        {
+            successfulDirectAttackActionCount++;
+            return true;
+        }
+
         return false;
     }
 
@@ -531,6 +1051,17 @@ public sealed class PlayerCombatController : MonoBehaviour
             return false;
         }
 
+        if (!ResolvePushAgainstDirectAttackRecovery(actionStartedAt))
+        {
+            return false;
+        }
+
+        if (nextDirectAttackReadyAt >= 0f &&
+            actionStartedAt < nextDirectAttackReadyAt)
+        {
+            pushStartedWhileDirectCooldownActiveCount++;
+        }
+
         BeginLeftPushActionTiming(actionStartedAt);
 
         bool facingChangedThisFrame =
@@ -565,7 +1096,8 @@ public sealed class PlayerCombatController : MonoBehaviour
 
         CollectPushCandidates(origin, aimDirection);
 
-        CombatAttackId attackId = IssueAttackId();
+        CombatAttackId attackId = IssueAttackId(
+            CombatActionKind.NonlethalPush);
         int acceptedTargetCount = 0;
         int targetLimit = Mathf.Min(
             nonlethalPushSettings.MaximumTargets,
@@ -644,9 +1176,133 @@ public sealed class PlayerCombatController : MonoBehaviour
     }
 
 
+    private bool ResolveDirectAttackAgainstPushRecovery(float now)
+    {
+        if (actionArbitrationSettings == null ||
+            !actionArbitrationSettings.Enabled ||
+            actionRecoveryEndsAt < 0f ||
+            now >= actionRecoveryEndsAt)
+        {
+            return true;
+        }
+
+        if (actionArbitrationSettings.DirectAttackDuringPushRecovery ==
+            CrossActionRecoveryPolicy.CancelCurrentRecovery)
+        {
+            CancelPushRecoveryForArbitration();
+            directCancelledPushRecoveryCount++;
+            return true;
+        }
+
+        directBlockedByPushRecoveryCount++;
+        return false;
+    }
+
+    private bool ResolvePushAgainstDirectAttackRecovery(float now)
+    {
+        if (actionArbitrationSettings == null ||
+            !actionArbitrationSettings.Enabled ||
+            directAttackRecoveryEndsAt < 0f ||
+            now >= directAttackRecoveryEndsAt)
+        {
+            return true;
+        }
+
+        if (actionArbitrationSettings.PushDuringDirectAttackRecovery ==
+            CrossActionRecoveryPolicy.CancelCurrentRecovery)
+        {
+            CancelDirectAttackRecoveryForArbitration();
+            pushCancelledDirectRecoveryCount++;
+            return true;
+        }
+
+        pushBlockedByDirectRecoveryCount++;
+        return false;
+    }
+
+    private void CancelPushRecoveryForArbitration()
+    {
+        actionRecoveryEndsAt = -1f;
+
+        if (movement != null)
+        {
+            movement.ClearTimedMovementScale(countCompletion: false);
+        }
+    }
+
+    private void CancelDirectAttackRecoveryForArbitration()
+    {
+        directAttackRecoveryEndsAt = -1f;
+
+        if (movement != null)
+        {
+            movement.ClearTimedMovementScale(countCompletion: false);
+        }
+    }
+
+    private void RecordActionStart(CombatActionKind actionKind)
+    {
+        int frame = Time.frameCount;
+
+        if (actionKind == CombatActionKind.NonlethalPush)
+        {
+            if (lastDirectActionStartFrame == frame)
+            {
+                dualActionStartFrameViolationCount++;
+            }
+
+            lastPushActionStartFrame = frame;
+        }
+        else if (actionKind == CombatActionKind.DirectAttack)
+        {
+            if (lastPushActionStartFrame == frame)
+            {
+                dualActionStartFrameViolationCount++;
+            }
+
+            lastDirectActionStartFrame = frame;
+        }
+
+        lastStartedActionKind = actionKind;
+    }
+
+    private void BeginDirectAttackActionTiming(float startedAt)
+    {
+        startedDirectAttackActionCount++;
+        executedDirectAttackActionCount++;
+        RecordActionStart(CombatActionKind.DirectAttack);
+        lastDirectAttackStartedAt = startedAt;
+        directAttackRecoveryEndsAt =
+            startedAt + directAttackSettings.AfterlagDuration;
+        nextDirectAttackReadyAt =
+            startedAt + directAttackSettings.CooldownDuration;
+
+        if (movement == null)
+        {
+            directAttackAfterlagMovementRejectCount++;
+            return;
+        }
+
+        bool movementAccepted =
+            movement.TryBeginTimedMovementScale(
+                directAttackSettings.AfterlagMovementMultiplier,
+                directAttackSettings.AfterlagDuration,
+                replaceExisting: true);
+
+        if (movementAccepted)
+        {
+            directAttackAfterlagMovementStartCount++;
+        }
+        else
+        {
+            directAttackAfterlagMovementRejectCount++;
+        }
+    }
+
     private void BeginLeftPushActionTiming(float startedAt)
     {
         startedLeftPushActionCount++;
+        RecordActionStart(CombatActionKind.NonlethalPush);
         lastLeftPushStartedAt = startedAt;
         actionRecoveryEndsAt =
             startedAt + nonlethalPushSettings.AfterlagDuration;
@@ -723,6 +1379,19 @@ public sealed class PlayerCombatController : MonoBehaviour
                 gameObject.name);
         }
 
+        if (directAttackSettings == null)
+        {
+            errors.Add(
+                gameObject.name +
+                ": Direct Attack settings are missing.");
+        }
+        else
+        {
+            directAttackSettings.CollectValidationErrors(
+                errors,
+                gameObject.name);
+        }
+
         if (inputBindings == null)
         {
             errors.Add(
@@ -735,6 +1404,115 @@ public sealed class PlayerCombatController : MonoBehaviour
                 errors,
                 gameObject.name);
         }
+
+        if (actionArbitrationSettings == null)
+        {
+            errors.Add(
+                gameObject.name +
+                ": Action Arbitration settings are missing.");
+        }
+        else
+        {
+            actionArbitrationSettings.CollectValidationErrors(
+                errors,
+                gameObject.name);
+        }
+    }
+
+    private void CollectDirectAttackCandidates(
+        Vector2 origin,
+        Vector2 aimDirection)
+    {
+        uniqueReceivers.Clear();
+        directAttackCandidates.Clear();
+        lastDirectAttackArcRejectedTargetCount = 0;
+
+        int overlapCount = Physics2D.OverlapCircle(
+            origin,
+            directAttackSettings.Range,
+            combatQueryFilter,
+            overlapResults);
+
+        float minimumDot = directAttackSettings.ArcAngle >= 359.9f
+            ? -1f
+            : Mathf.Cos(
+                directAttackSettings.HalfArcAngle *
+                Mathf.Deg2Rad);
+
+        for (int i = 0; i < overlapCount; i++)
+        {
+            Collider2D candidateCollider = overlapResults[i];
+
+            if (candidateCollider == null ||
+                candidateCollider.isTrigger)
+            {
+                continue;
+            }
+
+            EnemyCombatReceiver receiver =
+                candidateCollider.GetComponentInParent<
+                    EnemyCombatReceiver>();
+
+            if (receiver == null ||
+                !receiver.IsInitialized ||
+                receiver.Health == null ||
+                receiver.Health.IsDead ||
+                uniqueReceivers.Contains(receiver))
+            {
+                continue;
+            }
+
+            uniqueReceivers.Add(receiver);
+
+            Vector2 targetCenter = receiver.Motor != null &&
+                                   receiver.Motor.Body != null
+                ? receiver.Motor.Body.position
+                : (Vector2)receiver.transform.position;
+
+            Vector2 toTarget = targetCenter - origin;
+
+            if (toTarget.sqrMagnitude < MinimumAimMagnitude)
+            {
+                toTarget = aimDirection;
+            }
+
+            Vector2 targetDirection = toTarget.normalized;
+
+            if (Vector2.Dot(aimDirection, targetDirection) <
+                minimumDot)
+            {
+                lastDirectAttackArcRejectedTargetCount++;
+                directAttackArcRejectedTargetCount++;
+                continue;
+            }
+
+            Vector2 hitPoint = candidateCollider.ClosestPoint(origin);
+            float distance = Vector2.Distance(origin, hitPoint);
+
+            if (distance > directAttackSettings.Range + 0.001f)
+            {
+                continue;
+            }
+
+            if (!HasClearLineToTarget(
+                    origin,
+                    candidateCollider,
+                    receiver))
+            {
+                continue;
+            }
+
+            directAttackCandidates.Add(
+                new PushCandidate(
+                    receiver,
+                    candidateCollider,
+                    hitPoint,
+                    distance));
+        }
+
+        directAttackCandidates.Sort(
+            (first, second) =>
+                first.Distance.CompareTo(second.Distance));
     }
 
     private void CollectPushCandidates(
@@ -955,42 +1733,94 @@ public sealed class PlayerCombatController : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        NonlethalPushSettings settings = nonlethalPushSettings;
-
-        if (settings == null)
-        {
-            return;
-        }
-
         Vector2 origin = body != null
             ? body.position
             : (Vector2)transform.position;
 
-        Vector2 direction = lastAimDirection.sqrMagnitude >
-                            MinimumAimMagnitude
-            ? lastAimDirection.normalized
-            : Vector2.down;
+        if (nonlethalPushSettings != null)
+        {
+            Vector2 pushDirection = lastAimDirection.sqrMagnitude >
+                                    MinimumAimMagnitude
+                ? lastAimDirection.normalized
+                : Vector2.down;
 
-        Gizmos.color = new Color(0.2f, 0.9f, 1f, 0.8f);
-        Gizmos.DrawWireSphere(origin, settings.Range);
+            DrawFanGizmo(
+                origin,
+                pushDirection,
+                nonlethalPushSettings.Range,
+                nonlethalPushSettings.HalfArcAngle,
+                new Color(0.2f, 0.9f, 1f, 0.8f));
+        }
+
+        if (directAttackSettings != null)
+        {
+            Vector2 attackDirection =
+                lastDirectAttackAimDirection.sqrMagnitude >
+                MinimumAimMagnitude
+                    ? lastDirectAttackAimDirection.normalized
+                    : Vector2.down;
+
+            DrawFanGizmo(
+                origin,
+                attackDirection,
+                directAttackSettings.Range,
+                directAttackSettings.HalfArcAngle,
+                new Color(1f, 0.35f, 0.25f, 0.8f));
+        }
+    }
+
+    private static void DrawFanGizmo(
+        Vector2 origin,
+        Vector2 direction,
+        float range,
+        float halfArcAngle,
+        Color color)
+    {
+        Gizmos.color = color;
+        Gizmos.DrawWireSphere(origin, range);
 
         Vector2 leftBoundary = (Vector2)(Quaternion.Euler(
             0f,
             0f,
-            settings.HalfArcAngle) * (Vector3)direction);
+            halfArcAngle) * (Vector3)direction);
 
         Vector2 rightBoundary = (Vector2)(Quaternion.Euler(
             0f,
             0f,
-            -settings.HalfArcAngle) * (Vector3)direction);
+            -halfArcAngle) * (Vector3)direction);
 
         Gizmos.DrawLine(
             origin,
-            origin + leftBoundary * settings.Range);
+            origin + leftBoundary * range);
 
         Gizmos.DrawLine(
             origin,
-            origin + rightBoundary * settings.Range);
+            origin + rightBoundary * range);
+    }
+
+    private readonly struct CombatInputFrame
+    {
+        public readonly bool MousePressed;
+        public readonly bool PrimaryPressed;
+        public readonly bool SecondaryPressed;
+
+        public CombatInputFrame(
+            bool mousePressed,
+            bool primaryPressed,
+            bool secondaryPressed)
+        {
+            MousePressed = mousePressed;
+            PrimaryPressed = primaryPressed;
+            SecondaryPressed = secondaryPressed;
+        }
+
+        public bool AnyPressed =>
+            MousePressed || PrimaryPressed || SecondaryPressed;
+
+        public int SourceCount =>
+            (MousePressed ? 1 : 0) +
+            (PrimaryPressed ? 1 : 0) +
+            (SecondaryPressed ? 1 : 0);
     }
 
     private readonly struct PushCandidate

@@ -136,6 +136,11 @@ public sealed class EnemySpawner : MonoBehaviour
 
     [SerializeField, HideInInspector] private int sortingOrder = 20;
 
+    [Header("戰鬥：敵人臨時血條")]
+    [SerializeField]
+    private EnemyTemporaryHealthBarSettings temporaryHealthBarSettings =
+        EnemyTemporaryHealthBarSettings.CreateDefault();
+
     [Header("敵人碰撞")]
     [SerializeField, HideInInspector]
     private Vector2 colliderSize =
@@ -161,6 +166,15 @@ public sealed class EnemySpawner : MonoBehaviour
     public int MaxPathQueriesPerFrame => maxPathQueriesPerFrame;
     public bool SimplifiesCollinearPathWaypoints =>
         simplifyCollinearPathWaypoints;
+
+    public EnemyTemporaryHealthBarSettings TemporaryHealthBarSettings
+    {
+        get
+        {
+            EnsureTemporaryHealthBarSettings();
+            return temporaryHealthBarSettings;
+        }
+    }
 
     private void Awake()
     {
@@ -448,6 +462,7 @@ public sealed class EnemySpawner : MonoBehaviour
 
         CreateHealth(enemy, definition);
         CreateVisual(enemy, index, definition);
+        CreateTemporaryHealthBar(enemy, definition);
         CreatePhysics(enemy, definition);
         CreateContactDamage(enemy, definition);
 
@@ -565,6 +580,23 @@ public sealed class EnemySpawner : MonoBehaviour
             motor,
             stateMachine);
 
+        // CB6 subscribes after EnemyStateMachine so the Dead transition and
+        // motor cancellation happen before runtime hazards are sealed.
+        // EnemyManager registers after SpawnTestEnemies returns, so death
+        // attribution and active-list removal remain the manager's job.
+        EnemyDeathLifecycle deathLifecycle =
+            enemy.AddComponent<EnemyDeathLifecycle>();
+
+        deathLifecycle.Initialize(
+            enemy.GetComponent<Health>(),
+            identity,
+            stateMachine,
+            motor,
+            navigationAgent,
+            detection,
+            combatReceiver,
+            enemyAI);
+
         return enemy;
     }
 
@@ -679,6 +711,46 @@ public sealed class EnemySpawner : MonoBehaviour
                 ? definition.SortingOrder
                 : sortingOrder,
             GetAnimationProfile(enemyIndex, definition));
+    }
+
+    private void CreateTemporaryHealthBar(
+        GameObject enemy,
+        EnemyDefinition definition)
+    {
+        EnsureTemporaryHealthBarSettings();
+
+        bool enemyHealthBarEnabled =
+            definition == null ||
+            definition.TemporaryHealthBarEnabled;
+
+        if (!temporaryHealthBarSettings.Enabled ||
+            !enemyHealthBarEnabled)
+        {
+            return;
+        }
+
+        Health health = enemy.GetComponent<Health>();
+        EnemyVisual enemyVisual = enemy.GetComponent<EnemyVisual>();
+
+        if (health == null || enemyVisual == null)
+        {
+            return;
+        }
+
+        EnemyTemporaryHealthBar healthBar =
+            enemy.AddComponent<EnemyTemporaryHealthBar>();
+
+        healthBar.Initialize(
+            health,
+            enemyVisual,
+            temporaryHealthBarSettings,
+            true,
+            definition != null
+                ? definition.TemporaryHealthBarSizeMultiplier
+                : 1f,
+            definition != null
+                ? definition.TemporaryHealthBarOffset
+                : Vector2.zero);
     }
 
     private CharacterAnimationProfile GetAnimationProfile(
@@ -1160,6 +1232,19 @@ public sealed class EnemySpawner : MonoBehaviour
         colliderSize.y = Mathf.Max(
             0.05f,
             colliderSize.y);
+
+        EnsureTemporaryHealthBarSettings();
+    }
+
+    private void EnsureTemporaryHealthBarSettings()
+    {
+        if (temporaryHealthBarSettings == null)
+        {
+            temporaryHealthBarSettings =
+                EnemyTemporaryHealthBarSettings.CreateDefault();
+        }
+
+        temporaryHealthBarSettings.EnsureValid();
     }
 
     private void CreateFrictionlessMaterial()

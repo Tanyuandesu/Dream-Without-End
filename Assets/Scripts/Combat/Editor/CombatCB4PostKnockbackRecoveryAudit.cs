@@ -289,11 +289,11 @@ public static class CombatCB4PostKnockbackRecoveryAudit
                     "displacement ended.");
             }
 
-            if (state.LastPostDisplacementPauseCompletedAt >= 0f &&
+            if (state.LastPursuitRecoveryPauseCompletedAt >= 0f &&
                 motor.LastTimedNavigationSpeedStartedAt >= 0f &&
                 motor.LastTimedNavigationSpeedStartedAt +
                     TimeOrderTolerance <
-                    state.LastPostDisplacementPauseCompletedAt)
+                    state.LastPursuitRecoveryPauseCompletedAt)
             {
                 pauseBoostOrderViolations++;
                 errors.Add(

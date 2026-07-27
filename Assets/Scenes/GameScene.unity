@@ -10854,7 +10854,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   enemyCatalog: {fileID: 11400000, guid: 71fba5c7957df67b86496d59cdb93428, type: 2}
   defaultEnemyDefinition: {fileID: 11400000, guid: 21bb062c0bb5826579df4a0b0860fb97, type: 2}
-  enemyCount: 3
+  enemyCount: 1
   spawnNearPlayerFirst: 1
   excludeExitRoom: 1
   r83InjectNoLegalEnemyCellForControlledFailure: 0
@@ -11092,6 +11092,26 @@ MonoBehaviour:
   regenerationAmountPerTick: 1
   requireDamageBeforeRegeneration: 1
   moveSpeed: 5
+  nonlethalPushSettings:
+    enabled: 1
+    range: 1.35
+    arcAngle: 100
+    displacementDistance: 0.9
+    displacementDuration: 0.18
+    legacyReactionDuration: 0.22
+    maximumTargets: 8
+    cooldownDuration: 0.55
+    afterlagDuration: 0.18
+    afterlagMovementMultiplier: 0.45
+    cb3TimingInitialized: 1
+    cb35FacingInitialized: 1
+  combatInputBindings:
+    enableMouseNonlethalPush: 1
+    nonlethalPushPrimaryKey: 106
+    nonlethalPushSecondaryKey: 122
+    enableMouseDirectAttack: 1
+    directAttackPrimaryKey: 107
+    directAttackSecondaryKey: 120
 --- !u!114 &1036781217
 MonoBehaviour:
   m_ObjectHideFlags: 0

@@ -150,11 +150,12 @@ public static class CombatCB45MultiInputAudit
         }
 
         if (observation.IssuedAttackIds !=
-            observation.TotalStartedPushActions)
+            observation.TotalStartedPushActions +
+            observation.ExecutedDirectActions)
         {
             errors.Add(
-                "Issued attack ids must equal started nonlethal-push " +
-                "actions. Reserved direct-attack inputs must not issue ids.");
+                "Issued attack ids must equal started push actions plus " +
+                "executed direct-attack actions.");
         }
 
         if (observation.ReservedDirectRequests !=
@@ -165,11 +166,11 @@ public static class CombatCB45MultiInputAudit
                 "reserved common action request.");
         }
 
-        if (observation.ExecutedDirectActions != 0)
+        if (observation.ExecutedDirectActions > 0)
         {
-            errors.Add(
-                "CB4.5 must not execute a damaging direct attack before " +
-                "the damage phase is installed.");
+            notes.Add(
+                "CB5 or later is installed: direct-attack bindings now " +
+                "execute the shared damage-action entry point.");
         }
 
         bool pushMouseObserved =
@@ -308,8 +309,8 @@ public static class CombatCB45MultiInputAudit
         report.AppendLine(
             "PASS: Mouse, WASD-side keyboard and arrow-key-side keyboard " +
             "inputs share the same nonlethal-push pipeline. Right mouse, " +
-            "primary and secondary direct-attack inputs reach one reserved " +
-            "entry point without issuing damage or attack ids.");
+            "primary and secondary direct-attack inputs reach one shared " +
+            "entry point. Later phases may execute damage through it.");
         Debug.Log(report.ToString());
     }
 

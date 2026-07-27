@@ -51,6 +51,13 @@ MonoBehaviour:
   postKnockbackPursuitDuration: 0.5
   postKnockbackPursuitSpeedMultiplier: 1.2
   cb4KnockbackRecoveryInitialized: 1
+  directAttackWeakDisplacementMultiplier: 1
+  directAttackWeakHitPauseMultiplier: 1
+  cb7DirectHitResponseInitialized: 1
+  temporaryHealthBarEnabled: 1
+  temporaryHealthBarSizeMultiplier: 1
+  temporaryHealthBarOffset: {x: 0, y: 0}
+  cb95TemporaryHealthBarInitialized: 1
   attackMode: 0
   attackDamage: 5
   attackRange: 0.9

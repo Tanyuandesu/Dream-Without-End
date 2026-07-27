@@ -92,7 +92,7 @@ public static class CombatCB3ActionTimingAudit
             observation.StartedActions +=
                 controller.StartedLeftPushActionCount;
             observation.IssuedActions +=
-                controller.IssuedAttackCount;
+                controller.IssuedNonlethalPushAttackCount;
             observation.SuccessfulActions +=
                 controller.SuccessfulLeftPushActionCount;
             observation.AcceptedTargets +=
@@ -131,7 +131,7 @@ public static class CombatCB3ActionTimingAudit
             }
 
             if (controller.StartedLeftPushActionCount !=
-                controller.IssuedAttackCount)
+                controller.IssuedNonlethalPushAttackCount)
             {
                 errors.Add(
                     controller.gameObject.name +
@@ -139,13 +139,14 @@ public static class CombatCB3ActionTimingAudit
                     "CombatAttackId.");
             }
 
-            if (controller.AfterlagMovementStartCount !=
-                movement.TimedMovementScaleStartCount)
+            if (movement.TimedMovementScaleStartCount <
+                controller.AfterlagMovementStartCount)
             {
                 errors.Add(
                     controller.gameObject.name +
-                    ": combat afterlag starts do not match the movement " +
-                    "owner's timed-scale starts.");
+                    ": movement owner recorded fewer timed-scale starts " +
+                    "than the nonlethal-push controller. Later combat " +
+                    "actions may legitimately add more movement scales.");
             }
         }
 

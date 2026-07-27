@@ -8,6 +8,8 @@ using UnityEngine;
 /// CB2 additionally owns the runtime resistance level for this enemy instance.
 /// CB4 resolves each enemy's post-displacement pause and queues its pursuit
 /// recovery while EnemyStateMachine and EnemyMotor2D keep state/movement ownership.
+/// CB7 resolves a deliberately weak direct-attack displacement and Hit pause
+/// through the same owners without borrowing nonlethal decay or pursuit recovery.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(EnemyRuntimeContext))]
@@ -53,6 +55,24 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
     [SerializeField] private CombatActionKind lastAcceptedActionKind;
     [SerializeField] private int acceptedHitCount;
     [SerializeField] private int acceptedNonlethalPushCount;
+    [SerializeField] private int acceptedDirectAttackCount;
+    [SerializeField] private int acceptedDirectAttackWeakDisplacementCount;
+    [SerializeField] private int acceptedDirectAttackWeakReactionCount;
+    [SerializeField] private int directAttackReactionSuppressedByExistingCount;
+    [SerializeField] private int directAttackResponseResolutionCount;
+    [SerializeField] private int directAttackDecayIsolationViolationCount;
+    [SerializeField] private int directAttackPursuitIsolationViolationCount;
+    [SerializeField] private float lastDirectAttackDistanceMultiplier = 1f;
+    [SerializeField] private float lastDirectAttackPauseMultiplier = 1f;
+    [SerializeField] private float lastDirectAttackBaseDisplacementDistance;
+    [SerializeField] private float lastDirectAttackResolvedDisplacementDistance;
+    [SerializeField] private float lastDirectAttackBasePauseDuration;
+    [SerializeField] private float lastDirectAttackResolvedPauseDuration;
+    [SerializeField] private int acceptedDamageHitCount;
+    [SerializeField] private float totalAcceptedDamage;
+    [SerializeField] private float lastHealthBeforeDamage;
+    [SerializeField] private float lastHealthAfterDamage;
+    [SerializeField] private int directAttackPayloadViolationCount;
     [SerializeField] private int duplicateRejectCount;
     [SerializeField] private int busyRejectCount;
     [SerializeField] private CombatHit lastAcceptedHit;
@@ -76,6 +96,38 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
     public int AcceptedHitCount => acceptedHitCount;
     public int AcceptedNonlethalPushCount =>
         acceptedNonlethalPushCount;
+    public int AcceptedDirectAttackCount =>
+        acceptedDirectAttackCount;
+    public int AcceptedDirectAttackWeakDisplacementCount =>
+        acceptedDirectAttackWeakDisplacementCount;
+    public int AcceptedDirectAttackWeakReactionCount =>
+        acceptedDirectAttackWeakReactionCount;
+    public int DirectAttackReactionSuppressedByExistingCount =>
+        directAttackReactionSuppressedByExistingCount;
+    public int DirectAttackResponseResolutionCount =>
+        directAttackResponseResolutionCount;
+    public int DirectAttackDecayIsolationViolationCount =>
+        directAttackDecayIsolationViolationCount;
+    public int DirectAttackPursuitIsolationViolationCount =>
+        directAttackPursuitIsolationViolationCount;
+    public float LastDirectAttackDistanceMultiplier =>
+        lastDirectAttackDistanceMultiplier;
+    public float LastDirectAttackPauseMultiplier =>
+        lastDirectAttackPauseMultiplier;
+    public float LastDirectAttackBaseDisplacementDistance =>
+        lastDirectAttackBaseDisplacementDistance;
+    public float LastDirectAttackResolvedDisplacementDistance =>
+        lastDirectAttackResolvedDisplacementDistance;
+    public float LastDirectAttackBasePauseDuration =>
+        lastDirectAttackBasePauseDuration;
+    public float LastDirectAttackResolvedPauseDuration =>
+        lastDirectAttackResolvedPauseDuration;
+    public int AcceptedDamageHitCount => acceptedDamageHitCount;
+    public float TotalAcceptedDamage => totalAcceptedDamage;
+    public float LastHealthBeforeDamage => lastHealthBeforeDamage;
+    public float LastHealthAfterDamage => lastHealthAfterDamage;
+    public int DirectAttackPayloadViolationCount =>
+        directAttackPayloadViolationCount;
 
     public int DuplicateRejectCount => duplicateRejectCount;
     public int BusyRejectCount => busyRejectCount;
@@ -175,6 +227,26 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         lastAcceptedActionKind = CombatActionKind.Unspecified;
         acceptedHitCount = 0;
         acceptedNonlethalPushCount = 0;
+        acceptedDirectAttackCount = 0;
+        acceptedDirectAttackWeakDisplacementCount = 0;
+        acceptedDirectAttackWeakReactionCount = 0;
+        directAttackReactionSuppressedByExistingCount = 0;
+        directAttackResponseResolutionCount = 0;
+        directAttackDecayIsolationViolationCount = 0;
+        directAttackPursuitIsolationViolationCount = 0;
+        lastDirectAttackDistanceMultiplier = 1f;
+        lastDirectAttackPauseMultiplier = 1f;
+        lastDirectAttackBaseDisplacementDistance = 0f;
+        lastDirectAttackResolvedDisplacementDistance = 0f;
+        lastDirectAttackBasePauseDuration = 0f;
+        lastDirectAttackResolvedPauseDuration = 0f;
+        acceptedDamageHitCount = 0;
+        totalAcceptedDamage = 0f;
+        lastHealthBeforeDamage = health != null
+            ? health.CurrentHealth
+            : 0f;
+        lastHealthAfterDamage = lastHealthBeforeDamage;
+        directAttackPayloadViolationCount = 0;
         duplicateRejectCount = 0;
         busyRejectCount = 0;
         lastAcceptedHit = default(CombatHit);
@@ -218,16 +290,32 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         float acceptedAt = Time.time;
         TickKnockbackResistanceRecovery(acceptedAt);
 
+        int resistanceLevelBeforeDirectAttack =
+            currentKnockbackResistanceLevel;
+        int qualifyingPushCountBeforeDirectAttack =
+            qualifyingDecayPushCount;
+        int pursuitTriggerCountBeforeDirectAttack =
+            pursuitRecoveryTriggerCount;
+
+        CombatHit enemyResolvedBaseHit =
+            ApplyDirectAttackResponseResolution(hit);
+
         KnockbackResolution resolution =
-            ResolveKnockbackResistance(hit, acceptedAt);
+            ResolveKnockbackResistance(
+                enemyResolvedBaseHit,
+                acceptedAt);
 
         CombatHit resolvedHit = ApplyKnockbackResolution(
-            hit,
+            enemyResolvedBaseHit,
             resolution);
 
         bool displacementAccepted = false;
         bool reactionAccepted = false;
         bool damageAccepted = false;
+        bool suppressDirectReaction =
+            resolvedHit.ActionKind == CombatActionKind.DirectAttack &&
+            stateMachine != null &&
+            stateMachine.IsCombatReactionActive;
 
         if (resolvedHit.HasDisplacement)
         {
@@ -253,20 +341,26 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                         sourceCollider,
                         replaceExisting: false);
 
-                if (displacementAccepted)
+                if (displacementAccepted && resolvedHit.HasReaction)
                 {
-                    reactionAccepted = !resolvedHit.HasReaction ||
-                        stateMachine.TryBeginCombatReaction(
-                            resolvedHit.Reaction,
-                            resolvedHit.TriggersPursuitRecovery);
-
-                    if (!reactionAccepted &&
-                        resolvedHit.HasReaction)
+                    if (suppressDirectReaction)
                     {
-                        motor.CancelCombatDisplacement(
-                            CombatDisplacementEndReason.CancelledByOwner);
+                        directAttackReactionSuppressedByExistingCount++;
+                    }
+                    else
+                    {
+                        reactionAccepted =
+                            stateMachine.TryBeginCombatReaction(
+                                resolvedHit.Reaction,
+                                resolvedHit.TriggersPursuitRecovery);
 
-                        displacementAccepted = false;
+                        if (!reactionAccepted)
+                        {
+                            motor.CancelCombatDisplacement(
+                                CombatDisplacementEndReason.CancelledByOwner);
+
+                            displacementAccepted = false;
+                        }
                     }
                 }
             }
@@ -274,16 +368,39 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         else if (resolvedHit.HasReaction &&
                  stateMachine != null)
         {
-            reactionAccepted =
-                stateMachine.TryBeginCombatReaction(
-                    resolvedHit.Reaction,
-                    resolvedHit.TriggersPursuitRecovery);
+            if (suppressDirectReaction)
+            {
+                directAttackReactionSuppressedByExistingCount++;
+            }
+            else
+            {
+                reactionAccepted =
+                    stateMachine.TryBeginCombatReaction(
+                        resolvedHit.Reaction,
+                        resolvedHit.TriggersPursuitRecovery);
+            }
         }
+
+        float healthBeforeDamage = health.CurrentHealth;
 
         if (resolvedHit.HasDamage)
         {
             damageAccepted = health.ApplyDamage(
                 resolvedHit.ToDamageInfo());
+        }
+
+        float acceptedDamageAmount = 0f;
+
+        if (damageAccepted)
+        {
+            acceptedDamageAmount = Mathf.Max(
+                0f,
+                healthBeforeDamage - health.CurrentHealth);
+
+            acceptedDamageHitCount++;
+            totalAcceptedDamage += acceptedDamageAmount;
+            lastHealthBeforeDamage = healthBeforeDamage;
+            lastHealthAfterDamage = health.CurrentHealth;
         }
 
         bool accepted =
@@ -303,7 +420,7 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         {
             CommitKnockbackResolution(
                 resolution,
-                hit,
+                enemyResolvedBaseHit,
                 resolvedHit,
                 acceptedAt);
         }
@@ -327,6 +444,72 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         {
             acceptedNonlethalPushCount++;
         }
+
+        bool directPayloadViolation = false;
+        bool directDecayIsolationViolation = false;
+        bool directPursuitIsolationViolation = false;
+
+        if (resolvedHit.ActionKind == CombatActionKind.DirectAttack)
+        {
+            if (damageAccepted)
+            {
+                acceptedDirectAttackCount++;
+            }
+
+            if (displacementAccepted)
+            {
+                acceptedDirectAttackWeakDisplacementCount++;
+            }
+
+            if (reactionAccepted)
+            {
+                acceptedDirectAttackWeakReactionCount++;
+            }
+
+            directPayloadViolation =
+                resolvedHit.CountsTowardKnockbackDecay ||
+                resolvedHit.TriggersPursuitRecovery ||
+                (resolvedHit.HasDisplacement &&
+                 resolvedHit.Displacement.CancelTimedNavigationSpeed) ||
+                (resolvedHit.HasReaction &&
+                 (resolvedHit.Reaction.Kind != CombatReactionKind.Hit ||
+                  resolvedHit.Reaction.CancelTimedNavigationSpeed));
+
+            if (directPayloadViolation)
+            {
+                directAttackPayloadViolationCount++;
+            }
+
+            directDecayIsolationViolation =
+                currentKnockbackResistanceLevel !=
+                    resistanceLevelBeforeDirectAttack ||
+                qualifyingDecayPushCount !=
+                    qualifyingPushCountBeforeDirectAttack;
+
+            if (directDecayIsolationViolation)
+            {
+                directAttackDecayIsolationViolationCount++;
+            }
+
+            directPursuitIsolationViolation =
+                pursuitRecoveryTriggerCount !=
+                    pursuitTriggerCountBeforeDirectAttack;
+
+            if (directPursuitIsolationViolation)
+            {
+                directAttackPursuitIsolationViolationCount++;
+            }
+        }
+
+        CombatSystemDiagnostics.RecordAcceptedHit(
+            resolvedHit,
+            damageAccepted,
+            acceptedDamageAmount,
+            displacementAccepted,
+            reactionAccepted,
+            directPayloadViolation,
+            directDecayIsolationViolation,
+            directPursuitIsolationViolation);
 
         return true;
     }
@@ -453,6 +636,98 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         }
     }
 
+    private CombatHit ApplyDirectAttackResponseResolution(
+        CombatHit hit)
+    {
+        if (hit.ActionKind != CombatActionKind.DirectAttack ||
+            definition == null)
+        {
+            return hit;
+        }
+
+        float distanceMultiplier =
+            definition.DirectAttackWeakDisplacementMultiplier;
+        float pauseMultiplier =
+            definition.DirectAttackWeakHitPauseMultiplier;
+
+        CombatDisplacementRequest displacement =
+            default(CombatDisplacementRequest);
+
+        if (hit.HasDisplacement && distanceMultiplier > 0f)
+        {
+            float resolvedDistance =
+                hit.Displacement.Distance * distanceMultiplier;
+
+            if (resolvedDistance > 0f)
+            {
+                float resolvedDuration = Mathf.Max(
+                    MinimumScaledDuration,
+                    hit.Displacement.Duration * distanceMultiplier);
+
+                displacement = new CombatDisplacementRequest(
+                    hit.Displacement.AttackId,
+                    hit.Displacement.Direction,
+                    resolvedDistance,
+                    resolvedDuration,
+                    shouldCancelTimedNavigationSpeed: false);
+            }
+        }
+
+        CombatReactionRequest reaction =
+            default(CombatReactionRequest);
+
+        if (hit.HasReaction && pauseMultiplier > 0f)
+        {
+            float resolvedPause =
+                hit.Reaction.Duration * pauseMultiplier;
+
+            if (resolvedPause > 0f)
+            {
+                reaction = new CombatReactionRequest(
+                    hit.Reaction.AttackId,
+                    CombatReactionKind.Hit,
+                    resolvedPause,
+                    shouldExtendExistingReaction: false,
+                    shouldCancelTimedNavigationSpeed: false,
+                    newReason: hit.Reaction.Reason);
+            }
+        }
+
+        directAttackResponseResolutionCount++;
+        lastDirectAttackDistanceMultiplier = distanceMultiplier;
+        lastDirectAttackPauseMultiplier = pauseMultiplier;
+        lastDirectAttackBaseDisplacementDistance =
+            hit.HasDisplacement
+                ? hit.Displacement.Distance
+                : 0f;
+        lastDirectAttackResolvedDisplacementDistance =
+            displacement.IsValid
+                ? displacement.Distance
+                : 0f;
+        lastDirectAttackBasePauseDuration =
+            hit.HasReaction
+                ? hit.Reaction.Duration
+                : 0f;
+        lastDirectAttackResolvedPauseDuration =
+            reaction.IsValid
+                ? reaction.Duration
+                : 0f;
+
+        return new CombatHit(
+            hit.AttackId,
+            hit.ActionKind,
+            hit.Source,
+            hit.SourceFaction,
+            hit.Attribution,
+            hit.HitPoint,
+            hit.Direction,
+            hit.Damage,
+            displacement,
+            reaction,
+            shouldCountTowardKnockbackDecay: false,
+            shouldTriggerPursuitRecovery: false);
+    }
+
     private KnockbackResolution ResolveKnockbackResistance(
         CombatHit hit,
         float now)
@@ -531,7 +806,8 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                     hit.Displacement.AttackId,
                     hit.Displacement.Direction,
                     resolvedDistance,
-                    resolvedDuration);
+                    resolvedDuration,
+                    hit.Displacement.CancelTimedNavigationSpeed);
             }
         }
 
@@ -552,6 +828,7 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
                 hit.Reaction.Kind,
                 basePauseDuration * pauseMultiplier,
                 hit.Reaction.ExtendExistingReaction,
+                hit.Reaction.CancelTimedNavigationSpeed,
                 hit.Reaction.Reason);
         }
 

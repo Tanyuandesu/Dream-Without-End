@@ -7,6 +7,7 @@ using UnityEngine;
 /// 支援 Collision 與 Trigger。
 /// 持續接觸時依照 Hit Cooldown 再次造成傷害，
 /// 不會每個物理幀瘋狂扣血。
+/// CB6 在傷害來源死亡時立即停用本元件，避免幀末銷毀前的屍體傷害。
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Collider2D))]
@@ -22,15 +23,49 @@ public sealed class ContactDamage2D : MonoBehaviour
     [SerializeField] private DamageFactionMask targetFactions =
         DamageFactionMask.Player;
 
+    [Header("CB6 death safety (read only during Play Mode)")]
+    [SerializeField] private bool disabledBecauseSourceDied;
+    [SerializeField] private int sourceDeathDisableCount;
+
     private readonly Dictionary<int, float>
         nextHitTimeByTarget =
             new Dictionary<int, float>();
 
     private Health sourceHealth;
+    private bool subscribedToSourceHealth;
+
+    public bool DisabledBecauseSourceDied =>
+        disabledBecauseSourceDied;
+
+    public int SourceDeathDisableCount =>
+        sourceDeathDisableCount;
 
     private void Awake()
     {
-        sourceHealth = GetComponent<Health>();
+        CacheSourceHealth();
+        SubscribeToSourceHealth();
+    }
+
+    private void OnEnable()
+    {
+        CacheSourceHealth();
+        SubscribeToSourceHealth();
+
+        if (sourceHealth != null && sourceHealth.IsDead)
+        {
+            DisableForSourceDeath();
+        }
+    }
+
+    private void OnDisable()
+    {
+        UnsubscribeFromSourceHealth();
+        nextHitTimeByTarget.Clear();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeFromSourceHealth();
     }
 
     public void Initialize(
@@ -42,7 +77,38 @@ public sealed class ContactDamage2D : MonoBehaviour
         hitCooldown = Mathf.Max(0f, newHitCooldown);
         targetFactions = newTargetFactions;
 
-        sourceHealth = GetComponent<Health>();
+        CacheSourceHealth();
+        SubscribeToSourceHealth();
+
+        disabledBecauseSourceDied =
+            sourceHealth != null && sourceHealth.IsDead;
+        sourceDeathDisableCount = 0;
+
+        if (disabledBecauseSourceDied)
+        {
+            DisableForSourceDeath();
+        }
+    }
+
+    /// <summary>
+    /// Explicit CB6 shutdown entry used by EnemyDeathLifecycle. The health
+    /// subscription provides the same protection when this component is used
+    /// outside the standard enemy spawner.
+    /// </summary>
+    public void DisableForSourceDeath()
+    {
+        if (!disabledBecauseSourceDied)
+        {
+            disabledBecauseSourceDied = true;
+            sourceDeathDisableCount++;
+        }
+
+        nextHitTimeByTarget.Clear();
+
+        if (enabled)
+        {
+            enabled = false;
+        }
     }
 
     private void OnCollisionEnter2D(Collision2D collision)
@@ -83,7 +149,10 @@ public sealed class ContactDamage2D : MonoBehaviour
         Collider2D other,
         Vector2 hitPoint)
     {
-        if (damage <= 0f || other == null)
+        if (damage <= 0f ||
+            other == null ||
+            disabledBecauseSourceDied ||
+            (sourceHealth != null && sourceHealth.IsDead))
         {
             return;
         }
@@ -136,5 +205,41 @@ public sealed class ContactDamage2D : MonoBehaviour
             nextHitTimeByTarget[targetId] =
                 Time.time + hitCooldown;
         }
+    }
+
+    private void CacheSourceHealth()
+    {
+        if (sourceHealth == null)
+        {
+            sourceHealth = GetComponent<Health>();
+        }
+    }
+
+    private void SubscribeToSourceHealth()
+    {
+        if (subscribedToSourceHealth || sourceHealth == null)
+        {
+            return;
+        }
+
+        sourceHealth.Died += HandleSourceDied;
+        subscribedToSourceHealth = true;
+    }
+
+    private void UnsubscribeFromSourceHealth()
+    {
+        if (!subscribedToSourceHealth || sourceHealth == null)
+        {
+            subscribedToSourceHealth = false;
+            return;
+        }
+
+        sourceHealth.Died -= HandleSourceDied;
+        subscribedToSourceHealth = false;
+    }
+
+    private void HandleSourceDied(Health deadHealth)
+    {
+        DisableForSourceDeath();
     }
 }

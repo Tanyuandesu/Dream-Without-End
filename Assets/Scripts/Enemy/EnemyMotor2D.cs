@@ -330,7 +330,8 @@ public sealed class EnemyMotor2D : MonoBehaviour
                 CombatDisplacementEndReason.CancelledByReplacement);
         }
 
-        if (timedNavigationSpeedActive)
+        if (timedNavigationSpeedActive &&
+            request.CancelTimedNavigationSpeed)
         {
             FinishTimedNavigationSpeed(
                 TimedNavigationSpeedEndReason.CancelledByCombatDisplacement);
