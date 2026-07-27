@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -157,6 +158,11 @@ public sealed class PlayerCombatController : MonoBehaviour
 
     private readonly List<PushCandidate> directAttackCandidates =
         new List<PushCandidate>(16);
+
+    public event Action<
+        PlayerCombatController,
+        CombatActionKind,
+        CharacterFacingDirection> CombatActionAnimationRequested;
 
     public bool IsInitialized => initialized;
     public bool CombatInputEnabled => combatInputEnabled;
@@ -921,6 +927,11 @@ public sealed class PlayerCombatController : MonoBehaviour
             directAttackVisualFacingSyncCount++;
         }
 
+        CombatActionAnimationRequested?.Invoke(
+            this,
+            CombatActionKind.DirectAttack,
+            actionFacing);
+
         CollectDirectAttackCandidates(origin, aimDirection);
 
         CombatAttackId attackId = IssueAttackId(
@@ -1093,6 +1104,11 @@ public sealed class PlayerCombatController : MonoBehaviour
             visualAnimator.SetFacingDirection(actionFacing);
             visualFacingSyncCount++;
         }
+
+        CombatActionAnimationRequested?.Invoke(
+            this,
+            CombatActionKind.NonlethalPush,
+            actionFacing);
 
         CollectPushCandidates(origin, aimDirection);
 

@@ -267,10 +267,90 @@ public static class TemporaryCharacterAnimationInstaller
                 walkFrames,
                 walkFramesPerSecond,
                 true);
+
+            ConfigureTemporaryCombatSequences(
+                profile,
+                characterFolder,
+                filePrefix,
+                direction,
+                token);
         }
 
         EditorUtility.SetDirty(profile);
         return profile;
+    }
+
+    private static void ConfigureTemporaryCombatSequences(
+        CharacterAnimationProfile profile,
+        string characterFolder,
+        string filePrefix,
+        CharacterFacingDirection direction,
+        string token)
+    {
+        if (characterFolder == "StickHuman")
+        {
+            profile.SetSequence(
+                CharacterAnimationState.Attack,
+                direction,
+                LoadFrames(characterFolder, filePrefix, "DirectAttack", token, 4),
+                18f,
+                false);
+
+            profile.SetSequence(
+                CharacterAnimationState.Special,
+                direction,
+                LoadFrames(characterFolder, filePrefix, "Push", token, 4),
+                16f,
+                false);
+            return;
+        }
+
+        if (characterFolder == "StickCat")
+        {
+            profile.SetSequence(
+                CharacterAnimationState.Hurt,
+                direction,
+                LoadFrames(characterFolder, filePrefix, "WeakHit", token, 3),
+                18f,
+                false);
+
+            profile.SetSequence(
+                CharacterAnimationState.Special,
+                direction,
+                LoadFrames(characterFolder, filePrefix, "StrongKnockback", token, 4),
+                10f,
+                false);
+
+            profile.SetSequence(
+                CharacterAnimationState.Death,
+                direction,
+                LoadFrames(characterFolder, filePrefix, "Death", token, 5),
+                10f,
+                false);
+        }
+    }
+
+    private static Sprite[] LoadFrames(
+        string characterFolder,
+        string filePrefix,
+        string action,
+        string token,
+        int frameCount)
+    {
+        Sprite[] frames = new Sprite[frameCount];
+
+        for (int frame = 0; frame < frameCount; frame++)
+        {
+            frames[frame] = LoadSprite(
+                TemporaryRoot +
+                "/" + characterFolder +
+                "/" + filePrefix +
+                "_" + action +
+                "_" + token +
+                "_" + frame + ".png");
+        }
+
+        return frames;
     }
 
     private static Sprite LoadSprite(string assetPath)

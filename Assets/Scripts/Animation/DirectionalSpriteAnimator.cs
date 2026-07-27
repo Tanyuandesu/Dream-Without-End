@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -47,6 +48,16 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
     private SpriteAnimationSequence activeSequence;
     private bool activeFlipX;
     private ICharacterFacingSource facingSource;
+    private bool actionReachedEnd;
+
+    [Header("CB10A action diagnostics")]
+    [SerializeField] private int actionStartCount;
+    [SerializeField] private int actionCompleteCount;
+    [SerializeField] private CharacterAnimationState lastStartedAction;
+    [SerializeField] private CharacterAnimationState lastCompletedAction;
+
+    public event Action<DirectionalSpriteAnimator, CharacterAnimationState> ActionStarted;
+    public event Action<DirectionalSpriteAnimator, CharacterAnimationState> ActionCompleted;
 
     public CharacterAnimationProfile Profile => profile;
     public CharacterFacingDirection Facing => facing;
@@ -57,6 +68,32 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
 
     public bool IsMoving =>
         locomotionState == CharacterAnimationState.Walk;
+
+    public bool IsActionActive => actionActive;
+    public CharacterAnimationState ActiveActionState => actionState;
+    public int ActionStartCount => actionStartCount;
+    public int ActionCompleteCount => actionCompleteCount;
+
+    public float GetActionDuration(
+        CharacterAnimationState state,
+        CharacterFacingDirection direction)
+    {
+        if (profile == null)
+        {
+            return 0f;
+        }
+
+        bool unusedFlip;
+        SpriteAnimationSequence sequence =
+            profile.GetSequence(state, direction, out unusedFlip);
+
+        if (sequence == null || !sequence.HasFrames)
+        {
+            return 0f;
+        }
+
+        return sequence.FrameCount / sequence.FramesPerSecond;
+    }
 
     private void Awake()
     {
@@ -214,14 +251,19 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         actionActive = true;
         actionState = state;
         returnAfterAction = returnToLocomotion;
+        actionReachedEnd = false;
 
         RefreshSequence(true);
+        actionStartCount++;
+        lastStartedAction = state;
+        ActionStarted?.Invoke(this, state);
         return true;
     }
 
     public void ClearAction()
     {
         actionActive = false;
+        actionReachedEnd = false;
         RefreshSequence(true);
     }
 
@@ -233,6 +275,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         frameTimer = 0f;
         frameIndex = 0;
         activeSequence = null;
+        actionReachedEnd = false;
     }
 
     private bool TryApplyAuthoritativeFacing()
@@ -430,9 +473,18 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
             frameIndex =
                 activeSequence.FrameCount - 1;
 
+            if (actionActive && !actionReachedEnd)
+            {
+                actionReachedEnd = true;
+                actionCompleteCount++;
+                lastCompletedAction = actionState;
+                ActionCompleted?.Invoke(this, actionState);
+            }
+
             if (actionActive && returnAfterAction)
             {
                 actionActive = false;
+                actionReachedEnd = false;
                 RefreshSequence(true);
             }
 

@@ -274,6 +274,19 @@ public sealed class PlayerSpawner : MonoBehaviour
 
         combatController.SetCombatInputEnabled(
             combatInputBindings.HasAnyEnabledBinding);
+
+        DirectionalSpriteAnimator animator =
+            player.GetComponent<DirectionalSpriteAnimator>();
+
+        if (animator != null)
+        {
+            PlayerCombatAnimationBridge animationBridge =
+                player.AddComponent<PlayerCombatAnimationBridge>();
+
+            animationBridge.Initialize(
+                combatController,
+                animator);
+        }
     }
 
     private SpriteRenderer CreateVisual(Transform playerRoot)

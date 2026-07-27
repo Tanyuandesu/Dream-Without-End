@@ -580,6 +580,14 @@ public sealed class EnemySpawner : MonoBehaviour
             motor,
             stateMachine);
 
+        EnemyCombatAnimationBridge animationBridge =
+            enemy.AddComponent<EnemyCombatAnimationBridge>();
+
+        animationBridge.Initialize(
+            combatReceiver,
+            enemy.GetComponent<Health>(),
+            enemy.GetComponent<EnemyVisual>());
+
         // CB6 subscribes after EnemyStateMachine so the Dead transition and
         // motor cancellation happen before runtime hazards are sealed.
         // EnemyManager registers after SpawnTestEnemies returns, so death

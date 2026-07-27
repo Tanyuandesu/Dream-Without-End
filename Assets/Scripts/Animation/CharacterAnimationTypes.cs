@@ -28,8 +28,8 @@ public enum CharacterFacingDirection
 }
 
 /// <summary>
-/// CA1 当前实装 Idle 与 Walk。
-/// 其余状态先作为 PixelLab 正式资源的稳定接口。
+/// CA1 提供 Idle 与 Walk；CB10A 正式接通 Attack、Hurt、Death 与 Special。
+/// 这些状态保持为未来正式 PixelLab 资源的稳定接口。
 /// </summary>
 public enum CharacterAnimationState
 {

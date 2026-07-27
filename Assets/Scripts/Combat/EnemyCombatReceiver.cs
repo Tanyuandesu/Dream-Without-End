@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -82,6 +83,10 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
 
     private readonly HashSet<int> rememberedAttackIds =
         new HashSet<int>();
+
+    public event Action<
+        EnemyCombatReceiver,
+        CombatAnimationHitEvent> CombatAnimationHitAccepted;
 
     public bool IsInitialized => initialized;
     public EnemyRuntimeContext Context => context;
@@ -510,6 +515,15 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             directPayloadViolation,
             directDecayIsolationViolation,
             directPursuitIsolationViolation);
+
+        CombatAnimationHitAccepted?.Invoke(
+            this,
+            new CombatAnimationHitEvent(
+                resolvedHit,
+                damageAccepted,
+                displacementAccepted,
+                reactionAccepted,
+                suppressDirectReaction));
 
         return true;
     }

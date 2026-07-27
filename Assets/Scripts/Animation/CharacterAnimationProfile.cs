@@ -157,7 +157,7 @@ public sealed class CharacterAnimationProfile : ScriptableObject
     [SerializeField] private DirectionalSpriteSequenceSet walk =
         new DirectionalSpriteSequenceSet();
 
-    [Header("后续预留")]
+    [Header("战斗动作")]
     [SerializeField] private DirectionalSpriteSequenceSet attack =
         new DirectionalSpriteSequenceSet();
 
