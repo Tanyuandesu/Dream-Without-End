@@ -565,6 +565,23 @@ public sealed class EnemySpawner : MonoBehaviour
             motor,
             stateMachine);
 
+        // CB6 subscribes after EnemyStateMachine so the Dead transition and
+        // motor cancellation happen before runtime hazards are sealed.
+        // EnemyManager registers after SpawnTestEnemies returns, so death
+        // attribution and active-list removal remain the manager's job.
+        EnemyDeathLifecycle deathLifecycle =
+            enemy.AddComponent<EnemyDeathLifecycle>();
+
+        deathLifecycle.Initialize(
+            enemy.GetComponent<Health>(),
+            identity,
+            stateMachine,
+            motor,
+            navigationAgent,
+            detection,
+            combatReceiver,
+            enemyAI);
+
         return enemy;
     }
 

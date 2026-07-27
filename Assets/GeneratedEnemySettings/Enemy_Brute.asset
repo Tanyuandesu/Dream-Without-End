@@ -51,6 +51,9 @@ MonoBehaviour:
   postKnockbackPursuitDuration: 0.5
   postKnockbackPursuitSpeedMultiplier: 1.2
   cb4KnockbackRecoveryInitialized: 1
+  directAttackWeakDisplacementMultiplier: 1
+  directAttackWeakHitPauseMultiplier: 1
+  cb7DirectHitResponseInitialized: 1
   attackMode: 0
   attackDamage: 12
   attackRange: 1.15

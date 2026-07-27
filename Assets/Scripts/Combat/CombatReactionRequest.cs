@@ -21,12 +21,14 @@ public struct CombatReactionRequest
     [Min(0f)]
     [SerializeField] private float duration;
     [SerializeField] private bool extendExistingReaction;
+    [SerializeField] private bool cancelTimedNavigationSpeed;
     [SerializeField] private string reason;
 
     public CombatAttackId AttackId => attackId;
     public CombatReactionKind Kind => kind;
     public float Duration => duration;
     public bool ExtendExistingReaction => extendExistingReaction;
+    public bool CancelTimedNavigationSpeed => cancelTimedNavigationSpeed;
     public string Reason => reason;
 
     public bool IsValid =>
@@ -40,11 +42,30 @@ public struct CombatReactionRequest
         float newDuration,
         bool shouldExtendExistingReaction,
         string newReason)
+        : this(
+            newAttackId,
+            newKind,
+            newDuration,
+            shouldExtendExistingReaction,
+            shouldCancelTimedNavigationSpeed: true,
+            newReason: newReason)
+    {
+    }
+
+    public CombatReactionRequest(
+        CombatAttackId newAttackId,
+        CombatReactionKind newKind,
+        float newDuration,
+        bool shouldExtendExistingReaction,
+        bool shouldCancelTimedNavigationSpeed,
+        string newReason)
     {
         attackId = newAttackId;
         kind = newKind;
         duration = Mathf.Max(0f, newDuration);
         extendExistingReaction = shouldExtendExistingReaction;
+        cancelTimedNavigationSpeed =
+            shouldCancelTimedNavigationSpeed;
         reason = newReason ?? string.Empty;
     }
 }

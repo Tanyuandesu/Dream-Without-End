@@ -141,7 +141,7 @@ public static class CombatCB1RuntimeAudit
                     ": CB1 nonlethal push settings are disabled or missing.");
             }
 
-            issuedActions += controller.IssuedAttackCount;
+            issuedActions += controller.IssuedNonlethalPushAttackCount;
             successfulActions +=
                 controller.SuccessfulLeftPushActionCount;
             acceptedTargets +=

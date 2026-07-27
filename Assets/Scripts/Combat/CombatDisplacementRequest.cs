@@ -26,6 +26,7 @@ public struct CombatDisplacementRequest
     [SerializeField] private float distance;
     [Min(0f)]
     [SerializeField] private float duration;
+    [SerializeField] private bool cancelTimedNavigationSpeed;
 
     public CombatAttackId AttackId => attackId;
     public Vector2 Direction => direction;
@@ -36,6 +37,7 @@ public struct CombatDisplacementRequest
 
     public float Distance => distance;
     public float Duration => duration;
+    public bool CancelTimedNavigationSpeed => cancelTimedNavigationSpeed;
 
     public bool IsValid =>
         attackId.IsValid &&
@@ -48,10 +50,27 @@ public struct CombatDisplacementRequest
         Vector2 newDirection,
         float newDistance,
         float newDuration)
+        : this(
+            newAttackId,
+            newDirection,
+            newDistance,
+            newDuration,
+            shouldCancelTimedNavigationSpeed: true)
+    {
+    }
+
+    public CombatDisplacementRequest(
+        CombatAttackId newAttackId,
+        Vector2 newDirection,
+        float newDistance,
+        float newDuration,
+        bool shouldCancelTimedNavigationSpeed)
     {
         attackId = newAttackId;
         direction = newDirection;
         distance = Mathf.Max(0f, newDistance);
         duration = Mathf.Max(0f, newDuration);
+        cancelTimedNavigationSpeed =
+            shouldCancelTimedNavigationSpeed;
     }
 }

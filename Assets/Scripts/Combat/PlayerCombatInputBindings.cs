@@ -4,9 +4,8 @@ using UnityEngine;
 
 /// <summary>
 /// Configurable legacy-input bindings for player combat actions.
-/// CB4.5 routes mouse and keyboard inputs into the same action methods.
-/// Direct-attack inputs are captured now but intentionally remain reserved
-/// until the damage-attack phase is implemented.
+/// Mouse and keyboard inputs route into the same action methods. CB5 activates
+/// the direct-attack bindings without changing the CB4.5 key layout.
 /// </summary>
 [Serializable]
 public sealed class PlayerCombatInputBindings
@@ -21,14 +20,14 @@ public sealed class PlayerCombatInputBindings
     [Tooltip("Secondary keyboard binding used with arrow-key movement.")]
     [SerializeField] private KeyCode nonlethalPushSecondaryKey = KeyCode.Z;
 
-    [Header("Direct attack (reserved until damage phase)")]
-    [Tooltip("Capture the right mouse button as the future direct attack input.")]
+    [Header("Direct attack")]
+    [Tooltip("Allow the right mouse button to trigger the direct attack.")]
     [SerializeField] private bool enableMouseDirectAttack = true;
 
-    [Tooltip("Primary future direct-attack key used with WASD movement.")]
+    [Tooltip("Primary direct-attack key used with WASD movement.")]
     [SerializeField] private KeyCode directAttackPrimaryKey = KeyCode.K;
 
-    [Tooltip("Secondary future direct-attack key used with arrow-key movement.")]
+    [Tooltip("Secondary direct-attack key used with arrow-key movement.")]
     [SerializeField] private KeyCode directAttackSecondaryKey = KeyCode.X;
 
     public bool EnableMouseNonlethalPush => enableMouseNonlethalPush;
@@ -165,8 +164,7 @@ public sealed class PlayerCombatInputBindings
         {
             notes.Add(
                 prefix +
-                "Direct Attack has no binding. This does not block CB4.5, " +
-                "but no keyboard or mouse input will be ready for the next phase.");
+                "Direct Attack has no binding, so CB5 damage input is disabled.");
         }
     }
 

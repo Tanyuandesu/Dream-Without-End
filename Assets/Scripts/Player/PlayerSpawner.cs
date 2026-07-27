@@ -63,18 +63,37 @@ public sealed class PlayerSpawner : MonoBehaviour
     [Min(0.1f)]
     [SerializeField] private float moveSpeed = 5f;
 
-    [Header("战斗：CB4 八方向非致命击退与动作节奏")]
+    [Header("战斗：非致命击退")]
     [SerializeField]
     private NonlethalPushSettings nonlethalPushSettings =
         NonlethalPushSettings.CreateDefault();
 
-    [Header("战斗：CB4.5 鼠标与全键盘输入")]
+    [Header("战斗：直接伤害攻击")]
+    [SerializeField]
+    private DirectAttackSettings directAttackSettings =
+        DirectAttackSettings.CreateDefault();
+
+    [Header("战斗：鼠标与全键盘输入")]
     [SerializeField]
     private PlayerCombatInputBindings combatInputBindings =
         PlayerCombatInputBindings.CreateDefault();
 
+    [Header("战斗：双动作仲裁")]
+    [SerializeField]
+    private CombatActionArbitrationSettings actionArbitrationSettings =
+        CombatActionArbitrationSettings.CreateDefault();
+
+    public NonlethalPushSettings NonlethalPushSettings =>
+        nonlethalPushSettings;
+
+    public DirectAttackSettings DirectAttackSettings =>
+        directAttackSettings;
+
     public PlayerCombatInputBindings CombatInputBindings =>
         combatInputBindings;
+
+    public CombatActionArbitrationSettings ActionArbitrationSettings =>
+        actionArbitrationSettings;
 
     private Sprite fallbackSprite;
 
@@ -107,6 +126,14 @@ public sealed class PlayerSpawner : MonoBehaviour
 
         nonlethalPushSettings.EnsureValid();
 
+        if (directAttackSettings == null)
+        {
+            directAttackSettings =
+                DirectAttackSettings.CreateDefault();
+        }
+
+        directAttackSettings.EnsureValid();
+
         if (combatInputBindings == null)
         {
             combatInputBindings =
@@ -114,6 +141,14 @@ public sealed class PlayerSpawner : MonoBehaviour
         }
 
         combatInputBindings.EnsureValid();
+
+        if (actionArbitrationSettings == null)
+        {
+            actionArbitrationSettings =
+                CombatActionArbitrationSettings.CreateDefault();
+        }
+
+        actionArbitrationSettings.EnsureValid();
     }
 
     public GameObject Spawn(
@@ -209,10 +244,22 @@ public sealed class PlayerSpawner : MonoBehaviour
                 NonlethalPushSettings.CreateDefault();
         }
 
+        if (directAttackSettings == null)
+        {
+            directAttackSettings =
+                DirectAttackSettings.CreateDefault();
+        }
+
         if (combatInputBindings == null)
         {
             combatInputBindings =
                 PlayerCombatInputBindings.CreateDefault();
+        }
+
+        if (actionArbitrationSettings == null)
+        {
+            actionArbitrationSettings =
+                CombatActionArbitrationSettings.CreateDefault();
         }
 
         combatController.Initialize(
@@ -221,7 +268,9 @@ public sealed class PlayerSpawner : MonoBehaviour
             player.GetComponent<Health>(),
             player.GetComponent<DirectionalSpriteAnimator>(),
             nonlethalPushSettings,
-            combatInputBindings);
+            directAttackSettings,
+            combatInputBindings,
+            actionArbitrationSettings);
 
         combatController.SetCombatInputEnabled(
             combatInputBindings.HasAnyEnabledBinding);

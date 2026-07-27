@@ -110,7 +110,7 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float alertRadius = 0f;
 
-    [Header("CB4 nonlethal knockback response")]
+    [Header("Nonlethal knockback response")]
     [SerializeField]
     private KnockbackResistanceSettings knockbackResistance =
         KnockbackResistanceSettings.CreateDefault();
@@ -138,6 +138,24 @@ public sealed class EnemyDefinition : ScriptableObject
 
     [SerializeField, HideInInspector]
     private bool cb4KnockbackRecoveryInitialized;
+
+    [Header("Direct-attack weak hit response")]
+    [Tooltip(
+        "Per-enemy multiplier for the player's weak direct-attack nudge. " +
+        "Zero disables direct-attack movement for this enemy.")]
+    [Range(0f, 2f)]
+    [SerializeField]
+    private float directAttackWeakDisplacementMultiplier = 1f;
+
+    [Tooltip(
+        "Per-enemy multiplier for the player's weak direct-attack Hit pause. " +
+        "Zero disables the pause for this enemy.")]
+    [Range(0f, 2f)]
+    [SerializeField]
+    private float directAttackWeakHitPauseMultiplier = 1f;
+
+    [SerializeField, HideInInspector]
+    private bool cb7DirectHitResponseInitialized;
 
     [Header("Formal attack contract (activated in combat phase)")]
     [SerializeField] private EnemyAttackMode attackMode =
@@ -275,6 +293,24 @@ public sealed class EnemyDefinition : ScriptableObject
         }
     }
 
+    public float DirectAttackWeakDisplacementMultiplier
+    {
+        get
+        {
+            EnsureDirectHitResponseSettings();
+            return directAttackWeakDisplacementMultiplier;
+        }
+    }
+
+    public float DirectAttackWeakHitPauseMultiplier
+    {
+        get
+        {
+            EnsureDirectHitResponseSettings();
+            return directAttackWeakHitPauseMultiplier;
+        }
+    }
+
     public float DetectionRadius => detectionRadius;
     public float LoseTargetRadius => loseTargetRadius;
     public bool RequireLineOfSight => requireLineOfSight;
@@ -350,9 +386,41 @@ public sealed class EnemyDefinition : ScriptableObject
                 name + ": Projectile attack requires Projectile Speed above zero.");
         }
 
+        if (postKnockbackPauseDuration < 0f)
+        {
+            errors.Add(
+                name + ": Post Knockback Pause Duration cannot be negative.");
+        }
+
+        if (postKnockbackPursuitDuration < 0f)
+        {
+            errors.Add(
+                name + ": Post Knockback Pursuit Duration cannot be negative.");
+        }
+
+        if (postKnockbackPursuitSpeedMultiplier < 1f)
+        {
+            errors.Add(
+                name + ": Post Knockback Pursuit Speed Multiplier must be at least one.");
+        }
+
+        if (directAttackWeakDisplacementMultiplier < 0f ||
+            directAttackWeakDisplacementMultiplier > 2f)
+        {
+            errors.Add(
+                name + ": Direct Attack Weak Displacement Multiplier must be within 0..2.");
+        }
+
+        if (directAttackWeakHitPauseMultiplier < 0f ||
+            directAttackWeakHitPauseMultiplier > 2f)
+        {
+            errors.Add(
+                name + ": Direct Attack Weak Hit Pause Multiplier must be within 0..2.");
+        }
 
         EnsureKnockbackSettings();
         EnsureKnockbackRecoverySettings();
+        EnsureDirectHitResponseSettings();
         knockbackResistance.CollectValidationErrors(
             errors,
             name);
@@ -394,6 +462,34 @@ public sealed class EnemyDefinition : ScriptableObject
         postKnockbackPursuitSpeedMultiplier = Mathf.Max(
             1f,
             postKnockbackPursuitSpeedMultiplier);
+    }
+
+
+    private void EnsureDirectHitResponseSettings()
+    {
+        if (!cb7DirectHitResponseInitialized)
+        {
+            // Existing assets predate CB7. Preserve deliberately authored
+            // zeroes only after the initialization marker has been written.
+            if (directAttackWeakDisplacementMultiplier <= 0f &&
+                directAttackWeakHitPauseMultiplier <= 0f)
+            {
+                directAttackWeakDisplacementMultiplier = 1f;
+                directAttackWeakHitPauseMultiplier = 1f;
+            }
+
+            cb7DirectHitResponseInitialized = true;
+        }
+
+        directAttackWeakDisplacementMultiplier = Mathf.Clamp(
+            directAttackWeakDisplacementMultiplier,
+            0f,
+            2f);
+
+        directAttackWeakHitPauseMultiplier = Mathf.Clamp(
+            directAttackWeakHitPauseMultiplier,
+            0f,
+            2f);
     }
 
     private void OnValidate()
@@ -455,6 +551,7 @@ public sealed class EnemyDefinition : ScriptableObject
         EnsureKnockbackSettings();
         knockbackResistance.EnsureValid();
         EnsureKnockbackRecoverySettings();
+        EnsureDirectHitResponseSettings();
 
         detectionRadius = Mathf.Max(0.1f, detectionRadius);
         loseTargetRadius = Mathf.Max(

@@ -278,7 +278,7 @@ public static class CombatCB2DecayAudit
                     ": combat input is not enabled.");
             }
 
-            issuedActions += controller.IssuedAttackCount;
+            issuedActions += controller.IssuedNonlethalPushAttackCount;
             successfulActions +=
                 controller.SuccessfulLeftPushActionCount;
             acceptedTargets +=

@@ -144,13 +144,14 @@ public static class CombatCB35FacingAttackAudit
                     ": every started action must snapshot one facing.");
             }
 
-            if (movement.CombatFacingRefreshCount !=
+            if (movement.CombatFacingRefreshCount <
                 controller.StartedLeftPushActionCount)
             {
                 errors.Add(
                     controller.gameObject.name +
-                    ": every started action must refresh movement facing " +
-                    "exactly once before resolving its fan.");
+                    ": movement recorded fewer combat-facing refreshes than " +
+                    "started nonlethal-push actions. Later actions may add " +
+                    "more refreshes through the same facing source.");
             }
 
             if (controller.VisualAnimator != null &&
@@ -207,7 +208,7 @@ public static class CombatCB35FacingAttackAudit
             observation.StartedActions >= 3 &&
             observation.FacingBasedActions ==
                 observation.StartedActions &&
-            observation.CombatFacingRefreshes ==
+            observation.CombatFacingRefreshes >=
                 observation.StartedActions;
 
         bool frontHitObserved =

@@ -20,6 +20,21 @@ public sealed class EnemyManager : MonoBehaviour
 
     private int floorSessionSerial;
 
+    [Header("CB6 death and floor lifecycle diagnostics (read only)")]
+    [SerializeField] private int registeredEnemyCount;
+    [SerializeField] private int deathNotificationCount;
+    [SerializeField] private int recordedPlayerDeathCount;
+    [SerializeField] private int recordedOtherDeathCount;
+    [SerializeField] private int unregisterCount;
+    [SerializeField] private int duplicateDeathRecordCount;
+    [SerializeField] private int unexpectedRemovalCount;
+    [SerializeField] private int floorSetupCount;
+    [SerializeField] private int floorClearCount;
+    [SerializeField] private int lastClearSurvivorCount;
+    [SerializeField] private string lastDeathInstanceId = string.Empty;
+    [SerializeField] private DamageAttribution lastDeathAttribution =
+        DamageAttribution.Unspecified;
+
     public IReadOnlyList<GameObject> ActiveEnemies =>
         activeEnemies;
 
@@ -29,6 +44,19 @@ public sealed class EnemyManager : MonoBehaviour
         runRecord != null
             ? runRecord.CreateSnapshot()
             : new EnemyRunRecordSnapshot();
+
+    public int RegisteredEnemyCount => registeredEnemyCount;
+    public int DeathNotificationCount => deathNotificationCount;
+    public int RecordedPlayerDeathCount => recordedPlayerDeathCount;
+    public int RecordedOtherDeathCount => recordedOtherDeathCount;
+    public int UnregisterCount => unregisterCount;
+    public int DuplicateDeathRecordCount => duplicateDeathRecordCount;
+    public int UnexpectedRemovalCount => unexpectedRemovalCount;
+    public int FloorSetupCount => floorSetupCount;
+    public int FloorClearCount => floorClearCount;
+    public int LastClearSurvivorCount => lastClearSurvivorCount;
+    public string LastDeathInstanceId => lastDeathInstanceId;
+    public DamageAttribution LastDeathAttribution => lastDeathAttribution;
 
     public int ActiveEnemyCount
     {
@@ -123,6 +151,8 @@ public sealed class EnemyManager : MonoBehaviour
             floorSessionSerial,
             layout.Seed);
 
+        floorSetupCount++;
+
         List<GameObject> spawnedEnemies =
             enemySpawner.SpawnTestEnemies(
                 layout,
@@ -150,6 +180,7 @@ public sealed class EnemyManager : MonoBehaviour
         }
 
         activeEnemies.Add(enemy);
+        registeredEnemyCount++;
 
         Health health = enemy.GetComponent<Health>();
 
@@ -205,11 +236,21 @@ public sealed class EnemyManager : MonoBehaviour
                 HandleEnemyDestroyedUnexpectedly;
         }
 
-        activeEnemies.Remove(enemy);
+        if (activeEnemies.Remove(enemy))
+        {
+            unregisterCount++;
+        }
     }
 
     public void ClearFloor()
     {
+        lastClearSurvivorCount = 0;
+
+        if (activeEnemies.Count > 0)
+        {
+            floorClearCount++;
+        }
+
         for (int i = 0;
              i < activeEnemies.Count;
              i++)
@@ -233,9 +274,10 @@ public sealed class EnemyManager : MonoBehaviour
 
             if (identity != null)
             {
-                if (runRecord != null)
+                if (runRecord != null &&
+                    runRecord.MarkSurvivedFloor(identity))
                 {
-                    runRecord.MarkSurvivedFloor(identity);
+                    lastClearSurvivorCount++;
                 }
 
                 identity.DestroyedUnexpectedly -=
@@ -258,6 +300,8 @@ public sealed class EnemyManager : MonoBehaviour
             return;
         }
 
+        deathNotificationCount++;
+
         EnemyRuntimeIdentity identity =
             health.GetComponent<EnemyRuntimeIdentity>();
 
@@ -266,9 +310,33 @@ public sealed class EnemyManager : MonoBehaviour
                 ? health.LastAcceptedDamage.ResolvedAttribution
                 : DamageAttribution.Other;
 
+        lastDeathInstanceId = identity != null
+            ? identity.InstanceId
+            : health.gameObject.name;
+
+        lastDeathAttribution = attribution;
+
+        bool recorded = false;
+
         if (runRecord != null && identity != null)
         {
-            runRecord.RegisterDeath(identity, attribution);
+            recorded = runRecord.RegisterDeath(identity, attribution);
+        }
+
+        if (recorded)
+        {
+            if (attribution == DamageAttribution.Player)
+            {
+                recordedPlayerDeathCount++;
+            }
+            else
+            {
+                recordedOtherDeathCount++;
+            }
+        }
+        else
+        {
+            duplicateDeathRecordCount++;
         }
 
         UnregisterEnemy(health.gameObject);
@@ -297,7 +365,12 @@ public sealed class EnemyManager : MonoBehaviour
         identity.DestroyedUnexpectedly -=
             HandleEnemyDestroyedUnexpectedly;
 
-        activeEnemies.Remove(identity.gameObject);
+        if (activeEnemies.Remove(identity.gameObject))
+        {
+            unregisterCount++;
+        }
+
+        unexpectedRemovalCount++;
     }
 
     private void RemoveDestroyedReferences()
@@ -336,5 +409,18 @@ public sealed class EnemyManager : MonoBehaviour
 
         runRecord.ResetRun();
         floorSessionSerial = 0;
+
+        registeredEnemyCount = 0;
+        deathNotificationCount = 0;
+        recordedPlayerDeathCount = 0;
+        recordedOtherDeathCount = 0;
+        unregisterCount = 0;
+        duplicateDeathRecordCount = 0;
+        unexpectedRemovalCount = 0;
+        floorSetupCount = 0;
+        floorClearCount = 0;
+        lastClearSurvivorCount = 0;
+        lastDeathInstanceId = string.Empty;
+        lastDeathAttribution = DamageAttribution.Unspecified;
     }
 }
