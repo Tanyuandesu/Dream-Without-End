@@ -120,6 +120,11 @@ public static class EnemyEA1ConfigurationAudit
                 errors,
                 notes);
 
+            AuditT2SpawnPlan(
+                spawner,
+                errors,
+                notes);
+
             AuditT0SpawnBaseline(
                 spawner,
                 errors,
@@ -192,7 +197,111 @@ public static class EnemyEA1ConfigurationAudit
             spawner.name +
             ": T1 spawn-mode switch installed. Active=" +
             spawner.SpawnMode +
-            ". Temporary showcase remains runtime-guarded until T2.");
+            ". T2 plan builder is authoritative; showcase room " +
+            "assignment remains guarded until T3.");
+    }
+
+    private static void AuditT2SpawnPlan(
+        EnemySpawner spawner,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (spawner == null)
+        {
+            return;
+        }
+
+        List<EnemyDefinition> spawnPlan =
+            new List<EnemyDefinition>();
+        string failureReason;
+
+        if (!spawner.TryBuildConfiguredSpawnPlan(
+                spawnPlan,
+                out failureReason))
+        {
+            errors.Add(
+                spawner.name +
+                ": T2 spawn plan rejected. Reason=" +
+                failureReason);
+            return;
+        }
+
+        int expectedCount = spawner.SpawnMode ==
+            EnemySpawnMode.TemporaryFiveTypeShowcase
+                ? 5
+                : spawner.ConfiguredEnemyCount;
+
+        if (spawnPlan.Count != expectedCount)
+        {
+            errors.Add(
+                spawner.name +
+                ": T2 spawn plan count mismatch. Expected=" +
+                expectedCount +
+                ", Actual=" + spawnPlan.Count + ".");
+            return;
+        }
+
+        HashSet<EnemyId> usedIds = new HashSet<EnemyId>();
+
+        for (int i = 0; i < spawnPlan.Count; i++)
+        {
+            EnemyDefinition definition = spawnPlan[i];
+
+            if (definition == null)
+            {
+                errors.Add(
+                    spawner.name +
+                    ": T2 spawn plan slot " + i +
+                    " is null.");
+                continue;
+            }
+
+            if (!usedIds.Add(definition.Id) &&
+                spawner.SpawnMode ==
+                    EnemySpawnMode.TemporaryFiveTypeShowcase)
+            {
+                errors.Add(
+                    spawner.name +
+                    ": T2 showcase plan contains duplicate EnemyId '" +
+                    definition.Id + "'.");
+            }
+        }
+
+        notes.Add(
+            spawner.name +
+            ": T2 authoritative spawn plan ready. Mode=" +
+            spawner.SpawnMode +
+            ", Plan=" + DescribePlan(spawnPlan) +
+            ".");
+    }
+
+    private static string DescribePlan(
+        IReadOnlyList<EnemyDefinition> spawnPlan)
+    {
+        if (spawnPlan == null || spawnPlan.Count == 0)
+        {
+            return "[]";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.Append('[');
+
+        for (int i = 0; i < spawnPlan.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(", ");
+            }
+
+            EnemyDefinition definition = spawnPlan[i];
+            builder.Append(
+                definition != null
+                    ? definition.Id.Value
+                    : "legacy_enemy");
+        }
+
+        builder.Append(']');
+        return builder.ToString();
     }
 
     private static void AuditT0SpawnBaseline(
@@ -208,10 +317,10 @@ public static class EnemyEA1ConfigurationAudit
         if (spawner.SpawnMode !=
             EnemySpawnMode.BaselineSingleDefinition)
         {
-            errors.Add(
+            notes.Add(
                 spawner.name +
-                ": T1 acceptance requires Spawn Mode = " +
-                "Baseline Single Definition. Actual=" +
+                ": T0 baseline settings remain preserved but are " +
+                "currently inactive because Spawn Mode=" +
                 spawner.SpawnMode + ".");
         }
 

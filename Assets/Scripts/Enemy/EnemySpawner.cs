@@ -18,14 +18,23 @@ public sealed class EnemySpawner : MonoBehaviour
 {
     private const int R83EnemySelectionSalt = 830301;
 
+    private static readonly string[] TemporaryShowcaseEnemyIds =
+    {
+        "dream_wanderer",
+        "dream_scout",
+        "dream_hunter",
+        "dream_brute",
+        "dream_gazer"
+    };
+
     [Header("EA1 enemy data")]
     [Tooltip("Five stable enemy identities available to encounter authoring.")]
     [SerializeField] private EnemyCatalog enemyCatalog;
 
     [Tooltip(
         "Selects the authoritative enemy spawn input. " +
-        "T1 installs the switch only; keep Baseline Single Definition " +
-        "selected until T2 connects the five-type showcase roster.")]
+        "T2 builds and validates the selected Definition plan. " +
+        "Temporary showcase room assignment remains guarded until T3.")]
     [SerializeField] private EnemySpawnMode spawnMode =
         EnemySpawnMode.BaselineSingleDefinition;
 
@@ -190,6 +199,54 @@ public sealed class EnemySpawner : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// T2 authoritative input builder. This method decides only which
+    /// EnemyDefinitions belong to the current request. Room selection and
+    /// SpawnCell resolution remain separate stages.
+    /// </summary>
+    public bool TryBuildConfiguredSpawnPlan(
+        List<EnemyDefinition> destination,
+        out string failureReason)
+    {
+        failureReason = string.Empty;
+
+        if (destination == null)
+        {
+            failureReason =
+                "Spawn plan destination list is null.";
+            return false;
+        }
+
+        destination.Clear();
+
+        switch (spawnMode)
+        {
+            case EnemySpawnMode.BaselineSingleDefinition:
+            {
+                EnemyDefinition definition =
+                    ResolveDefaultDefinition();
+
+                for (int i = 0; i < enemyCount; i++)
+                {
+                    destination.Add(definition);
+                }
+
+                return true;
+            }
+
+            case EnemySpawnMode.TemporaryFiveTypeShowcase:
+                return TryBuildTemporaryShowcasePlan(
+                    destination,
+                    out failureReason);
+
+            default:
+                failureReason =
+                    "Enemy Spawn Mode contains an undefined value: " +
+                    spawnMode + ".";
+                return false;
+        }
+    }
+
     private void Awake()
     {
         ValidateSettings();
@@ -266,20 +323,34 @@ public sealed class EnemySpawner : MonoBehaviour
         ValidateSettings();
         CreateFrictionlessMaterial();
 
-        if (spawnMode != EnemySpawnMode.BaselineSingleDefinition)
+        List<EnemyDefinition> spawnPlan =
+            new List<EnemyDefinition>();
+        string planFailureReason;
+
+        if (!TryBuildConfiguredSpawnPlan(
+                spawnPlan,
+                out planFailureReason))
         {
             Debug.LogWarning(
-                "[EnemySpawner/T1] Temporary Five Type Showcase is " +
-                "installed but intentionally not connected until T2. " +
-                "Enemy generation was rejected instead of silently " +
-                "falling back to the baseline.",
+                "[EnemySpawner/T2] Enemy spawn plan was rejected. " +
+                "Reason=" + planFailureReason +
+                " | EnemiesSpawned=0",
                 this);
 
             return enemies;
         }
 
-        EnemyDefinition definition =
-            ResolveDefaultDefinition();
+        if (spawnMode == EnemySpawnMode.TemporaryFiveTypeShowcase)
+        {
+            Debug.Log(
+                "[EnemySpawner/T2] Authoritative five-type plan ready. " +
+                "Plan=" + DescribeSpawnPlan(spawnPlan) +
+                " | RoomAssignment=GuardedUntilT3" +
+                " | EnemiesSpawned=0",
+                this);
+
+            return enemies;
+        }
 
         List<int> candidateRoomIndices;
         int startRoomIndex;
@@ -304,11 +375,11 @@ public sealed class EnemySpawner : MonoBehaviour
         }
 
         int amount = Mathf.Clamp(
-            enemyCount,
+            spawnPlan.Count,
             0,
             candidateRoomIndices.Count);
 
-        if (enemyCount > 0 && amount == 0)
+        if (spawnPlan.Count > 0 && amount == 0)
         {
             LogR83EnemyRejection(
                 layout,
@@ -417,7 +488,7 @@ public sealed class EnemySpawner : MonoBehaviour
                 dungeonRoot,
                 dungeonRenderer,
                 player,
-                definition,
+                spawnPlan[i],
                 floorNumber,
                 floorSessionId,
                 spawnResult.RoomIndex,
@@ -1024,6 +1095,104 @@ public sealed class EnemySpawner : MonoBehaviour
             hash = hash * 31 + enemyIndex;
             return hash;
         }
+    }
+
+    private bool TryBuildTemporaryShowcasePlan(
+        List<EnemyDefinition> destination,
+        out string failureReason)
+    {
+        failureReason = string.Empty;
+
+        if (enemyCatalog == null)
+        {
+            failureReason =
+                "Temporary showcase requires an assigned Enemy Catalog.";
+            return false;
+        }
+
+        if (enemyCatalog.Count != TemporaryShowcaseEnemyIds.Length)
+        {
+            failureReason =
+                "Temporary showcase requires exactly " +
+                TemporaryShowcaseEnemyIds.Length +
+                " catalog definitions. Actual=" +
+                enemyCatalog.Count + ".";
+            return false;
+        }
+
+        HashSet<EnemyId> usedIds = new HashSet<EnemyId>();
+
+        for (int i = 0;
+             i < TemporaryShowcaseEnemyIds.Length;
+             i++)
+        {
+            string requiredId =
+                TemporaryShowcaseEnemyIds[i];
+            EnemyDefinition definition;
+
+            if (!enemyCatalog.TryGet(
+                    requiredId,
+                    out definition) ||
+                definition == null)
+            {
+                failureReason =
+                    "Temporary showcase catalog is missing EnemyId '" +
+                    requiredId + "'.";
+                destination.Clear();
+                return false;
+            }
+
+            if (!definition.Id.IsValid)
+            {
+                failureReason =
+                    "Temporary showcase contains an invalid EnemyId at " +
+                    "slot " + i + ".";
+                destination.Clear();
+                return false;
+            }
+
+            if (!usedIds.Add(definition.Id))
+            {
+                failureReason =
+                    "Temporary showcase contains duplicate EnemyId '" +
+                    definition.Id + "'.";
+                destination.Clear();
+                return false;
+            }
+
+            destination.Add(definition);
+        }
+
+        return true;
+    }
+
+    private static string DescribeSpawnPlan(
+        IReadOnlyList<EnemyDefinition> spawnPlan)
+    {
+        if (spawnPlan == null || spawnPlan.Count == 0)
+        {
+            return "[]";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        builder.Append('[');
+
+        for (int i = 0; i < spawnPlan.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(", ");
+            }
+
+            EnemyDefinition definition = spawnPlan[i];
+            builder.Append(
+                definition != null
+                    ? definition.Id.Value
+                    : "legacy_enemy");
+        }
+
+        builder.Append(']');
+        return builder.ToString();
     }
 
     private EnemyDefinition ResolveDefaultDefinition()

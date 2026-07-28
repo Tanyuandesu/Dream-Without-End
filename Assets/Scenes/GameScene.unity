@@ -10865,6 +10865,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyCatalog: {fileID: 11400000, guid: 71fba5c7957df67b86496d59cdb93428, type: 2}
+  spawnMode: 1
   defaultEnemyDefinition: {fileID: 11400000, guid: 21bb062c0bb5826579df4a0b0860fb97, type: 2}
   enemyCount: 3
   spawnNearPlayerFirst: 1
