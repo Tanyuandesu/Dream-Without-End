@@ -115,6 +115,11 @@ public static class EnemyEA1ConfigurationAudit
                     ": Default Enemy Definition is outside its catalog.");
             }
 
+            AuditT1SpawnModeSwitch(
+                spawner,
+                errors,
+                notes);
+
             AuditT0SpawnBaseline(
                 spawner,
                 errors,
@@ -163,6 +168,33 @@ public static class EnemyEA1ConfigurationAudit
         Debug.LogError(report.ToString());
     }
 
+    private static void AuditT1SpawnModeSwitch(
+        EnemySpawner spawner,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (spawner == null)
+        {
+            return;
+        }
+
+        if (!System.Enum.IsDefined(
+                typeof(EnemySpawnMode),
+                spawner.SpawnMode))
+        {
+            errors.Add(
+                spawner.name +
+                ": T1 Enemy Spawn Mode contains an undefined value.");
+            return;
+        }
+
+        notes.Add(
+            spawner.name +
+            ": T1 spawn-mode switch installed. Active=" +
+            spawner.SpawnMode +
+            ". Temporary showcase remains runtime-guarded until T2.");
+    }
+
     private static void AuditT0SpawnBaseline(
         EnemySpawner spawner,
         List<string> errors,
@@ -171,6 +203,16 @@ public static class EnemyEA1ConfigurationAudit
         if (spawner == null)
         {
             return;
+        }
+
+        if (spawner.SpawnMode !=
+            EnemySpawnMode.BaselineSingleDefinition)
+        {
+            errors.Add(
+                spawner.name +
+                ": T1 acceptance requires Spawn Mode = " +
+                "Baseline Single Definition. Actual=" +
+                spawner.SpawnMode + ".");
         }
 
         if (spawner.ConfiguredEnemyCount != 3)

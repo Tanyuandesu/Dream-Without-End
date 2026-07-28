@@ -3,6 +3,12 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
+public enum EnemySpawnMode
+{
+    BaselineSingleDefinition = 0,
+    TemporaryFiveTypeShowcase = 1
+}
+
 /// <summary>
 /// 測試敵人生成器。
 /// 包含外觀、生命、接觸傷害與目前 AI 參數。
@@ -17,7 +23,14 @@ public sealed class EnemySpawner : MonoBehaviour
     [SerializeField] private EnemyCatalog enemyCatalog;
 
     [Tooltip(
-        "EA1 currently spawns only this Definition so baseline behaviour " +
+        "Selects the authoritative enemy spawn input. " +
+        "T1 installs the switch only; keep Baseline Single Definition " +
+        "selected until T2 connects the five-type showcase roster.")]
+    [SerializeField] private EnemySpawnMode spawnMode =
+        EnemySpawnMode.BaselineSingleDefinition;
+
+    [Tooltip(
+        "Baseline mode spawns only this Definition so existing behaviour " +
         "remains unchanged.")]
     [SerializeField] private EnemyDefinition defaultEnemyDefinition;
 
@@ -156,6 +169,7 @@ public sealed class EnemySpawner : MonoBehaviour
     private bool loggedDefinitionOutsideCatalog;
 
     public EnemyCatalog Catalog => enemyCatalog;
+    public EnemySpawnMode SpawnMode => spawnMode;
     public EnemyDefinition DefaultEnemyDefinition =>
         defaultEnemyDefinition;
 
@@ -251,6 +265,18 @@ public sealed class EnemySpawner : MonoBehaviour
 
         ValidateSettings();
         CreateFrictionlessMaterial();
+
+        if (spawnMode != EnemySpawnMode.BaselineSingleDefinition)
+        {
+            Debug.LogWarning(
+                "[EnemySpawner/T1] Temporary Five Type Showcase is " +
+                "installed but intentionally not connected until T2. " +
+                "Enemy generation was rejected instead of silently " +
+                "falling back to the baseline.",
+                this);
+
+            return enemies;
+        }
 
         EnemyDefinition definition =
             ResolveDefaultDefinition();
@@ -1179,6 +1205,11 @@ public sealed class EnemySpawner : MonoBehaviour
 
     private void ValidateSettings()
     {
+        if (!Enum.IsDefined(typeof(EnemySpawnMode), spawnMode))
+        {
+            spawnMode = EnemySpawnMode.BaselineSingleDefinition;
+        }
+
         enemyCount = Mathf.Max(0, enemyCount);
         maxPathQueriesPerFrame = Mathf.Clamp(
             maxPathQueriesPerFrame > 0
