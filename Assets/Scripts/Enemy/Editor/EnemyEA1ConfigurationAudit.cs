@@ -125,6 +125,11 @@ public static class EnemyEA1ConfigurationAudit
                 errors,
                 notes);
 
+            AuditT3RoomAssignmentContract(
+                spawner,
+                errors,
+                notes);
+
             AuditT0SpawnBaseline(
                 spawner,
                 errors,
@@ -197,8 +202,8 @@ public static class EnemyEA1ConfigurationAudit
             spawner.name +
             ": T1 spawn-mode switch installed. Active=" +
             spawner.SpawnMode +
-            ". T2 plan builder is authoritative; showcase room " +
-            "assignment remains guarded until T3.");
+            ". T2 plan builder is authoritative; T3 room assignment " +
+            "is connected.");
     }
 
     private static void AuditT2SpawnPlan(
@@ -273,6 +278,59 @@ public static class EnemyEA1ConfigurationAudit
             spawner.SpawnMode +
             ", Plan=" + DescribePlan(spawnPlan) +
             ".");
+    }
+
+    private static void AuditT3RoomAssignmentContract(
+        EnemySpawner spawner,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (spawner == null)
+        {
+            return;
+        }
+
+        if (spawner.SpawnMode ==
+            EnemySpawnMode.TemporaryFiveTypeShowcase)
+        {
+            List<EnemyDefinition> spawnPlan =
+                new List<EnemyDefinition>();
+            string failureReason;
+
+            if (!spawner.TryBuildConfiguredSpawnPlan(
+                    spawnPlan,
+                    out failureReason))
+            {
+                errors.Add(
+                    spawner.name +
+                    ": T3 cannot assign rooms because the showcase " +
+                    "plan is invalid. Reason=" + failureReason);
+                return;
+            }
+
+            if (spawnPlan.Count != 5)
+            {
+                errors.Add(
+                    spawner.name +
+                    ": T3 showcase room assignment requires exactly " +
+                    "five plan entries. Actual=" +
+                    spawnPlan.Count + ".");
+                return;
+            }
+
+            notes.Add(
+                spawner.name +
+                ": T3 five-room assignment is active. Runtime requires " +
+                "at least five non-Start/non-Exit rooms and rejects the " +
+                "whole request before creation when that contract fails.");
+        }
+        else
+        {
+            notes.Add(
+                spawner.name +
+                ": T3 room-assignment path is installed but inactive " +
+                "because BaselineSingleDefinition is selected.");
+        }
     }
 
     private static string DescribePlan(

@@ -33,8 +33,9 @@ public sealed class EnemySpawner : MonoBehaviour
 
     [Tooltip(
         "Selects the authoritative enemy spawn input. " +
-        "T2 builds and validates the selected Definition plan. " +
-        "Temporary showcase room assignment remains guarded until T3.")]
+        "Baseline preserves the existing single-Definition flow. " +
+        "Temporary showcase assigns five stable enemy types to five " +
+        "non-Start/non-Exit rooms.")]
     [SerializeField] private EnemySpawnMode spawnMode =
         EnemySpawnMode.BaselineSingleDefinition;
 
@@ -295,7 +296,7 @@ public sealed class EnemySpawner : MonoBehaviour
     }
 
     /// <summary>
-    /// EA1 runtime entry. Floor Session Id makes every generated enemy
+    /// T3 runtime entry. Floor Session Id makes every generated enemy
     /// traceable even when the same floor is regenerated with the same seed.
     /// </summary>
     public List<GameObject> SpawnTestEnemies(
@@ -340,18 +341,6 @@ public sealed class EnemySpawner : MonoBehaviour
             return enemies;
         }
 
-        if (spawnMode == EnemySpawnMode.TemporaryFiveTypeShowcase)
-        {
-            Debug.Log(
-                "[EnemySpawner/T2] Authoritative five-type plan ready. " +
-                "Plan=" + DescribeSpawnPlan(spawnPlan) +
-                " | RoomAssignment=GuardedUntilT3" +
-                " | EnemiesSpawned=0",
-                this);
-
-            return enemies;
-        }
-
         List<int> candidateRoomIndices;
         int startRoomIndex;
         int exitRoomIndex;
@@ -374,10 +363,36 @@ public sealed class EnemySpawner : MonoBehaviour
             return enemies;
         }
 
-        int amount = Mathf.Clamp(
-            spawnPlan.Count,
-            0,
-            candidateRoomIndices.Count);
+        int amount;
+
+        if (spawnMode == EnemySpawnMode.TemporaryFiveTypeShowcase)
+        {
+            if (candidateRoomIndices.Count < spawnPlan.Count)
+            {
+                LogR83EnemyRejection(
+                    layout,
+                    "Temporary Five Type Showcase requires " +
+                    spawnPlan.Count +
+                    " non-Start/non-Exit rooms, but only " +
+                    candidateRoomIndices.Count +
+                    " are available. The request was rejected before " +
+                    "any enemy was created.",
+                    startRoomIndex,
+                    exitRoomIndex,
+                    runtimeSpawnReservations);
+
+                return enemies;
+            }
+
+            amount = spawnPlan.Count;
+        }
+        else
+        {
+            amount = Mathf.Clamp(
+                spawnPlan.Count,
+                0,
+                candidateRoomIndices.Count);
+        }
 
         if (spawnPlan.Count > 0 && amount == 0)
         {
@@ -506,6 +521,7 @@ public sealed class EnemySpawner : MonoBehaviour
         LogR83EnemyCommit(
             layout,
             spawnResults,
+            spawnPlan,
             startRoomIndex,
             exitRoomIndex,
             runtimeSpawnReservations);
@@ -941,10 +957,14 @@ public sealed class EnemySpawner : MonoBehaviour
             return false;
         }
 
-        if (excludeExitRoom && exitRoomIndex < 0)
+        bool mustExcludeExitRoom =
+            excludeExitRoom ||
+            spawnMode == EnemySpawnMode.TemporaryFiveTypeShowcase;
+
+        if (mustExcludeExitRoom && exitRoomIndex < 0)
         {
             failureReason =
-                "Exclude Exit Room 已开启，但无法确定 " +
+                "当前生成模式要求排除 Exit Room，但无法确定 " +
                 "ExitCell 所属房间。";
 
             return false;
@@ -963,7 +983,7 @@ public sealed class EnemySpawner : MonoBehaviour
                 continue;
             }
 
-            if (excludeExitRoom &&
+            if (mustExcludeExitRoom &&
                 roomIndex == exitRoomIndex)
             {
                 continue;
@@ -1166,35 +1186,6 @@ public sealed class EnemySpawner : MonoBehaviour
         return true;
     }
 
-    private static string DescribeSpawnPlan(
-        IReadOnlyList<EnemyDefinition> spawnPlan)
-    {
-        if (spawnPlan == null || spawnPlan.Count == 0)
-        {
-            return "[]";
-        }
-
-        StringBuilder builder = new StringBuilder();
-        builder.Append('[');
-
-        for (int i = 0; i < spawnPlan.Count; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append(", ");
-            }
-
-            EnemyDefinition definition = spawnPlan[i];
-            builder.Append(
-                definition != null
-                    ? definition.Id.Value
-                    : "legacy_enemy");
-        }
-
-        builder.Append(']');
-        return builder.ToString();
-    }
-
     private EnemyDefinition ResolveDefaultDefinition()
     {
         if (defaultEnemyDefinition == null)
@@ -1264,7 +1255,10 @@ public sealed class EnemySpawner : MonoBehaviour
             " | Seed=" + (layout != null ? layout.Seed : 0) +
             "\nStartRoomIndex=" + startRoomIndex +
             " | ExitRoomIndex=" + exitRoomIndex +
-            " | ExcludeExitRoom=" + excludeExitRoom +
+            " | SpawnMode=" + spawnMode +
+            " | ExcludeExitRoom=" +
+            (excludeExitRoom ||
+             spawnMode == EnemySpawnMode.TemporaryFiveTypeShowcase) +
             " | SharedReserved=" +
             (runtimeSpawnReservations != null
                 ? runtimeSpawnReservations.Count
@@ -1281,6 +1275,7 @@ public sealed class EnemySpawner : MonoBehaviour
     private void LogR83EnemyCommit(
         DungeonLayout layout,
         List<DungeonSpawnCellResult> spawnResults,
+        IReadOnlyList<EnemyDefinition> spawnPlan,
         int startRoomIndex,
         int exitRoomIndex,
         ISet<Vector2Int> runtimeSpawnReservations)
@@ -1303,24 +1298,37 @@ public sealed class EnemySpawner : MonoBehaviour
         }
 
         report.AppendLine(
-            "[EnemySpawner/R8.3] Enemy SpawnCell 已提交。");
+            "[EnemySpawner/T3] Enemy room assignment committed.");
 
         report.AppendLine(
             "Requested=SpawnPoint(Enemy)" +
-            " | RequestedCount=" + enemyCount +
+            " | SpawnMode=" + spawnMode +
+            " | RequestedCount=" +
+            (spawnPlan != null ? spawnPlan.Count : 0) +
             " | EffectiveCount=" + spawnResults.Count +
             " | Seed=" + layout.Seed +
             " | StartRoomIndex=" + startRoomIndex +
             " | ExitRoomIndex=" + exitRoomIndex +
-            " | ExcludeExitRoom=" + excludeExitRoom);
+            " | ExcludeExitRoom=" +
+            (excludeExitRoom ||
+             spawnMode == EnemySpawnMode.TemporaryFiveTypeShowcase));
 
         for (int i = 0; i < spawnResults.Count; i++)
         {
             DungeonSpawnCellResult result = spawnResults[i];
 
+            EnemyDefinition definition =
+                spawnPlan != null && i < spawnPlan.Count
+                    ? spawnPlan[i]
+                    : null;
+
             report.AppendLine(
                 "Enemy_" + (i + 1) +
-                " Requested=SpawnPoint(Enemy)" +
+                " EnemyId=" +
+                (definition != null
+                    ? definition.Id.Value
+                    : "legacy_enemy") +
+                " | Requested=SpawnPoint(Enemy)" +
                 " | Effective=" + result.Source +
                 " | RoomIndex=" + result.RoomIndex +
                 " | Cell=" + result.Cell +
