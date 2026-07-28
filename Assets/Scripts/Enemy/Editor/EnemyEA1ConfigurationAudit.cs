@@ -114,6 +114,11 @@ public static class EnemyEA1ConfigurationAudit
                     spawner.name +
                     ": Default Enemy Definition is outside its catalog.");
             }
+
+            AuditT0SpawnBaseline(
+                spawner,
+                errors,
+                notes);
         }
 
         if (sceneSpawnerCount == 0)
@@ -156,6 +161,149 @@ public static class EnemyEA1ConfigurationAudit
         }
 
         Debug.LogError(report.ToString());
+    }
+
+    private static void AuditT0SpawnBaseline(
+        EnemySpawner spawner,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (spawner == null)
+        {
+            return;
+        }
+
+        if (spawner.ConfiguredEnemyCount != 3)
+        {
+            errors.Add(
+                spawner.name +
+                ": T0 baseline requires Enemy Count = 3. Actual=" +
+                spawner.ConfiguredEnemyCount + ".");
+        }
+
+        if (spawner.DefaultEnemyDefinition != null &&
+            spawner.DefaultEnemyDefinition.Id.Value !=
+                "dream_wanderer")
+        {
+            errors.Add(
+                spawner.name +
+                ": T0 baseline Default Enemy Definition must be " +
+                "dream_wanderer. Actual=" +
+                spawner.DefaultEnemyDefinition.Id.Value + ".");
+        }
+
+        if (spawner.NavigationTopology !=
+            EnemyNavigationTopology.FourDirections)
+        {
+            errors.Add(
+                spawner.name +
+                ": T0 baseline navigation must remain FourDirections.");
+        }
+
+        if (spawner.MaxPathQueriesPerFrame != 2)
+        {
+            errors.Add(
+                spawner.name +
+                ": T0 baseline Max Path Queries Per Frame must be 2. " +
+                "Actual=" + spawner.MaxPathQueriesPerFrame + ".");
+        }
+
+        if (spawner.SimplifiesCollinearPathWaypoints)
+        {
+            errors.Add(
+                spawner.name +
+                ": T0 baseline Simplify Collinear Path Waypoints must be off.");
+        }
+
+        SerializedObject serializedSpawner =
+            new SerializedObject(spawner);
+
+        RequireSerializedBool(
+            serializedSpawner,
+            "spawnNearPlayerFirst",
+            true,
+            errors);
+
+        RequireSerializedBool(
+            serializedSpawner,
+            "excludeExitRoom",
+            true,
+            errors);
+
+        RequireSerializedBool(
+            serializedSpawner,
+            "r83InjectNoLegalEnemyCellForControlledFailure",
+            false,
+            errors);
+
+        RequireSerializedInt(
+            serializedSpawner,
+            "maxExpandedPathNodesPerQuery",
+            4096,
+            errors);
+
+        RequireSerializedInt(
+            serializedSpawner,
+            "navigationStartRecoveryRadiusInCells",
+            1,
+            errors);
+
+        notes.Add(
+            spawner.name +
+            ": T0 spawn baseline locked as 3 x dream_wanderer, " +
+            "nearest rooms first, Start/Exit excluded.");
+    }
+
+    private static void RequireSerializedBool(
+        SerializedObject target,
+        string fieldName,
+        bool expected,
+        List<string> errors)
+    {
+        SerializedProperty property =
+            target.FindProperty(fieldName);
+
+        if (property == null)
+        {
+            errors.Add(
+                target.targetObject.name +
+                ": missing serialized field " + fieldName + ".");
+            return;
+        }
+
+        if (property.boolValue != expected)
+        {
+            errors.Add(
+                target.targetObject.name +
+                ": " + fieldName + " must be " + expected +
+                ". Actual=" + property.boolValue + ".");
+        }
+    }
+
+    private static void RequireSerializedInt(
+        SerializedObject target,
+        string fieldName,
+        int expected,
+        List<string> errors)
+    {
+        SerializedProperty property =
+            target.FindProperty(fieldName);
+
+        if (property == null)
+        {
+            errors.Add(
+                target.targetObject.name +
+                ": missing serialized field " + fieldName + ".");
+            return;
+        }
+
+        if (property.intValue != expected)
+        {
+            errors.Add(
+                target.targetObject.name +
+                ": " + fieldName + " must be " + expected +
+                ". Actual=" + property.intValue + ".");
+        }
     }
 
     private static void AuditRunRecordContract(
