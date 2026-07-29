@@ -70,7 +70,10 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float patrolPauseDuration = 0.35f;
 
-    [Tooltip("Maximum A* path cost from HomeAnchor used by future chase.")]
+    [Tooltip(
+        "Maximum A* route cost accepted while tracking the player. " +
+        "If a chase route exceeds this limit, the enemy gives up and " +
+        "returns home. Measured in grid-cell movement cost.")]
     [Min(1)]
     [SerializeField] private int maximumChasePathCost = 32;
 
@@ -110,6 +113,9 @@ public sealed class EnemyDefinition : ScriptableObject
     [SerializeField] private bool requireLineOfSight;
     [SerializeField] private LayerMask obstacleMask = ~0;
 
+    [Tooltip(
+        "Initial target-acquisition cone in degrees. Once acquired, " +
+        "Lose Target Radius and line of sight control retention.")]
     [Range(1f, 360f)]
     [SerializeField] private float viewAngle = 360f;
 

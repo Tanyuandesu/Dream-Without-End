@@ -584,6 +584,15 @@ public sealed class EnemySpawner : MonoBehaviour
 
         pathfinder.Initialize(pathService);
 
+        EnemyMotor2D motor =
+            enemy.AddComponent<EnemyMotor2D>();
+
+        motor.Initialize(
+            enemy.GetComponent<Rigidbody2D>(),
+            definition != null
+                ? definition.MoveSpeed
+                : moveSpeed);
+
         EnemyDetection detection =
             enemy.AddComponent<EnemyDetection>();
 
@@ -600,16 +609,11 @@ public sealed class EnemySpawner : MonoBehaviour
                 : requireLineOfSight,
             definition != null
                 ? definition.ObstacleMask
-                : obstacleMask);
-
-        EnemyMotor2D motor =
-            enemy.AddComponent<EnemyMotor2D>();
-
-        motor.Initialize(
-            enemy.GetComponent<Rigidbody2D>(),
+                : obstacleMask,
             definition != null
-                ? definition.MoveSpeed
-                : moveSpeed);
+                ? definition.ViewAngle
+                : 360f,
+            motor);
 
         EnemyRuntimeContext runtimeContext =
             enemy.AddComponent<EnemyRuntimeContext>();
@@ -662,7 +666,9 @@ public sealed class EnemySpawner : MonoBehaviour
             definition != null
                 ? definition.FailedPathRetryDelay
                 : 0.5f,
-            0);
+            definition != null
+                ? definition.MaximumChasePathCost
+                : 0);
 
         runtimeContext.AttachNavigation(
             pathService,

@@ -26,9 +26,15 @@ MonoBehaviour:
   lastPositionTolerance: 0.15
   patrolRadiusInCells: 6
   patrolPauseDuration: 0.45
-  maximumChasePathCost: 32
+  maximumChasePathCost: 3
   searchRadiusInCells: 2
   searchDuration: 3
+  minimumRepathInterval: 0.08
+  stuckTimeout: 0.75
+  stuckMovementThreshold: 0.015
+  maximumRecoveryAttempts: 3
+  maximumRecoverySnapDistance: 0.8
+  failedPathRetryDelay: 0.5
   detectionRadius: 5.5
   loseTargetRadius: 8
   requireLineOfSight: 1

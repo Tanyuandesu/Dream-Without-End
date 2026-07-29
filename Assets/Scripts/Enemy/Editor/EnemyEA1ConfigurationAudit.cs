@@ -46,6 +46,11 @@ public static class EnemyEA1ConfigurationAudit
             errors,
             notes);
 
+        AuditT5BPerceptionAndChaseAuthoring(
+            definitions,
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -446,6 +451,57 @@ public static class EnemyEA1ConfigurationAudit
             "T5A behavior authoring is installed. Patrol Radius, Patrol Pause, " +
             "Search Radius and Search Duration are read from each " +
             "EnemyDefinition; GameplayRole does not override them.");
+    }
+
+    private static void AuditT5BPerceptionAndChaseAuthoring(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null)
+            {
+                continue;
+            }
+
+            if (definition.ViewAngle < 1f ||
+                definition.ViewAngle > 360f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T5B View Angle must be between 1 and 360 degrees.");
+            }
+
+            if (definition.MaximumChasePathCost < 1)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T5B Maximum Chase Path Cost must be at least 1.");
+            }
+
+            if (definition.LoseTargetRadius <
+                definition.DetectionRadius)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T5B Lose Target Radius cannot be smaller than " +
+                    "Detection Radius.");
+            }
+        }
+
+        notes.Add(
+            "T5B authoring is installed. View Angle gates initial " +
+            "acquisition, Require Line Of Sight gates perception, and " +
+            "Maximum Chase Path Cost is supplied to the shared A* agent. " +
+            "All values remain editable per EnemyDefinition.");
     }
 
     private static void AuditT0SpawnBaseline(

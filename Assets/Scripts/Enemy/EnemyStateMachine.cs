@@ -66,6 +66,11 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private int searchDestinationCount;
     [SerializeField] private int returnHomeCount;
 
+    [Header("T5B perception and chase leash")]
+    [SerializeField] private bool chasePathCostBlockedUntilTargetLost;
+    [SerializeField] private int chasePathCostRejectCount;
+    [SerializeField] private float lastChasePathCostRejectedAt = -1f;
+
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
     [SerializeField] private EnemyNavigationAgent navigationAgent;
@@ -105,6 +110,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
     public int PatrolDestinationCount => patrolDestinationCount;
     public int SearchDestinationCount => searchDestinationCount;
     public int ReturnHomeCount => returnHomeCount;
+    public bool IsChasePathCostBlocked =>
+        chasePathCostBlockedUntilTargetLost;
+    public int ChasePathCostRejectCount =>
+        chasePathCostRejectCount;
+    public float LastChasePathCostRejectedAt =>
+        lastChasePathCostRejectedAt;
 
     public bool IsCombatReactionActive => combatReactionActive;
     public CombatAttackId ActiveReactionAttackId =>
@@ -249,6 +260,9 @@ public sealed class EnemyStateMachine : MonoBehaviour
         patrolDestinationCount = 0;
         searchDestinationCount = 0;
         returnHomeCount = 0;
+        chasePathCostBlockedUntilTargetLost = false;
+        chasePathCostRejectCount = 0;
+        lastChasePathCostRejectedAt = -1f;
 
         if (!initialized)
         {
@@ -461,8 +475,34 @@ public sealed class EnemyStateMachine : MonoBehaviour
     {
         EnemyDetection detection = context.Detection;
 
+        if (chasePathCostBlockedUntilTargetLost &&
+            (detection == null || !detection.IsTargetDetected))
+        {
+            chasePathCostBlockedUntilTargetLost = false;
+        }
+
+        if (currentState == EnemyRuntimeState.Chase &&
+            navigationAgent.LastFailureReason ==
+                EnemyPathFailureReason.PathCostLimitExceeded)
+        {
+            chasePathCostBlockedUntilTargetLost = true;
+            chasePathCostRejectCount++;
+            lastChasePathCostRejectedAt = Time.time;
+
+            context.ClearLastKnownTargetPosition();
+            navigationAgent.StopMovement(
+                clearLastKnownPosition: false);
+
+            TransitionTo(
+                EnemyRuntimeState.ReturnToHomeOrPatrol,
+                "T5B maximum chase path cost exceeded");
+
+            return;
+        }
+
         if (detection != null &&
-            detection.IsTargetDetected)
+            detection.IsTargetDetected &&
+            !chasePathCostBlockedUntilTargetLost)
         {
             Vector2 observedPosition =
                 detection.LastKnownTargetPosition;

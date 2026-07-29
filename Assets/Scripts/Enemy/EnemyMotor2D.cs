@@ -54,6 +54,9 @@ public sealed class EnemyMotor2D : MonoBehaviour
     [SerializeField] private float activeNavigationSpeedMultiplier = 1f;
     [SerializeField] private float timedNavigationSpeedEndsAt = -1f;
 
+    [Header("T5B perception-facing authority")]
+    [SerializeField] private Vector2 facingDirection = Vector2.down;
+
     [Header("Runtime diagnostics (read only during Play Mode)")]
     [SerializeField] private bool initialized;
     [SerializeField] private bool hasMovementIntent;
@@ -90,6 +93,11 @@ public sealed class EnemyMotor2D : MonoBehaviour
     public Rigidbody2D Body => body;
     public Collider2D BodyCollider => bodyCollider;
     public float MoveSpeed => moveSpeed;
+    public Vector2 FacingDirection =>
+        facingDirection.sqrMagnitude > 0.000001f
+            ? facingDirection.normalized
+            : Vector2.down;
+
     public float EffectiveMoveSpeed =>
         moveSpeed * ActiveNavigationSpeedMultiplier;
 
@@ -237,6 +245,7 @@ public sealed class EnemyMotor2D : MonoBehaviour
         lastTimedNavigationSpeedEndReason =
             TimedNavigationSpeedEndReason.Completed;
 
+        facingDirection = Vector2.down;
         ResetTimedNavigationSpeedFields();
         ResetCombatDisplacementFields();
         initialized = body != null && bodyCollider != null;
@@ -266,6 +275,13 @@ public sealed class EnemyMotor2D : MonoBehaviour
 
         float safeTolerance = Mathf.Max(0.001f, tolerance);
         float step = EffectiveMoveSpeed * Time.fixedDeltaTime;
+
+        Vector2 movementDirection = destination - body.position;
+
+        if (movementDirection.sqrMagnitude > 0.000001f)
+        {
+            facingDirection = movementDirection.normalized;
+        }
 
         Vector2 nextPosition = Vector2.MoveTowards(
             body.position,

@@ -38,8 +38,9 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     [SerializeField] private float failedRequestRetryDelay = 0.5f;
 
     [Tooltip(
-        "EA3 keeps the accepted chase distance behaviour. The Definition's " +
-        "future chase-cost limit is activated with EA4 behaviour rules.")]
+        "Maximum A* path cost used while tracking a detected target. " +
+        "Zero means unlimited; EnemySpawner supplies EnemyDefinition." +
+        "MaximumChasePathCost in T5B.")]
     [SerializeField] private int maximumPathCostInCells;
 
     [Header("Runtime references")]
@@ -143,6 +144,11 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     public int PrefetchedRequestCount => prefetchedRequestCount;
     public int SeamlessPathSwapCount => seamlessPathSwapCount;
     public int RepathWaitCount => repathWaitCount;
+    public int ConfiguredMaximumPathCostInCells =>
+        maximumPathCostInCells;
+    public int ActiveMaximumPathCostInCells =>
+        activeMaximumPathCostInCells;
+    public int LastPathCost => lastPathCost;
 
     private void Awake()
     {
@@ -291,6 +297,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             return false;
         }
 
+        ClearFailureSnapshot();
         navigationIntent = EnemyNavigationIntent.FixedDestination;
         activeMaximumPathCostInCells = Mathf.Max(0, maximumPathCost);
         destinationReached = false;
@@ -307,6 +314,11 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         if (!initialized)
         {
             return;
+        }
+
+        if (navigationIntent != EnemyNavigationIntent.TrackingTarget)
+        {
+            ClearFailureSnapshot();
         }
 
         navigationIntent = EnemyNavigationIntent.TrackingTarget;
@@ -1040,6 +1052,18 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
 
         navigationStatus = EnemyNavigationStatus.Recovering;
         RefreshPathSnapshot();
+    }
+
+    private void ClearFailureSnapshot()
+    {
+        lastFailureReason = EnemyPathFailureReason.None;
+        lastFailureDetails = string.Empty;
+        retryFailedRequestAt = 0f;
+
+        if (navigationStatus == EnemyNavigationStatus.Failed)
+        {
+            navigationStatus = EnemyNavigationStatus.Idle;
+        }
     }
 
     private void RegisterFailure(

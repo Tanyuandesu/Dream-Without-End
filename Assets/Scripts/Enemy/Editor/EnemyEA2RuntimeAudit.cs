@@ -52,6 +52,7 @@ public static class EnemyEA2RuntimeAudit
         int verifiedDefinitionBindingCount = 0;
         int extendedBehaviorMachineCount = 0;
         int extendedNavigationAgentCount = 0;
+        int t5bRuntimeBindingCount = 0;
 
         for (int i = 0; i < allContexts.Length; i++)
         {
@@ -216,6 +217,13 @@ public static class EnemyEA2RuntimeAudit
             {
                 verifiedDefinitionBindingCount++;
             }
+
+            if (AuditT5BRuntimeBinding(
+                    context,
+                    errors))
+            {
+                t5bRuntimeBindingCount++;
+            }
         }
 
         if (runtimeEnemyCount == 0)
@@ -246,6 +254,12 @@ public static class EnemyEA2RuntimeAudit
             definitionCounts,
             errors,
             notes);
+
+        notes.Add(
+            "T5B verifies per-Definition view cones, motor-facing authority " +
+            "and Maximum Chase Path Cost binding. A path-cost rejection " +
+            "returns the enemy home and suppresses immediate reacquisition " +
+            "until the target leaves perception.");
 
         if (optionalTransitionLoggingCount > 0)
         {
@@ -278,6 +292,9 @@ public static class EnemyEA2RuntimeAudit
         report.AppendLine(
             "T5AExtendedNavigationAgents=" +
             extendedNavigationAgentCount + "/" + runtimeEnemyCount);
+        report.AppendLine(
+            "T5BRuntimeBindings=" +
+            t5bRuntimeBindingCount + "/" + runtimeEnemyCount);
 
         if (activeSpawner != null)
         {
@@ -512,6 +529,8 @@ public static class EnemyEA2RuntimeAudit
             " | Detect=" +
             DescribeFloat(definition.DetectionRadius) + "/" +
             DescribeFloat(definition.LoseTargetRadius) +
+            " | View=" + DescribeFloat(definition.ViewAngle) +
+            " | ChaseCost=" + definition.MaximumChasePathCost +
             " | Contact=" +
             (definition.EnableLegacyContactDamage
                 ? DescribeFloat(definition.LegacyContactDamage)
@@ -520,6 +539,84 @@ public static class EnemyEA2RuntimeAudit
             DescribeFloat(definition.VisualWorldHeight) +
             " | Color=#" +
             ColorUtility.ToHtmlStringRGBA(definition.VisualColor));
+
+        return valid;
+    }
+
+    private static bool AuditT5BRuntimeBinding(
+        EnemyRuntimeContext context,
+        List<string> errors)
+    {
+        if (context == null || context.Definition == null)
+        {
+            return false;
+        }
+
+        string prefix = context.gameObject.name + ": ";
+        EnemyDefinition definition = context.Definition;
+        EnemyDetection detection = context.Detection;
+        EnemyMotor2D motor = context.Motor;
+        EnemyNavigationAgent navigationAgent =
+            context.NavigationAgent;
+
+        bool valid = true;
+
+        if (detection == null ||
+            !Approximately(
+                detection.ViewAngle,
+                definition.ViewAngle))
+        {
+            errors.Add(
+                prefix +
+                "T5B View Angle runtime binding does not match Definition.");
+            valid = false;
+        }
+
+        if (detection == null ||
+            detection.FacingSource != motor)
+        {
+            errors.Add(
+                prefix +
+                "T5B EnemyDetection does not use the authoritative " +
+                "EnemyMotor2D facing source.");
+            valid = false;
+        }
+
+        if (motor == null ||
+            motor.FacingDirection.sqrMagnitude <= 0.99f)
+        {
+            errors.Add(
+                prefix +
+                "T5B motor facing direction is unavailable or not normalized.");
+            valid = false;
+        }
+
+        if (navigationAgent == null ||
+            navigationAgent.ConfiguredMaximumPathCostInCells !=
+                definition.MaximumChasePathCost)
+        {
+            errors.Add(
+                prefix +
+                "T5B Maximum Chase Path Cost runtime binding mismatch. " +
+                "Runtime=" +
+                (navigationAgent != null
+                    ? navigationAgent.ConfiguredMaximumPathCostInCells
+                    : -1) +
+                ", Definition=" +
+                definition.MaximumChasePathCost + ".");
+            valid = false;
+        }
+
+        EnemyStateMachine stateMachine =
+            context.GetComponent<EnemyStateMachine>();
+
+        if (stateMachine == null)
+        {
+            errors.Add(
+                prefix +
+                "T5B chase-leash state owner is missing.");
+            valid = false;
+        }
 
         return valid;
     }
