@@ -62,13 +62,21 @@ public sealed class EnemyDefinition : ScriptableObject
     [Range(0.01f, 1f)]
     [SerializeField] private float lastPositionTolerance = 0.15f;
 
-    [Tooltip("Maximum A* path cost from HomeAnchor used by future patrol.")]
+    [Tooltip("Maximum patrol selection radius around HomeAnchor, measured in grid cells.")]
     [Min(0)]
     [SerializeField] private int patrolRadiusInCells = 6;
+
+    [Tooltip("Pause after reaching a patrol point before choosing the next one.")]
+    [Min(0f)]
+    [SerializeField] private float patrolPauseDuration = 0.35f;
 
     [Tooltip("Maximum A* path cost from HomeAnchor used by future chase.")]
     [Min(1)]
     [SerializeField] private int maximumChasePathCost = 32;
+
+    [Tooltip("Radius around the last known target cell used by Search movement.")]
+    [Min(0)]
+    [SerializeField] private int searchRadiusInCells = 2;
 
     [Min(0f)]
     [SerializeField] private float searchDuration = 3f;
@@ -241,7 +249,9 @@ public sealed class EnemyDefinition : ScriptableObject
     public float StopDistance => stopDistance;
     public float LastPositionTolerance => lastPositionTolerance;
     public int PatrolRadiusInCells => patrolRadiusInCells;
+    public float PatrolPauseDuration => patrolPauseDuration;
     public int MaximumChasePathCost => maximumChasePathCost;
+    public int SearchRadiusInCells => searchRadiusInCells;
     public float MinimumRepathInterval =>
         minimumRepathInterval > 0f
             ? minimumRepathInterval
@@ -414,6 +424,26 @@ public sealed class EnemyDefinition : ScriptableObject
         {
             errors.Add(
                 name + ": Lose Target Radius must be at least Detection Radius.");
+        }
+
+        if (patrolRadiusInCells < 0)
+        {
+            errors.Add(name + ": Patrol Radius In Cells cannot be negative.");
+        }
+
+        if (patrolPauseDuration < 0f)
+        {
+            errors.Add(name + ": Patrol Pause Duration cannot be negative.");
+        }
+
+        if (searchRadiusInCells < 0)
+        {
+            errors.Add(name + ": Search Radius In Cells cannot be negative.");
+        }
+
+        if (searchDuration < 0f)
+        {
+            errors.Add(name + ": Search Duration cannot be negative.");
         }
 
         if (animationProfile == null)

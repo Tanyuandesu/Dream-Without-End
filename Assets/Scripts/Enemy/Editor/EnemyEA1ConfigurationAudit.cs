@@ -41,6 +41,11 @@ public static class EnemyEA1ConfigurationAudit
             errors,
             notes);
 
+        AuditT5ABehaviorAuthoring(
+            definitions,
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -405,6 +410,42 @@ public static class EnemyEA1ConfigurationAudit
             colorKeys.Count + "/" + definitions.Length +
             ". These colors are editable presentation data only; " +
             "GameplayRole never overrides Definition values.");
+    }
+
+    private static void AuditT5ABehaviorAuthoring(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null)
+            {
+                continue;
+            }
+
+            if (definition.PatrolRadiusInCells < 0 ||
+                definition.PatrolPauseDuration < 0f ||
+                definition.SearchRadiusInCells < 0 ||
+                definition.SearchDuration < 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T5A patrol/search authoring values cannot be negative.");
+            }
+        }
+
+        notes.Add(
+            "T5A behavior authoring is installed. Patrol Radius, Patrol Pause, " +
+            "Search Radius and Search Duration are read from each " +
+            "EnemyDefinition; GameplayRole does not override them.");
     }
 
     private static void AuditT0SpawnBaseline(

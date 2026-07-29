@@ -50,6 +50,8 @@ public static class EnemyEA2RuntimeAudit
         int legacyAdapterCount = 0;
         int optionalTransitionLoggingCount = 0;
         int verifiedDefinitionBindingCount = 0;
+        int extendedBehaviorMachineCount = 0;
+        int extendedNavigationAgentCount = 0;
 
         for (int i = 0; i < allContexts.Length; i++)
         {
@@ -168,6 +170,29 @@ public static class EnemyEA2RuntimeAudit
                     optionalTransitionLoggingCount++;
                 }
 
+                if (stateMachine.UsesExtendedBehaviorLoop)
+                {
+                    extendedBehaviorMachineCount++;
+                }
+                else
+                {
+                    errors.Add(
+                        context.gameObject.name +
+                        ": T5A extended patrol/search/return loop is inactive.");
+                }
+
+                if (stateMachine.NavigationAgent != null &&
+                    stateMachine.NavigationAgent.SupportsExtendedBehaviorStates)
+                {
+                    extendedNavigationAgentCount++;
+                }
+                else
+                {
+                    errors.Add(
+                        context.gameObject.name +
+                        ": T5A navigation agent does not support extended states.");
+                }
+
                 AddStateCount(
                     stateCounts,
                     stateMachine.CurrentState);
@@ -247,6 +272,12 @@ public static class EnemyEA2RuntimeAudit
         report.AppendLine(
             "T4DefinitionBindings=" +
             verifiedDefinitionBindingCount + "/" + runtimeEnemyCount);
+        report.AppendLine(
+            "T5AExtendedBehaviorMachines=" +
+            extendedBehaviorMachineCount + "/" + runtimeEnemyCount);
+        report.AppendLine(
+            "T5AExtendedNavigationAgents=" +
+            extendedNavigationAgentCount + "/" + runtimeEnemyCount);
 
         if (activeSpawner != null)
         {
@@ -474,6 +505,10 @@ public static class EnemyEA2RuntimeAudit
             " | Room=" + identity.RoomIndex +
             " | HP=" + DescribeFloat(definition.MaxHealth) +
             " | Speed=" + DescribeFloat(definition.MoveSpeed) +
+            " | Patrol=" + definition.PatrolRadiusInCells +
+            "@" + DescribeFloat(definition.PatrolPauseDuration) +
+            " | Search=" + definition.SearchRadiusInCells +
+            "@" + DescribeFloat(definition.SearchDuration) +
             " | Detect=" +
             DescribeFloat(definition.DetectionRadius) + "/" +
             DescribeFloat(definition.LoseTargetRadius) +

@@ -11,6 +11,13 @@ public enum EnemyNavigationTopology
     EightDirectionsNoCornerCutting = 1
 }
 
+public enum EnemyNavigationIntent
+{
+    None = 0,
+    TrackingTarget = 1,
+    FixedDestination = 2
+}
+
 public enum EnemyNavigationStatus
 {
     Uninitialized = 0,

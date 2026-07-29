@@ -1,7 +1,8 @@
 /// <summary>
 /// Stable runtime state vocabulary shared by every enemy type.
-/// EA2 activates Spawn, Idle, Chase, InvestigateLastKnownPosition and Dead.
-/// The remaining values reserve the state contract for later enemy phases.
+/// T5A activates Patrol, Chase, InvestigateLastKnownPosition,
+/// SearchLastKnownPosition, ReturnToHomeOrPatrol and Dead. Attack and Alert
+/// remain reserved for later enemy phases.
 /// </summary>
 public enum EnemyRuntimeState
 {

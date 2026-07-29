@@ -25,11 +25,13 @@ MonoBehaviour:
   stopDistance: 0.9
   lastPositionTolerance: 0.18
   patrolRadiusInCells: 4
+  patrolPauseDuration: 0.75
   maximumChasePathCost: 20
+  searchRadiusInCells: 1
   searchDuration: 2
-  detectionRadius: 14
-  loseTargetRadius: 18
-  requireLineOfSight: 0
+  detectionRadius: 4
+  loseTargetRadius: 7
+  requireLineOfSight: 1
   obstacleMask:
     serializedVersion: 2
     m_Bits: 4294967295

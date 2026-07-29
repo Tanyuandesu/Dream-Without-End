@@ -53,6 +53,11 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     [SerializeField] private EnemyNavigationStatus navigationStatus =
         EnemyNavigationStatus.Uninitialized;
 
+    [SerializeField] private EnemyNavigationIntent navigationIntent =
+        EnemyNavigationIntent.None;
+
+    [SerializeField] private bool destinationReached;
+    [SerializeField] private int activeMaximumPathCostInCells;
     [SerializeField] private bool hasDesiredDestination;
     [SerializeField] private Vector2 desiredDestination;
     [SerializeField] private bool hasKnownTargetCell;
@@ -113,6 +118,11 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     public EnemyPathfinder Pathfinder => pathfinder;
     public EnemyMotor2D Motor => motor;
     public EnemyNavigationStatus NavigationStatus => navigationStatus;
+    public EnemyNavigationIntent NavigationIntent => navigationIntent;
+    public bool HasDesiredDestination => hasDesiredDestination;
+    public Vector2 DesiredDestination => desiredDestination;
+    public bool HasReachedDestination => destinationReached;
+    public bool SupportsExtendedBehaviorStates => true;
     public bool HasActivePath => pathIndex < currentPath.Count;
     public int RemainingWaypointCount => HasActivePath
         ? currentPath.Count - pathIndex
@@ -185,6 +195,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             newFailedRequestRetryDelay,
             newMaximumPathCostInCells);
 
+        activeMaximumPathCostInCells = maximumPathCostInCells;
         ResetNavigationState();
 
         initialized =
@@ -271,6 +282,26 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             1f);
     }
 
+    public bool SetFixedDestination(
+        Vector2 destination,
+        int maximumPathCost = 0)
+    {
+        if (!initialized)
+        {
+            return false;
+        }
+
+        navigationIntent = EnemyNavigationIntent.FixedDestination;
+        activeMaximumPathCostInCells = Mathf.Max(0, maximumPathCost);
+        destinationReached = false;
+
+        SetDesiredDestination(
+            destination,
+            allowImmediatePrefetch: false);
+
+        return true;
+    }
+
     public void ObserveDetectedTarget(Vector2 observedPosition)
     {
         if (!initialized)
@@ -278,31 +309,59 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             return;
         }
 
+        navigationIntent = EnemyNavigationIntent.TrackingTarget;
+        activeMaximumPathCostInCells = maximumPathCostInCells;
+        destinationReached = false;
         context.SetLastKnownTargetPosition(observedPosition);
-        desiredDestination = observedPosition;
+
+        SetDesiredDestination(
+            observedPosition,
+            allowImmediatePrefetch: true);
+    }
+
+    private void SetDesiredDestination(
+        Vector2 destination,
+        bool allowImmediatePrefetch)
+    {
+        desiredDestination = destination;
         hasDesiredDestination = true;
-        context.SetNavigationDestination(observedPosition);
+        context.SetNavigationDestination(destination);
 
         Vector2Int targetCell =
-            pathService.WorldToCell(observedPosition);
+            pathService.WorldToCell(destination);
 
-        if (hasKnownTargetCell &&
-            targetCell == knownTargetCell)
+        bool cellChanged =
+            !hasKnownTargetCell ||
+            targetCell != knownTargetCell;
+
+        if (!cellChanged)
         {
             return;
+        }
+
+        if (!allowImmediatePrefetch)
+        {
+            CancelPendingRequest();
+            currentPath.Clear();
+            pathIndex = 0;
+            waitingAtWaypointForRepath = false;
+            motor.Stop();
+            ResetProgressTracking();
         }
 
         knownTargetCell = targetCell;
         hasKnownTargetCell = true;
         hasQueuedRepath = true;
         DiscardBufferedReplacementPath();
+        RefreshPathSnapshot();
 
         if (pathRequestPending && !HasActivePath)
         {
             CancelPendingRequest();
         }
 
-        if (!pathRequestPending &&
+        if (allowImmediatePrefetch &&
+            !pathRequestPending &&
             HasActivePath &&
             Time.time >= nextAllowedRepathAt)
         {
@@ -318,9 +377,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             return;
         }
 
-        if (state != EnemyRuntimeState.Chase &&
-            state !=
-                EnemyRuntimeState.InvestigateLastKnownPosition)
+        if (!IsMovementState(state))
         {
             motor.Stop();
             ResetProgressTracking();
@@ -333,7 +390,8 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             return;
         }
 
-        if (detection.IsTargetDetected &&
+        if (state == EnemyRuntimeState.Chase &&
+            detection.IsTargetDetected &&
             Vector2.Distance(
                 body.position,
                 target.position) <= stopDistance)
@@ -344,15 +402,15 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             return;
         }
 
-        if (!context.HasLastKnownTargetPosition)
+        EnsureDesiredDestinationFromContext(state);
+
+        if (!hasDesiredDestination)
         {
             motor.Stop();
             ResetProgressTracking();
             navigationStatus = EnemyNavigationStatus.Idle;
             return;
         }
-
-        EnsureDesiredDestinationFromContext();
 
         if (navigationStatus == EnemyNavigationStatus.Failed &&
             Time.time < retryFailedRequestAt)
@@ -409,6 +467,38 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         navigationStatus = EnemyNavigationStatus.Idle;
     }
 
+    private static bool IsMovementState(EnemyRuntimeState state)
+    {
+        return state == EnemyRuntimeState.Patrol ||
+               state == EnemyRuntimeState.Chase ||
+               state == EnemyRuntimeState.InvestigateLastKnownPosition ||
+               state == EnemyRuntimeState.SearchLastKnownPosition ||
+               state == EnemyRuntimeState.ReturnToHomeOrPatrol;
+    }
+
+    private void MarkDestinationReached()
+    {
+        CancelPendingRequest();
+        currentPath.Clear();
+        DiscardBufferedReplacementPath();
+        pathIndex = 0;
+        hasCurrentWaypoint = false;
+        currentWaypoint = Vector2.zero;
+        hasQueuedRepath = false;
+        waitingAtWaypointForRepath = false;
+        destinationReached = true;
+        motor.Stop();
+        ResetProgressTracking();
+
+        if (context != null)
+        {
+            context.ClearNavigationDestination();
+        }
+
+        navigationStatus = EnemyNavigationStatus.Stopped;
+        RefreshPathSnapshot();
+    }
+
     public void StopMovement(bool clearLastKnownPosition)
     {
         CancelPendingRequest();
@@ -416,6 +506,9 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         pathIndex = 0;
         hasCurrentWaypoint = false;
         currentWaypoint = Vector2.zero;
+        navigationIntent = EnemyNavigationIntent.None;
+        destinationReached = false;
+        activeMaximumPathCostInCells = maximumPathCostInCells;
         hasDesiredDestination = false;
         hasKnownTargetCell = false;
         hasQueuedRepath = false;
@@ -440,9 +533,17 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         RefreshPathSnapshot();
     }
 
-    private void EnsureDesiredDestinationFromContext()
+    private void EnsureDesiredDestinationFromContext(
+        EnemyRuntimeState state)
     {
-        if (!context.HasLastKnownTargetPosition)
+        if (hasDesiredDestination ||
+            !context.HasLastKnownTargetPosition)
+        {
+            return;
+        }
+
+        if (state != EnemyRuntimeState.Chase &&
+            state != EnemyRuntimeState.InvestigateLastKnownPosition)
         {
             return;
         }
@@ -450,22 +551,13 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         Vector2 rememberedPosition =
             context.LastKnownTargetPosition;
 
-        if (!hasDesiredDestination)
-        {
-            desiredDestination = rememberedPosition;
-            hasDesiredDestination = true;
-            context.SetNavigationDestination(
-                rememberedPosition);
-        }
+        navigationIntent = state == EnemyRuntimeState.Chase
+            ? EnemyNavigationIntent.TrackingTarget
+            : EnemyNavigationIntent.FixedDestination;
 
-        if (!hasKnownTargetCell)
-        {
-            knownTargetCell =
-                pathService.WorldToCell(rememberedPosition);
-
-            hasKnownTargetCell = true;
-            hasQueuedRepath = true;
-        }
+        SetDesiredDestination(
+            rememberedPosition,
+            allowImmediatePrefetch: false);
     }
 
     private bool ShouldMoveDirectlyWithinGoalCell()
@@ -481,9 +573,11 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         hasQueuedRepath = false;
         waitingAtWaypointForRepath = false;
 
-        Vector2 destination = detection.IsTargetDetected
-            ? (Vector2)target.position
-            : context.LastKnownTargetPosition;
+        Vector2 destination =
+            navigationIntent == EnemyNavigationIntent.TrackingTarget &&
+            detection.IsTargetDetected
+                ? (Vector2)target.position
+                : desiredDestination;
 
         float distance = Vector2.Distance(
             body.position,
@@ -491,18 +585,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
 
         if (distance <= lastPositionTolerance)
         {
-            motor.Stop();
-            ResetProgressTracking();
-
-            if (!detection.IsTargetDetected)
-            {
-                StopMovement(clearLastKnownPosition: true);
-            }
-            else
-            {
-                navigationStatus = EnemyNavigationStatus.Stopped;
-            }
-
+            MarkDestinationReached();
             return;
         }
 
@@ -547,7 +630,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             this,
             requestStartPosition,
             desiredDestination,
-            maximumPathCostInCells,
+            activeMaximumPathCostInCells,
             HandlePathResult,
             out requestId,
             out rejectionReason,
@@ -997,6 +1080,9 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         currentPath.Clear();
         DiscardBufferedReplacementPath();
         pathIndex = 0;
+        navigationIntent = EnemyNavigationIntent.None;
+        destinationReached = false;
+        activeMaximumPathCostInCells = maximumPathCostInCells;
         hasDesiredDestination = false;
         desiredDestination = Vector2.zero;
         hasKnownTargetCell = false;

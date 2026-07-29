@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -52,6 +53,19 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private float lastPursuitRecoverySpeedMultiplier = 1f;
     [SerializeField] private float lastPursuitRecoveryDuration;
 
+    [Header("T5A patrol, search and return loop")]
+    [SerializeField] private bool extendedBehaviorLoopActive;
+    [SerializeField] private Vector2 activeBehaviorDestination;
+    [SerializeField] private Vector2 searchCenter;
+    [SerializeField] private float searchEndsAt;
+    [SerializeField] private float nextBehaviorDecisionAt;
+    [SerializeField] private bool patrolPausePending;
+    [SerializeField] private int patrolDestinationSequence;
+    [SerializeField] private int searchDestinationSequence;
+    [SerializeField] private int patrolDestinationCount;
+    [SerializeField] private int searchDestinationCount;
+    [SerializeField] private int returnHomeCount;
+
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
     [SerializeField] private EnemyNavigationAgent navigationAgent;
@@ -61,6 +75,10 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [Tooltip(
         "Logs only actual state changes. It never logs once per frame.")]
     [SerializeField] private bool logStateTransitions;
+
+    private const float BehaviorRetryDelay = 0.25f;
+    private readonly List<Vector2Int> behaviorCandidates =
+        new List<Vector2Int>();
 
     private Health subscribedHealth;
 
@@ -77,6 +95,16 @@ public sealed class EnemyStateMachine : MonoBehaviour
     public EnemyNavigationAgent NavigationAgent => navigationAgent;
     public EnemyMotor2D Motor => motor;
     public bool LogsStateTransitions => logStateTransitions;
+    public bool UsesExtendedBehaviorLoop => extendedBehaviorLoopActive;
+    public Vector2 ActiveBehaviorDestination => activeBehaviorDestination;
+    public Vector2 SearchCenter => searchCenter;
+    public float SearchRemainingTime => currentState ==
+            EnemyRuntimeState.SearchLastKnownPosition
+        ? Mathf.Max(0f, searchEndsAt - Time.time)
+        : 0f;
+    public int PatrolDestinationCount => patrolDestinationCount;
+    public int SearchDestinationCount => searchDestinationCount;
+    public int ReturnHomeCount => returnHomeCount;
 
     public bool IsCombatReactionActive => combatReactionActive;
     public CombatAttackId ActiveReactionAttackId =>
@@ -210,6 +238,18 @@ public sealed class EnemyStateMachine : MonoBehaviour
         lastPursuitRecoverySpeedMultiplier = 1f;
         lastPursuitRecoveryDuration = 0f;
 
+        extendedBehaviorLoopActive = initialized;
+        activeBehaviorDestination = Vector2.zero;
+        searchCenter = Vector2.zero;
+        searchEndsAt = 0f;
+        nextBehaviorDecisionAt = 0f;
+        patrolPausePending = false;
+        patrolDestinationSequence = 0;
+        searchDestinationSequence = 0;
+        patrolDestinationCount = 0;
+        searchDestinationCount = 0;
+        returnHomeCount = 0;
+
         if (!initialized)
         {
             return;
@@ -228,8 +268,8 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
 
         TransitionTo(
-            EnemyRuntimeState.Idle,
-            "EA3 navigation ready");
+            EnemyRuntimeState.Patrol,
+            "T5A patrol loop ready");
     }
 
     /// <summary>
@@ -403,7 +443,7 @@ public sealed class EnemyStateMachine : MonoBehaviour
             return;
         }
 
-        EvaluatePerceptionState();
+        EvaluateBehaviorState();
     }
 
     private void FixedUpdate()
@@ -415,23 +455,9 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
 
         navigationAgent.TickFixed(currentState);
-
-        if (combatReactionActive)
-        {
-            return;
-        }
-
-        if (currentState ==
-                EnemyRuntimeState.InvestigateLastKnownPosition &&
-            !context.HasLastKnownTargetPosition)
-        {
-            TransitionTo(
-                EnemyRuntimeState.Idle,
-                "Last known position reached");
-        }
     }
 
-    private void EvaluatePerceptionState()
+    private void EvaluateBehaviorState()
     {
         EnemyDetection detection = context.Detection;
 
@@ -454,18 +480,99 @@ public sealed class EnemyStateMachine : MonoBehaviour
             return;
         }
 
-        if (context.HasLastKnownTargetPosition)
+        switch (currentState)
         {
-            TransitionTo(
-                EnemyRuntimeState.InvestigateLastKnownPosition,
-                "Target lost; continue to last known position");
+            case EnemyRuntimeState.Chase:
+                if (context.HasLastKnownTargetPosition)
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.InvestigateLastKnownPosition,
+                        "Target lost; investigate last known position");
+                }
+                else
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.ReturnToHomeOrPatrol,
+                        "Target lost without a remembered position");
+                }
+                break;
 
-            return;
+            case EnemyRuntimeState.InvestigateLastKnownPosition:
+                if (!context.HasLastKnownTargetPosition)
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.ReturnToHomeOrPatrol,
+                        "Last known target position was cleared");
+                }
+                else if (navigationAgent.HasReachedDestination)
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.SearchLastKnownPosition,
+                        "Last known position reached");
+                }
+                break;
+
+            case EnemyRuntimeState.SearchLastKnownPosition:
+                if (Time.time >= searchEndsAt)
+                {
+                    context.ClearLastKnownTargetPosition();
+                    TransitionTo(
+                        EnemyRuntimeState.ReturnToHomeOrPatrol,
+                        "Search duration completed");
+                }
+                else if ((!navigationAgent.HasDesiredDestination ||
+                          navigationAgent.HasReachedDestination) &&
+                         Time.time >= nextBehaviorDecisionAt)
+                {
+                    AssignSearchDestination();
+                }
+                break;
+
+            case EnemyRuntimeState.ReturnToHomeOrPatrol:
+                if (navigationAgent.HasReachedDestination ||
+                    IsNearHome())
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.Patrol,
+                        "Home anchor reached");
+                }
+                break;
+
+            case EnemyRuntimeState.Patrol:
+                if (!navigationAgent.HasDesiredDestination)
+                {
+                    patrolPausePending = false;
+                    AssignPatrolDestination();
+                }
+                else if (navigationAgent.HasReachedDestination)
+                {
+                    if (!patrolPausePending)
+                    {
+                        float pause = context.Definition != null
+                            ? Mathf.Max(
+                                0f,
+                                context.Definition.PatrolPauseDuration)
+                            : 0f;
+
+                        patrolPausePending = true;
+                        nextBehaviorDecisionAt = Time.time + pause;
+                    }
+
+                    if (Time.time >= nextBehaviorDecisionAt)
+                    {
+                        patrolPausePending = false;
+                        AssignPatrolDestination();
+                    }
+                }
+                break;
+
+            case EnemyRuntimeState.Idle:
+            case EnemyRuntimeState.Spawn:
+                TransitionTo(
+                    EnemyRuntimeState.Patrol,
+                    "Resume configured patrol loop");
+                break;
         }
-
-        TransitionTo(
-            EnemyRuntimeState.Idle,
-            "No detected or remembered target");
     }
 
     private void ResumeAfterCombatReaction(string reason)
@@ -506,16 +613,18 @@ public sealed class EnemyStateMachine : MonoBehaviour
             TransitionTo(
                 EnemyRuntimeState.InvestigateLastKnownPosition,
                 string.IsNullOrWhiteSpace(reason)
-                    ? "Combat reaction complete; repath to last known target"
+                    ? "Combat reaction complete; investigate remembered target"
                     : reason);
 
             return;
         }
 
         TransitionTo(
-            EnemyRuntimeState.Idle,
+            IsNearHome()
+                ? EnemyRuntimeState.Patrol
+                : EnemyRuntimeState.ReturnToHomeOrPatrol,
             string.IsNullOrWhiteSpace(reason)
-                ? "Combat reaction complete"
+                ? "Combat reaction complete; resume home behaviour"
                 : reason);
     }
 
@@ -581,10 +690,267 @@ public sealed class EnemyStateMachine : MonoBehaviour
                 this);
         }
 
+        HandleEnteredState(nextState);
+
         StateChanged?.Invoke(
             this,
             oldState,
             nextState);
+    }
+
+    private void HandleEnteredState(EnemyRuntimeState state)
+    {
+        if (!initialized || navigationAgent == null)
+        {
+            return;
+        }
+
+        switch (state)
+        {
+            case EnemyRuntimeState.Patrol:
+                context.ClearLastKnownTargetPosition();
+                patrolPausePending = false;
+                nextBehaviorDecisionAt = Time.time;
+                AssignPatrolDestination();
+                break;
+
+            case EnemyRuntimeState.InvestigateLastKnownPosition:
+                if (context.HasLastKnownTargetPosition)
+                {
+                    activeBehaviorDestination =
+                        context.LastKnownTargetPosition;
+
+                    navigationAgent.SetFixedDestination(
+                        activeBehaviorDestination);
+                }
+                break;
+
+            case EnemyRuntimeState.SearchLastKnownPosition:
+                searchCenter = context.HasLastKnownTargetPosition
+                    ? context.LastKnownTargetPosition
+                    : (Vector2)transform.position;
+
+                searchEndsAt = Time.time + Mathf.Max(
+                    0f,
+                    GetDefinitionSearchDuration());
+
+                nextBehaviorDecisionAt = Time.time;
+                AssignSearchDestination();
+                break;
+
+            case EnemyRuntimeState.ReturnToHomeOrPatrol:
+                context.ClearLastKnownTargetPosition();
+                activeBehaviorDestination = context.HomeWorldPosition;
+                returnHomeCount++;
+                navigationAgent.SetFixedDestination(
+                    activeBehaviorDestination);
+                break;
+
+            case EnemyRuntimeState.Idle:
+            case EnemyRuntimeState.Hit:
+            case EnemyRuntimeState.Stunned:
+            case EnemyRuntimeState.Dead:
+                navigationAgent.StopMovement(
+                    clearLastKnownPosition: false);
+                break;
+        }
+    }
+
+    private void AssignPatrolDestination()
+    {
+        if (Time.time < nextBehaviorDecisionAt)
+        {
+            return;
+        }
+
+        int radius = context.Definition != null
+            ? Mathf.Max(0, context.Definition.PatrolRadiusInCells)
+            : 0;
+
+        if (!TrySelectBehaviorDestination(
+                context.HomeCell,
+                radius,
+                ref patrolDestinationSequence,
+                out Vector2 destination))
+        {
+            navigationAgent.StopMovement(
+                clearLastKnownPosition: false);
+
+            nextBehaviorDecisionAt =
+                Time.time + BehaviorRetryDelay;
+            return;
+        }
+
+        activeBehaviorDestination = destination;
+        patrolDestinationCount++;
+        patrolPausePending = false;
+        navigationAgent.SetFixedDestination(destination);
+        nextBehaviorDecisionAt = Time.time;
+    }
+
+    private void AssignSearchDestination()
+    {
+        if (Time.time >= searchEndsAt)
+        {
+            return;
+        }
+
+        int radius = context.Definition != null
+            ? Mathf.Max(0, context.Definition.SearchRadiusInCells)
+            : 0;
+
+        Vector2Int centerCell =
+            context.PathService.WorldToCell(searchCenter);
+
+        if (!TrySelectBehaviorDestination(
+                centerCell,
+                radius,
+                ref searchDestinationSequence,
+                out Vector2 destination))
+        {
+            navigationAgent.StopMovement(
+                clearLastKnownPosition: false);
+
+            nextBehaviorDecisionAt =
+                Time.time + BehaviorRetryDelay;
+            return;
+        }
+
+        activeBehaviorDestination = destination;
+        searchDestinationCount++;
+        navigationAgent.SetFixedDestination(destination);
+        nextBehaviorDecisionAt = Time.time;
+    }
+
+    private bool TrySelectBehaviorDestination(
+        Vector2Int centerCell,
+        int radius,
+        ref int sequence,
+        out Vector2 destination)
+    {
+        destination = transform.position;
+
+        EnemyPathService service = context.PathService;
+
+        if (service == null || !service.IsInitialized)
+        {
+            return false;
+        }
+
+        behaviorCandidates.Clear();
+        Vector2Int currentCell =
+            service.WorldToCell(transform.position);
+
+        int safeRadius = Mathf.Max(0, radius);
+
+        for (int x = -safeRadius; x <= safeRadius; x++)
+        {
+            int remaining = safeRadius - Mathf.Abs(x);
+
+            for (int y = -remaining; y <= remaining; y++)
+            {
+                Vector2Int candidate =
+                    centerCell + new Vector2Int(x, y);
+
+                if (!service.IsWalkable(candidate) ||
+                    !service.AreCellsReachable(
+                        currentCell,
+                        candidate))
+                {
+                    continue;
+                }
+
+                behaviorCandidates.Add(candidate);
+            }
+        }
+
+        if (behaviorCandidates.Count == 0)
+        {
+            return false;
+        }
+
+        int seed = StableHash(
+            context.Identity != null
+                ? context.Identity.InstanceId
+                : context.EnemyId);
+
+        int startIndex = PositiveModulo(
+            unchecked(seed + sequence * 1103515245),
+            behaviorCandidates.Count);
+
+        sequence++;
+
+        for (int i = 0; i < behaviorCandidates.Count; i++)
+        {
+            Vector2Int candidate = behaviorCandidates[
+                (startIndex + i) % behaviorCandidates.Count];
+
+            if (behaviorCandidates.Count > 1 &&
+                candidate == currentCell)
+            {
+                continue;
+            }
+
+            destination = service.CellToWorld(candidate);
+            return true;
+        }
+
+        destination = service.CellToWorld(
+            behaviorCandidates[startIndex]);
+
+        return true;
+    }
+
+    private bool IsNearHome()
+    {
+        if (context == null)
+        {
+            return true;
+        }
+
+        float tolerance = context.Definition != null
+            ? Mathf.Max(
+                0.05f,
+                context.Definition.LastPositionTolerance)
+            : 0.15f;
+
+        return Vector2.Distance(
+                   transform.position,
+                   context.HomeWorldPosition) <= tolerance;
+    }
+
+    private float GetDefinitionSearchDuration()
+    {
+        return context != null && context.Definition != null
+            ? context.Definition.SearchDuration
+            : 0f;
+    }
+
+    private static int StableHash(string value)
+    {
+        unchecked
+        {
+            int hash = 17;
+            string safeValue = value ?? string.Empty;
+
+            for (int i = 0; i < safeValue.Length; i++)
+            {
+                hash = hash * 31 + safeValue[i];
+            }
+
+            return hash;
+        }
+    }
+
+    private static int PositiveModulo(int value, int modulus)
+    {
+        if (modulus <= 0)
+        {
+            return 0;
+        }
+
+        int result = value % modulus;
+        return result < 0 ? result + modulus : result;
     }
 
     private void CacheComponents()
