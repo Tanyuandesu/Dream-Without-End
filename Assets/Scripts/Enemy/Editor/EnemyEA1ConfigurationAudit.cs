@@ -36,6 +36,11 @@ public static class EnemyEA1ConfigurationAudit
             definitions[i].CollectValidationErrors(errors);
         }
 
+        AuditT4AuthoringVisibility(
+            definitions,
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -360,6 +365,46 @@ public static class EnemyEA1ConfigurationAudit
 
         builder.Append(']');
         return builder.ToString();
+    }
+
+    private static void AuditT4AuthoringVisibility(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        HashSet<string> colorKeys = new HashSet<string>();
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null)
+            {
+                continue;
+            }
+
+            if (definition.VisualColor.a <= 0.05f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T4 Visual Color alpha is effectively invisible.");
+            }
+
+            colorKeys.Add(
+                ColorUtility.ToHtmlStringRGBA(
+                    definition.VisualColor));
+        }
+
+        notes.Add(
+            "T4 authoring visibility is installed. DistinctVisualColors=" +
+            colorKeys.Count + "/" + definitions.Length +
+            ". These colors are editable presentation data only; " +
+            "GameplayRole never overrides Definition values.");
     }
 
     private static void AuditT0SpawnBaseline(

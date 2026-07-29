@@ -26,6 +26,12 @@ public sealed class EnemyVisual : MonoBehaviour
 
     public SpriteRenderer Renderer => spriteRenderer;
     public DirectionalSpriteAnimator Animator => spriteAnimator;
+    public Sprite CurrentSprite => currentSprite;
+    public float VisualWorldHeight => visualWorldHeight;
+    public Vector2 VisualOffset => visualOffset;
+    public Color VisualColor => visualColor;
+    public int SortingOrder => sortingOrder;
+    public CharacterAnimationProfile AnimationProfile => animationProfile;
 
     public void Initialize(
         Sprite sprite,

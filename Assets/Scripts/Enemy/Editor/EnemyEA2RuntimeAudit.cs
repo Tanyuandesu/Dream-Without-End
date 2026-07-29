@@ -5,6 +5,15 @@ using UnityEngine;
 
 public static class EnemyEA2RuntimeAudit
 {
+    private static readonly string[] T4ExpectedShowcaseEnemyIds =
+    {
+        "dream_wanderer",
+        "dream_scout",
+        "dream_hunter",
+        "dream_brute",
+        "dream_gazer"
+    };
+
     [MenuItem(
         "Tools/Dream Dungeon/Enemy System/Run EA2 Runtime Audit")]
     public static void RunAudit()
@@ -20,10 +29,17 @@ public static class EnemyEA2RuntimeAudit
 
         List<string> errors = new List<string>();
         List<string> notes = new List<string>();
+        List<string> definitionBindings = new List<string>();
         HashSet<string> instanceIds = new HashSet<string>();
 
         Dictionary<EnemyRuntimeState, int> stateCounts =
             new Dictionary<EnemyRuntimeState, int>();
+
+        Dictionary<string, int> definitionCounts =
+            new Dictionary<string, int>();
+
+        EnemySpawner activeSpawner =
+            GetActiveSceneSpawner(errors);
 
         EnemyRuntimeContext[] allContexts =
             Resources.FindObjectsOfTypeAll<EnemyRuntimeContext>();
@@ -33,6 +49,7 @@ public static class EnemyEA2RuntimeAudit
         int initializedStateMachineCount = 0;
         int legacyAdapterCount = 0;
         int optionalTransitionLoggingCount = 0;
+        int verifiedDefinitionBindingCount = 0;
 
         for (int i = 0; i < allContexts.Length; i++)
         {
@@ -165,6 +182,15 @@ public static class EnemyEA2RuntimeAudit
                     context.gameObject.name +
                     ": CA1 DirectionalSpriteAnimator is missing.");
             }
+
+            if (AuditT4DefinitionBinding(
+                    context,
+                    errors,
+                    definitionBindings,
+                    definitionCounts))
+            {
+                verifiedDefinitionBindingCount++;
+            }
         }
 
         if (runtimeEnemyCount == 0)
@@ -189,6 +215,13 @@ public static class EnemyEA2RuntimeAudit
                 runtimeEnemyCount + ").");
         }
 
+        AuditT4SpawnModeContract(
+            activeSpawner,
+            runtimeEnemyCount,
+            definitionCounts,
+            errors,
+            notes);
+
         if (optionalTransitionLoggingCount > 0)
         {
             notes.Add(
@@ -211,6 +244,21 @@ public static class EnemyEA2RuntimeAudit
             "EnemyManagerActive=" + managerEnemyCount);
         report.AppendLine(
             "States=" + FormatStateCounts(stateCounts));
+        report.AppendLine(
+            "T4DefinitionBindings=" +
+            verifiedDefinitionBindingCount + "/" + runtimeEnemyCount);
+
+        if (activeSpawner != null)
+        {
+            report.AppendLine(
+                "SpawnMode=" + activeSpawner.SpawnMode);
+        }
+
+        for (int i = 0; i < definitionBindings.Count; i++)
+        {
+            report.AppendLine(
+                "BINDING: " + definitionBindings[i]);
+        }
 
         for (int i = 0; i < notes.Count; i++)
         {
@@ -232,6 +280,342 @@ public static class EnemyEA2RuntimeAudit
         }
 
         Debug.LogError(report.ToString());
+    }
+
+    private static bool AuditT4DefinitionBinding(
+        EnemyRuntimeContext context,
+        List<string> errors,
+        List<string> definitionBindings,
+        Dictionary<string, int> definitionCounts)
+    {
+        if (context == null)
+        {
+            return false;
+        }
+
+        string prefix = context.gameObject.name + ": ";
+        EnemyRuntimeIdentity identity = context.Identity;
+        EnemyDefinition definition = context.Definition;
+        bool valid = true;
+
+        if (identity == null)
+        {
+            errors.Add(prefix + "T4 runtime identity is missing.");
+            return false;
+        }
+
+        if (definition == null)
+        {
+            errors.Add(prefix + "T4 EnemyDefinition is missing.");
+            return false;
+        }
+
+        if (identity.Definition != definition)
+        {
+            errors.Add(
+                prefix +
+                "T4 identity and runtime context reference different " +
+                "EnemyDefinition assets.");
+            valid = false;
+        }
+
+        if (context.EnemyId != definition.Id.Value ||
+            identity.EnemyId != definition.Id)
+        {
+            errors.Add(
+                prefix +
+                "T4 EnemyId binding mismatch. Context=" +
+                context.EnemyId + ", Identity=" + identity.EnemyId +
+                ", Definition=" + definition.Id + ".");
+            valid = false;
+        }
+
+        if (!context.gameObject.name.StartsWith(
+                definition.DisplayName + "_"))
+        {
+            errors.Add(
+                prefix +
+                "T4 runtime name does not begin with Definition DisplayName '" +
+                definition.DisplayName + "'.");
+            valid = false;
+        }
+
+        IncrementCount(
+            definitionCounts,
+            definition.Id.Value);
+
+        Health health = context.Health;
+
+        if (health == null ||
+            !Approximately(
+                health.MaxHealth,
+                definition.MaxHealth))
+        {
+            errors.Add(
+                prefix +
+                "T4 MaxHealth does not match Definition. Runtime=" +
+                DescribeFloat(health != null ? health.MaxHealth : -1f) +
+                ", Definition=" +
+                DescribeFloat(definition.MaxHealth) + ".");
+            valid = false;
+        }
+
+        EnemyMotor2D motor = context.Motor;
+
+        if (motor == null ||
+            !motor.IsInitialized ||
+            !Approximately(
+                motor.MoveSpeed,
+                definition.MoveSpeed))
+        {
+            errors.Add(
+                prefix +
+                "T4 MoveSpeed does not match Definition. Runtime=" +
+                DescribeFloat(motor != null ? motor.MoveSpeed : -1f) +
+                ", Definition=" +
+                DescribeFloat(definition.MoveSpeed) + ".");
+            valid = false;
+        }
+
+        EnemyDetection detection = context.Detection;
+
+        if (detection == null ||
+            !Approximately(
+                detection.DetectionRadius,
+                definition.DetectionRadius) ||
+            !Approximately(
+                detection.LoseTargetRadius,
+                definition.LoseTargetRadius) ||
+            detection.RequiresLineOfSight !=
+                definition.RequireLineOfSight ||
+            detection.ObstacleMask.value !=
+                definition.ObstacleMask.value)
+        {
+            errors.Add(
+                prefix +
+                "T4 perception settings do not match Definition.");
+            valid = false;
+        }
+
+        BoxCollider2D[] colliders =
+            context.GetComponents<BoxCollider2D>();
+
+        if (colliders.Length != 1 ||
+            !Approximately(
+                colliders[0].size,
+                definition.ColliderSize) ||
+            !Approximately(
+                colliders[0].offset,
+                definition.ColliderOffset))
+        {
+            errors.Add(
+                prefix +
+                "T4 collider size/offset does not match Definition.");
+            valid = false;
+        }
+
+        EnemyVisual visual = context.Visual;
+
+        if (visual == null ||
+            visual.Renderer == null ||
+            !Approximately(
+                visual.VisualWorldHeight,
+                definition.VisualWorldHeight) ||
+            !Approximately(
+                visual.VisualOffset,
+                definition.VisualOffset) ||
+            !Approximately(
+                visual.VisualColor,
+                definition.VisualColor) ||
+            !Approximately(
+                visual.Renderer.color,
+                definition.VisualColor) ||
+            visual.SortingOrder != definition.SortingOrder)
+        {
+            errors.Add(
+                prefix +
+                "T4 presentation settings do not match Definition.");
+            valid = false;
+        }
+
+        ContactDamage2D[] contactDamageComponents =
+            context.GetComponents<ContactDamage2D>();
+
+        if (definition.EnableLegacyContactDamage)
+        {
+            if (contactDamageComponents.Length != 1 ||
+                !Approximately(
+                    contactDamageComponents[0].Damage,
+                    definition.LegacyContactDamage) ||
+                !Approximately(
+                    contactDamageComponents[0].HitCooldown,
+                    definition.LegacyContactDamageCooldown) ||
+                contactDamageComponents[0].TargetFactions !=
+                    definition.LegacyContactDamageTargets)
+            {
+                errors.Add(
+                    prefix +
+                    "T4 legacy contact-damage settings do not match " +
+                    "Definition.");
+                valid = false;
+            }
+        }
+        else if (contactDamageComponents.Length != 0)
+        {
+            errors.Add(
+                prefix +
+                "T4 contact damage exists although the Definition " +
+                "disables it.");
+            valid = false;
+        }
+
+        definitionBindings.Add(
+            definition.Id.Value +
+            " | Room=" + identity.RoomIndex +
+            " | HP=" + DescribeFloat(definition.MaxHealth) +
+            " | Speed=" + DescribeFloat(definition.MoveSpeed) +
+            " | Detect=" +
+            DescribeFloat(definition.DetectionRadius) + "/" +
+            DescribeFloat(definition.LoseTargetRadius) +
+            " | Contact=" +
+            (definition.EnableLegacyContactDamage
+                ? DescribeFloat(definition.LegacyContactDamage)
+                : "Off") +
+            " | Height=" +
+            DescribeFloat(definition.VisualWorldHeight) +
+            " | Color=#" +
+            ColorUtility.ToHtmlStringRGBA(definition.VisualColor));
+
+        return valid;
+    }
+
+    private static void AuditT4SpawnModeContract(
+        EnemySpawner activeSpawner,
+        int runtimeEnemyCount,
+        Dictionary<string, int> definitionCounts,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (activeSpawner == null)
+        {
+            return;
+        }
+
+        if (activeSpawner.SpawnMode ==
+            EnemySpawnMode.TemporaryFiveTypeShowcase)
+        {
+            if (runtimeEnemyCount !=
+                T4ExpectedShowcaseEnemyIds.Length)
+            {
+                errors.Add(
+                    "T4 showcase requires exactly five runtime enemies. " +
+                    "Actual=" + runtimeEnemyCount + ".");
+            }
+
+            for (int i = 0;
+                 i < T4ExpectedShowcaseEnemyIds.Length;
+                 i++)
+            {
+                string expectedId =
+                    T4ExpectedShowcaseEnemyIds[i];
+
+                int count = definitionCounts.TryGetValue(
+                    expectedId,
+                    out int foundCount)
+                        ? foundCount
+                        : 0;
+
+                if (count != 1)
+                {
+                    errors.Add(
+                        "T4 showcase requires one '" + expectedId +
+                        "' instance. Actual=" + count + ".");
+                }
+            }
+
+            notes.Add(
+                "T4 showcase verifies five independent Definition " +
+                "bindings. GameplayRole is descriptive only; runtime " +
+                "values come directly from each EnemyDefinition asset.");
+
+            return;
+        }
+
+        int expectedBaselineCount =
+            activeSpawner.ConfiguredEnemyCount;
+
+        if (runtimeEnemyCount != expectedBaselineCount)
+        {
+            errors.Add(
+                "T4 baseline runtime count mismatch. Expected=" +
+                expectedBaselineCount + ", Actual=" +
+                runtimeEnemyCount + ".");
+        }
+
+        EnemyDefinition baselineDefinition =
+            activeSpawner.DefaultEnemyDefinition;
+
+        if (baselineDefinition != null)
+        {
+            int baselineCount = definitionCounts.TryGetValue(
+                baselineDefinition.Id.Value,
+                out int foundCount)
+                    ? foundCount
+                    : 0;
+
+            if (baselineCount != runtimeEnemyCount ||
+                definitionCounts.Count !=
+                    (runtimeEnemyCount > 0 ? 1 : 0))
+            {
+                errors.Add(
+                    "T4 baseline mode contains a runtime Definition " +
+                    "other than Default Enemy Definition '" +
+                    baselineDefinition.Id + "'.");
+            }
+        }
+
+        notes.Add(
+            "T4 baseline verifies that every runtime enemy reads the " +
+            "selected Default Enemy Definition without role-based overrides.");
+    }
+
+    private static EnemySpawner GetActiveSceneSpawner(
+        List<string> errors)
+    {
+        EnemySpawner[] spawners =
+            Resources.FindObjectsOfTypeAll<EnemySpawner>();
+
+        EnemySpawner activeSpawner = null;
+        int activeCount = 0;
+
+        for (int i = 0; i < spawners.Length; i++)
+        {
+            if (!IsActiveSceneObject(spawners[i]))
+            {
+                continue;
+            }
+
+            activeCount++;
+
+            if (activeSpawner == null)
+            {
+                activeSpawner = spawners[i];
+            }
+        }
+
+        if (activeCount == 0)
+        {
+            errors.Add(
+                "No active EnemySpawner was found in the loaded scene.");
+        }
+        else if (activeCount > 1)
+        {
+            errors.Add(
+                "Expected one active EnemySpawner, found " +
+                activeCount + ".");
+        }
+
+        return activeSpawner;
     }
 
     private static bool IsActiveSceneObject(Component component)
@@ -276,6 +660,18 @@ public static class EnemyEA2RuntimeAudit
         counts[state] = count + 1;
     }
 
+    private static void IncrementCount(
+        Dictionary<string, int> counts,
+        string key)
+    {
+        if (!counts.TryGetValue(key, out int count))
+        {
+            count = 0;
+        }
+
+        counts[key] = count + 1;
+    }
+
     private static string FormatStateCounts(
         Dictionary<EnemyRuntimeState, int> counts)
     {
@@ -299,5 +695,29 @@ public static class EnemyEA2RuntimeAudit
         }
 
         return builder.ToString();
+    }
+
+    private static bool Approximately(float a, float b)
+    {
+        return Mathf.Abs(a - b) <= 0.0001f;
+    }
+
+    private static bool Approximately(Vector2 a, Vector2 b)
+    {
+        return Approximately(a.x, b.x) &&
+               Approximately(a.y, b.y);
+    }
+
+    private static bool Approximately(Color a, Color b)
+    {
+        return Approximately(a.r, b.r) &&
+               Approximately(a.g, b.g) &&
+               Approximately(a.b, b.b) &&
+               Approximately(a.a, b.a);
+    }
+
+    private static string DescribeFloat(float value)
+    {
+        return value.ToString("0.###");
     }
 }

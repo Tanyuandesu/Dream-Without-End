@@ -34,6 +34,10 @@ public sealed class ContactDamage2D : MonoBehaviour
     private Health sourceHealth;
     private bool subscribedToSourceHealth;
 
+    public float Damage => damage;
+    public float HitCooldown => hitCooldown;
+    public DamageFactionMask TargetFactions => targetFactions;
+
     public bool DisabledBecauseSourceDied =>
         disabledBecauseSourceDied;
 

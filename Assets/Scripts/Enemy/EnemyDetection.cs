@@ -14,6 +14,11 @@ public sealed class EnemyDetection : MonoBehaviour
 
     private Transform target;
 
+    public Transform Target => target;
+    public float DetectionRadius => detectionRadius;
+    public float LoseTargetRadius => loseTargetRadius;
+    public bool RequiresLineOfSight => requireLineOfSight;
+    public LayerMask ObstacleMask => obstacleMask;
     public bool IsTargetDetected { get; private set; }
     public Vector2 LastKnownTargetPosition { get; private set; }
 

@@ -73,7 +73,7 @@ MonoBehaviour:
   animationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
   visualWorldHeight: 0.8
   visualOffset: {x: 0, y: 0}
-  visualColor: {r: 1, g: 1, b: 1, a: 1}
+  visualColor: {r: 0.55, g: 0.88, b: 0.76, a: 1}
   sortingOrder: 20
   colliderSize: {x: 0.54, y: 0.54}
   colliderOffset: {x: 0, y: 0}
