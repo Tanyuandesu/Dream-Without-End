@@ -35,6 +35,13 @@ public sealed class EnemyManager : MonoBehaviour
     [SerializeField] private DamageAttribution lastDeathAttribution =
         DamageAttribution.Unspecified;
 
+    [Header("T5C local alert diagnostics (read only)")]
+    [SerializeField] private int alertBroadcastCount;
+    [SerializeField] private int alertDeliveryCount;
+    [SerializeField] private string lastAlertSourceId = string.Empty;
+    [SerializeField] private Vector2 lastAlertPosition;
+    [SerializeField] private float lastAlertRadius;
+
     public IReadOnlyList<GameObject> ActiveEnemies =>
         activeEnemies;
 
@@ -57,6 +64,11 @@ public sealed class EnemyManager : MonoBehaviour
     public int LastClearSurvivorCount => lastClearSurvivorCount;
     public string LastDeathInstanceId => lastDeathInstanceId;
     public DamageAttribution LastDeathAttribution => lastDeathAttribution;
+    public int AlertBroadcastCount => alertBroadcastCount;
+    public int AlertDeliveryCount => alertDeliveryCount;
+    public string LastAlertSourceId => lastAlertSourceId;
+    public Vector2 LastAlertPosition => lastAlertPosition;
+    public float LastAlertRadius => lastAlertRadius;
 
     public int ActiveEnemyCount
     {
@@ -125,6 +137,7 @@ public sealed class EnemyManager : MonoBehaviour
         ISet<Vector2Int> runtimeSpawnReservations)
     {
         ClearFloor();
+        ResetFloorAlertDiagnostics();
 
         if (layout == null ||
             floorRoot == null ||
@@ -211,6 +224,71 @@ public sealed class EnemyManager : MonoBehaviour
                 "EnemyRuntimeIdentity. Ending statistics cannot include it.",
                 enemy);
         }
+    }
+
+    /// <summary>
+    /// Delivers one event-driven last-known-position alert to living enemies
+    /// in the current floor roster. Recipients decide how to react through
+    /// their own EnemyStateMachine and EnemyDefinition values.
+    /// </summary>
+    public int BroadcastAlert(
+        EnemyStateMachine source,
+        Vector2 targetPosition,
+        float radius)
+    {
+        if (source == null || radius <= 0f)
+        {
+            return 0;
+        }
+
+        RemoveDestroyedReferences();
+
+        float radiusSquared = radius * radius;
+        int delivered = 0;
+
+        for (int i = 0; i < activeEnemies.Count; i++)
+        {
+            GameObject enemy = activeEnemies[i];
+
+            if (enemy == null)
+            {
+                continue;
+            }
+
+            EnemyStateMachine recipient =
+                enemy.GetComponent<EnemyStateMachine>();
+
+            if (recipient == null || recipient == source)
+            {
+                continue;
+            }
+
+            Vector2 offset =
+                (Vector2)recipient.transform.position -
+                (Vector2)source.transform.position;
+
+            if (offset.sqrMagnitude > radiusSquared)
+            {
+                continue;
+            }
+
+            if (recipient.TryReceiveAlert(
+                    targetPosition,
+                    source))
+            {
+                delivered++;
+            }
+        }
+
+        alertBroadcastCount++;
+        alertDeliveryCount += delivered;
+        lastAlertSourceId = source.Context != null
+            ? source.Context.EnemyId
+            : source.gameObject.name;
+        lastAlertPosition = targetPosition;
+        lastAlertRadius = radius;
+
+        return delivered;
     }
 
     public void UnregisterEnemy(GameObject enemy)
@@ -373,6 +451,15 @@ public sealed class EnemyManager : MonoBehaviour
         unexpectedRemovalCount++;
     }
 
+    private void ResetFloorAlertDiagnostics()
+    {
+        alertBroadcastCount = 0;
+        alertDeliveryCount = 0;
+        lastAlertSourceId = string.Empty;
+        lastAlertPosition = Vector2.zero;
+        lastAlertRadius = 0f;
+    }
+
     private void RemoveDestroyedReferences()
     {
         activeEnemies.RemoveAll(
@@ -422,5 +509,6 @@ public sealed class EnemyManager : MonoBehaviour
         lastClearSurvivorCount = 0;
         lastDeathInstanceId = string.Empty;
         lastDeathAttribution = DamageAttribution.Unspecified;
+        ResetFloorAlertDiagnostics();
     }
 }

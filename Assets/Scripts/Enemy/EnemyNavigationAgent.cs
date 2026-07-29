@@ -482,6 +482,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     private static bool IsMovementState(EnemyRuntimeState state)
     {
         return state == EnemyRuntimeState.Patrol ||
+               state == EnemyRuntimeState.Alert ||
                state == EnemyRuntimeState.Chase ||
                state == EnemyRuntimeState.InvestigateLastKnownPosition ||
                state == EnemyRuntimeState.SearchLastKnownPosition ||
@@ -555,6 +556,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         }
 
         if (state != EnemyRuntimeState.Chase &&
+            state != EnemyRuntimeState.Alert &&
             state != EnemyRuntimeState.InvestigateLastKnownPosition)
         {
             return;

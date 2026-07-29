@@ -53,6 +53,10 @@ public static class EnemyEA2RuntimeAudit
         int extendedBehaviorMachineCount = 0;
         int extendedNavigationAgentCount = 0;
         int t5bRuntimeBindingCount = 0;
+        int t5cRuntimeBindingCount = 0;
+        int totalAlertBroadcasts = 0;
+        int totalAlertRecipients = 0;
+        int totalAlertsReceived = 0;
 
         for (int i = 0; i < allContexts.Length; i++)
         {
@@ -194,6 +198,13 @@ public static class EnemyEA2RuntimeAudit
                         ": T5A navigation agent does not support extended states.");
                 }
 
+                totalAlertBroadcasts +=
+                    stateMachine.AlertBroadcastCount;
+                totalAlertRecipients +=
+                    stateMachine.AlertRecipientCount;
+                totalAlertsReceived +=
+                    stateMachine.AlertReceivedCount;
+
                 AddStateCount(
                     stateCounts,
                     stateMachine.CurrentState);
@@ -223,6 +234,13 @@ public static class EnemyEA2RuntimeAudit
                     errors))
             {
                 t5bRuntimeBindingCount++;
+            }
+
+            if (AuditT5CRuntimeBinding(
+                    context,
+                    errors))
+            {
+                t5cRuntimeBindingCount++;
             }
         }
 
@@ -261,6 +279,11 @@ public static class EnemyEA2RuntimeAudit
             "returns the enemy home and suppresses immediate reacquisition " +
             "until the target leaves perception.");
 
+        notes.Add(
+            "T5C verifies the shared EnemyManager alert roster and the Alert " +
+            "state relay. A broadcast supplies only a last-known position; " +
+            "each recipient still uses its own perception and movement profile.");
+
         if (optionalTransitionLoggingCount > 0)
         {
             notes.Add(
@@ -295,6 +318,13 @@ public static class EnemyEA2RuntimeAudit
         report.AppendLine(
             "T5BRuntimeBindings=" +
             t5bRuntimeBindingCount + "/" + runtimeEnemyCount);
+        report.AppendLine(
+            "T5CAlertRuntimeBindings=" +
+            t5cRuntimeBindingCount + "/" + runtimeEnemyCount);
+        report.AppendLine(
+            "T5CAlertActivity=Broadcasts:" + totalAlertBroadcasts +
+            ", Recipients:" + totalAlertRecipients +
+            ", Received:" + totalAlertsReceived);
 
         if (activeSpawner != null)
         {
@@ -531,6 +561,12 @@ public static class EnemyEA2RuntimeAudit
             DescribeFloat(definition.LoseTargetRadius) +
             " | View=" + DescribeFloat(definition.ViewAngle) +
             " | ChaseCost=" + definition.MaximumChasePathCost +
+            " | Alert=" +
+            (definition.BroadcastsAlert
+                ? DescribeFloat(definition.AlertRadius) +
+                  "@" +
+                  DescribeFloat(definition.AlertBroadcastCooldown)
+                : "Off") +
             " | Contact=" +
             (definition.EnableLegacyContactDamage
                 ? DescribeFloat(definition.LegacyContactDamage)
@@ -619,6 +655,48 @@ public static class EnemyEA2RuntimeAudit
         }
 
         return valid;
+    }
+
+    private static bool AuditT5CRuntimeBinding(
+        EnemyRuntimeContext context,
+        List<string> errors)
+    {
+        if (context == null || context.Definition == null)
+        {
+            return false;
+        }
+
+        string prefix = context.gameObject.name + ": ";
+        EnemyStateMachine stateMachine =
+            context.GetComponent<EnemyStateMachine>();
+
+        if (stateMachine == null ||
+            !stateMachine.SupportsLocalAlertRelay)
+        {
+            errors.Add(
+                prefix +
+                "T5C local alert state owner is missing or inactive.");
+            return false;
+        }
+
+        if (stateMachine.AlertManager == null)
+        {
+            errors.Add(
+                prefix +
+                "T5C state machine is not bound to the active EnemyManager roster.");
+            return false;
+        }
+
+        if (context.Definition.BroadcastsAlert &&
+            context.Definition.AlertRadius <= 0f)
+        {
+            errors.Add(
+                prefix +
+                "T5C broadcaster has a non-positive Alert Radius.");
+            return false;
+        }
+
+        return true;
     }
 
     private static void AuditT4SpawnModeContract(

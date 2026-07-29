@@ -71,10 +71,21 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private int chasePathCostRejectCount;
     [SerializeField] private float lastChasePathCostRejectedAt = -1f;
 
+    [Header("T5C local alert relay")]
+    [SerializeField] private float nextAlertBroadcastAt;
+    [SerializeField] private int alertBroadcastCount;
+    [SerializeField] private int alertRecipientCount;
+    [SerializeField] private int alertReceivedCount;
+    [SerializeField] private float lastAlertBroadcastAt = -1f;
+    [SerializeField] private float lastAlertReceivedAt = -1f;
+    [SerializeField] private Vector2 lastAlertPosition;
+    [SerializeField] private string lastAlertSourceId = string.Empty;
+
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
     [SerializeField] private EnemyNavigationAgent navigationAgent;
     [SerializeField] private EnemyMotor2D motor;
+    [SerializeField] private EnemyManager alertManager;
 
     [Header("Optional diagnostics")]
     [Tooltip(
@@ -116,6 +127,15 @@ public sealed class EnemyStateMachine : MonoBehaviour
         chasePathCostRejectCount;
     public float LastChasePathCostRejectedAt =>
         lastChasePathCostRejectedAt;
+    public bool SupportsLocalAlertRelay => true;
+    public EnemyManager AlertManager => alertManager;
+    public int AlertBroadcastCount => alertBroadcastCount;
+    public int AlertRecipientCount => alertRecipientCount;
+    public int AlertReceivedCount => alertReceivedCount;
+    public float LastAlertBroadcastAt => lastAlertBroadcastAt;
+    public float LastAlertReceivedAt => lastAlertReceivedAt;
+    public Vector2 LastAlertPosition => lastAlertPosition;
+    public string LastAlertSourceId => lastAlertSourceId;
 
     public bool IsCombatReactionActive => combatReactionActive;
     public CombatAttackId ActiveReactionAttackId =>
@@ -263,6 +283,14 @@ public sealed class EnemyStateMachine : MonoBehaviour
         chasePathCostBlockedUntilTargetLost = false;
         chasePathCostRejectCount = 0;
         lastChasePathCostRejectedAt = -1f;
+        nextAlertBroadcastAt = 0f;
+        alertBroadcastCount = 0;
+        alertRecipientCount = 0;
+        alertReceivedCount = 0;
+        lastAlertBroadcastAt = -1f;
+        lastAlertReceivedAt = -1f;
+        lastAlertPosition = Vector2.zero;
+        lastAlertSourceId = string.Empty;
 
         if (!initialized)
         {
@@ -443,6 +471,50 @@ public sealed class EnemyStateMachine : MonoBehaviour
         return true;
     }
 
+    /// <summary>
+    /// Receives a local last-known-position alert. This does not grant direct
+    /// target detection: the recipient moves to the reported position in the
+    /// Alert state and must still acquire the player with its own perception
+    /// settings before entering Chase.
+    /// </summary>
+    public bool TryReceiveAlert(
+        Vector2 targetPosition,
+        EnemyStateMachine source)
+    {
+        if (!initialized ||
+            source == null ||
+            source == this ||
+            currentState == EnemyRuntimeState.Dead ||
+            currentState == EnemyRuntimeState.Chase ||
+            combatReactionActive ||
+            chasePathCostBlockedUntilTargetLost ||
+            context == null ||
+            navigationAgent == null)
+        {
+            return false;
+        }
+
+        context.SetLastKnownTargetPosition(targetPosition);
+        alertReceivedCount++;
+        lastAlertReceivedAt = Time.time;
+        lastAlertPosition = targetPosition;
+        lastAlertSourceId = source.Context != null
+            ? source.Context.EnemyId
+            : source.gameObject.name;
+
+        if (currentState == EnemyRuntimeState.Alert)
+        {
+            ApplyAlertDestination();
+            return true;
+        }
+
+        TransitionTo(
+            EnemyRuntimeState.Alert,
+            "T5C alert received from " + lastAlertSourceId);
+
+        return true;
+    }
+
     private void Update()
     {
         if (!initialized ||
@@ -513,6 +585,11 @@ public sealed class EnemyStateMachine : MonoBehaviour
             navigationAgent.ObserveDetectedTarget(
                 observedPosition);
 
+            if (currentState != EnemyRuntimeState.Chase)
+            {
+                TryBroadcastAlert(observedPosition);
+            }
+
             TransitionTo(
                 EnemyRuntimeState.Chase,
                 "Target detected");
@@ -522,6 +599,21 @@ public sealed class EnemyStateMachine : MonoBehaviour
 
         switch (currentState)
         {
+            case EnemyRuntimeState.Alert:
+                if (!context.HasLastKnownTargetPosition)
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.ReturnToHomeOrPatrol,
+                        "Alert target position was cleared");
+                }
+                else if (navigationAgent.HasReachedDestination)
+                {
+                    TransitionTo(
+                        EnemyRuntimeState.SearchLastKnownPosition,
+                        "Alert position reached");
+                }
+                break;
+
             case EnemyRuntimeState.Chase:
                 if (context.HasLastKnownTargetPosition)
                 {
@@ -638,6 +730,11 @@ public sealed class EnemyStateMachine : MonoBehaviour
             navigationAgent.ObserveDetectedTarget(
                 observedPosition);
 
+            if (currentState != EnemyRuntimeState.Chase)
+            {
+                TryBroadcastAlert(observedPosition);
+            }
+
             TransitionTo(
                 EnemyRuntimeState.Chase,
                 string.IsNullOrWhiteSpace(reason)
@@ -747,6 +844,10 @@ public sealed class EnemyStateMachine : MonoBehaviour
 
         switch (state)
         {
+            case EnemyRuntimeState.Alert:
+                ApplyAlertDestination();
+                break;
+
             case EnemyRuntimeState.Patrol:
                 context.ClearLastKnownTargetPosition();
                 patrolPausePending = false;
@@ -941,6 +1042,61 @@ public sealed class EnemyStateMachine : MonoBehaviour
         return true;
     }
 
+    private void TryBroadcastAlert(Vector2 observedPosition)
+    {
+        EnemyDefinition definition = context != null
+            ? context.Definition
+            : null;
+
+        if (definition == null ||
+            !definition.BroadcastsAlert ||
+            definition.AlertRadius <= 0f ||
+            Time.time < nextAlertBroadcastAt)
+        {
+            return;
+        }
+
+        if (alertManager == null)
+        {
+            alertManager =
+                UnityEngine.Object.FindFirstObjectByType<EnemyManager>();
+        }
+
+        if (alertManager == null)
+        {
+            return;
+        }
+
+        int delivered = alertManager.BroadcastAlert(
+            this,
+            observedPosition,
+            definition.AlertRadius);
+
+        alertBroadcastCount++;
+        alertRecipientCount += delivered;
+        lastAlertBroadcastAt = Time.time;
+        lastAlertPosition = observedPosition;
+        nextAlertBroadcastAt = Time.time + Mathf.Max(
+            0f,
+            definition.AlertBroadcastCooldown);
+    }
+
+    private void ApplyAlertDestination()
+    {
+        if (context == null ||
+            navigationAgent == null ||
+            !context.HasLastKnownTargetPosition)
+        {
+            return;
+        }
+
+        activeBehaviorDestination =
+            context.LastKnownTargetPosition;
+
+        navigationAgent.SetFixedDestination(
+            activeBehaviorDestination);
+    }
+
     private bool IsNearHome()
     {
         if (context == null)
@@ -1011,6 +1167,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
             motor = navigationAgent != null
                 ? navigationAgent.Motor
                 : GetComponent<EnemyMotor2D>();
+        }
+
+        if (alertManager == null)
+        {
+            alertManager =
+                UnityEngine.Object.FindFirstObjectByType<EnemyManager>();
         }
     }
 

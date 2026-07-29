@@ -124,6 +124,12 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float alertRadius = 0f;
 
+    [Tooltip(
+        "Minimum time between local alert broadcasts after fresh target " +
+        "acquisition. The alert is event-driven, never emitted per frame.")]
+    [Min(0f)]
+    [SerializeField] private float alertBroadcastCooldown = 1f;
+
     [Header("Nonlethal knockback response")]
     [SerializeField]
     private KnockbackResistanceSettings knockbackResistance =
@@ -378,6 +384,7 @@ public sealed class EnemyDefinition : ScriptableObject
     public float ViewAngle => viewAngle;
     public bool BroadcastsAlert => broadcastsAlert;
     public float AlertRadius => alertRadius;
+    public float AlertBroadcastCooldown => alertBroadcastCooldown;
 
     public EnemyAttackMode AttackMode => attackMode;
     public float AttackDamage => attackDamage;
@@ -450,6 +457,20 @@ public sealed class EnemyDefinition : ScriptableObject
         if (searchDuration < 0f)
         {
             errors.Add(name + ": Search Duration cannot be negative.");
+        }
+
+        if (broadcastsAlert && alertRadius <= 0f)
+        {
+            errors.Add(
+                name +
+                ": Broadcasts Alert requires Alert Radius above zero.");
+        }
+
+        if (alertBroadcastCooldown < 0f)
+        {
+            errors.Add(
+                name +
+                ": Alert Broadcast Cooldown cannot be negative.");
         }
 
         if (animationProfile == null)
@@ -668,6 +689,9 @@ public sealed class EnemyDefinition : ScriptableObject
 
         viewAngle = Mathf.Clamp(viewAngle, 1f, 360f);
         alertRadius = Mathf.Max(0f, alertRadius);
+        alertBroadcastCooldown = Mathf.Max(
+            0f,
+            alertBroadcastCooldown);
 
         attackDamage = Mathf.Max(0f, attackDamage);
         attackRange = Mathf.Max(0f, attackRange);

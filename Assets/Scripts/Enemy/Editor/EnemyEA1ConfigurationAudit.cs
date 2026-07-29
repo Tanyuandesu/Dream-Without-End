@@ -51,6 +51,11 @@ public static class EnemyEA1ConfigurationAudit
             errors,
             notes);
 
+        AuditT5CLocalAlertAuthoring(
+            definitions,
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -502,6 +507,57 @@ public static class EnemyEA1ConfigurationAudit
             "acquisition, Require Line Of Sight gates perception, and " +
             "Maximum Chase Path Cost is supplied to the shared A* agent. " +
             "All values remain editable per EnemyDefinition.");
+    }
+
+    private static void AuditT5CLocalAlertAuthoring(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        int broadcasterCount = 0;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null)
+            {
+                continue;
+            }
+
+            if (definition.AlertBroadcastCooldown < 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T5C Alert Broadcast Cooldown cannot be negative.");
+            }
+
+            if (!definition.BroadcastsAlert)
+            {
+                continue;
+            }
+
+            broadcasterCount++;
+
+            if (definition.AlertRadius <= 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T5C broadcaster requires Alert Radius above zero.");
+            }
+        }
+
+        notes.Add(
+            "T5C local alert authoring is installed. AlertBroadcasters=" +
+            broadcasterCount + "/" + definitions.Length +
+            ". Broadcasts Alert, Alert Radius and Alert Broadcast Cooldown " +
+            "are read directly from each EnemyDefinition; no GameplayRole " +
+            "branch assigns behavior.");
     }
 
     private static void AuditT0SpawnBaseline(
