@@ -6,8 +6,8 @@ using UnityEngine;
 /// Health still owns the death event and end-of-frame destruction;
 /// EnemyStateMachine still owns the Dead transition; EnemyManager still owns
 /// run-record attribution and active-list removal. This component only closes
-/// runtime hazards between Died and Destroy by disabling contact damage,
-/// collision, physics simulation and remaining AI updates.
+/// runtime hazards between Died and Destroy by disabling collision, physics
+/// simulation and remaining AI updates.
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Health))]
@@ -23,7 +23,6 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
     [SerializeField] private EnemyNavigationAgent navigationAgent;
     [SerializeField] private EnemyDetection detection;
     [SerializeField] private EnemyCombatReceiver combatReceiver;
-    [SerializeField] private TestEnemyAI legacyBridge;
     [SerializeField] private Rigidbody2D body;
 
     [Header("CB6 death state (read only during Play Mode)")]
@@ -31,7 +30,6 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
     [SerializeField] private bool deathProcessed;
     [SerializeField] private float deathProcessedAt = -1f;
     [SerializeField] private DamageAttribution deathAttribution;
-    [SerializeField] private bool contactDamageDisabled;
     [SerializeField] private bool collidersDisabled;
     [SerializeField] private bool physicsDisabled;
     [SerializeField] private bool aiDisabled;
@@ -42,7 +40,6 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
     public bool DeathProcessed => deathProcessed;
     public float DeathProcessedAt => deathProcessedAt;
     public DamageAttribution DeathAttribution => deathAttribution;
-    public bool ContactDamageDisabled => contactDamageDisabled;
     public bool CollidersDisabled => collidersDisabled;
     public bool PhysicsDisabled => physicsDisabled;
     public bool AiDisabled => aiDisabled;
@@ -59,8 +56,7 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
         EnemyMotor2D newMotor,
         EnemyNavigationAgent newNavigationAgent,
         EnemyDetection newDetection,
-        EnemyCombatReceiver newCombatReceiver,
-        TestEnemyAI newLegacyBridge)
+        EnemyCombatReceiver newCombatReceiver)
     {
         Unsubscribe();
 
@@ -71,14 +67,12 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
         navigationAgent = newNavigationAgent;
         detection = newDetection;
         combatReceiver = newCombatReceiver;
-        legacyBridge = newLegacyBridge;
 
         CacheComponents();
 
         deathProcessed = false;
         deathProcessedAt = -1f;
         deathAttribution = DamageAttribution.Unspecified;
-        contactDamageDisabled = false;
         collidersDisabled = false;
         physicsDisabled = false;
         aiDisabled = false;
@@ -134,11 +128,6 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
             combatReceiver = GetComponent<EnemyCombatReceiver>();
         }
 
-        if (legacyBridge == null)
-        {
-            legacyBridge = GetComponent<TestEnemyAI>();
-        }
-
         if (body == null)
         {
             body = GetComponent<Rigidbody2D>();
@@ -182,7 +171,6 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
             ? deadHealth.LastAcceptedDamage.ResolvedAttribution
             : DamageAttribution.Other;
 
-        DisableContactDamage();
         DisableColliders();
         DisablePhysics();
         DisableRemainingAiUpdates();
@@ -207,35 +195,9 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
             stateWasDead,
             motorWasInactive,
             reactionWasInactive,
-            contactDamageDisabled,
             collidersDisabled,
             physicsDisabled,
             aiDisabled);
-    }
-
-    private void DisableContactDamage()
-    {
-        ContactDamage2D[] damageSources =
-            GetComponents<ContactDamage2D>();
-
-        contactDamageDisabled = true;
-
-        for (int i = 0; i < damageSources.Length; i++)
-        {
-            ContactDamage2D source = damageSources[i];
-
-            if (source == null)
-            {
-                continue;
-            }
-
-            source.DisableForSourceDeath();
-
-            if (source.enabled)
-            {
-                contactDamageDisabled = false;
-            }
-        }
     }
 
     private void DisableColliders()
@@ -295,16 +257,10 @@ public sealed class EnemyDeathLifecycle : MonoBehaviour
             combatReceiver.enabled = false;
         }
 
-        if (legacyBridge != null)
-        {
-            legacyBridge.enabled = false;
-        }
-
         aiDisabled =
             (detection == null || !detection.enabled) &&
             (navigationAgent == null || !navigationAgent.enabled) &&
-            (combatReceiver == null || !combatReceiver.enabled) &&
-            (legacyBridge == null || !legacyBridge.enabled);
+            (combatReceiver == null || !combatReceiver.enabled);
     }
 
     private void OnDestroy()

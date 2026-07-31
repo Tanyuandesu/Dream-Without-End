@@ -68,10 +68,6 @@ MonoBehaviour:
   attackRecovery: 0.32
   attackCooldown: 0.58
   projectileSpeed: 0
-  enableLegacyContactDamage: 0
-  legacyContactDamage: 4
-  legacyContactDamageCooldown: 0.58
-  legacyContactDamageTargets: 2
   enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
   animationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
   visualWorldHeight: 0.8

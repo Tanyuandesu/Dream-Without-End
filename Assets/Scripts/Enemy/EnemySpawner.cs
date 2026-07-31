@@ -114,21 +114,6 @@ public sealed class EnemySpawner : MonoBehaviour
     private float damageInvulnerabilityTime =
         0.1f;
 
-    [Header("碰撞傷害")]
-    [SerializeField, HideInInspector]
-    private bool enableContactDamage = true;
-
-    [Min(0f)]
-    [SerializeField, HideInInspector] private float contactDamage = 10f;
-
-    [Min(0f)]
-    [SerializeField, HideInInspector]
-    private float contactDamageCooldown = 0.75f;
-
-    [SerializeField, HideInInspector]
-    private DamageFactionMask contactDamageTargets =
-        DamageFactionMask.Player;
-
     [Header("敵人外觀")]
     [SerializeField, HideInInspector] private Sprite enemySprite;
 
@@ -577,7 +562,6 @@ public sealed class EnemySpawner : MonoBehaviour
         CreateVisual(enemy, index, definition);
         CreateTemporaryHealthBar(enemy, definition);
         CreatePhysics(enemy, definition);
-        CreateContactDamage(enemy, definition);
 
         EnemyPathfinder pathfinder =
             enemy.AddComponent<EnemyPathfinder>();
@@ -675,13 +659,6 @@ public sealed class EnemySpawner : MonoBehaviour
             navigationAgent,
             motor);
 
-        TestEnemyAI enemyAI =
-            enemy.AddComponent<TestEnemyAI>();
-
-        enemyAI.Initialize(
-            runtimeContext,
-            navigationAgent);
-
         EnemyMeleeAttackController meleeAttackController = null;
         EnemyProjectileAttackController projectileAttackController = null;
 
@@ -749,8 +726,7 @@ public sealed class EnemySpawner : MonoBehaviour
             motor,
             navigationAgent,
             detection,
-            combatReceiver,
-            enemyAI);
+            combatReceiver);
 
         return enemy;
     }
@@ -825,44 +801,6 @@ public sealed class EnemySpawner : MonoBehaviour
                definition.ProjectileSpeed > 0f &&
                definition.ProjectileLifetime > 0f &&
                definition.ProjectileRadius > 0f;
-    }
-
-    private void CreateContactDamage(
-        GameObject enemy,
-        EnemyDefinition definition)
-    {
-        // T6A/T6B formal attacks are the sole active damage paths for
-        // configured melee/projectile profiles. The legacy component remains
-        // only for definition-less migration
-        // fallback and can be deleted during Enemy Legacy Cleanup.
-        if (SupportsFormalMeleeAttack(definition) ||
-            SupportsFormalProjectileAttack(definition))
-        {
-            return;
-        }
-
-        bool shouldEnable = definition != null
-            ? definition.EnableLegacyContactDamage
-            : enableContactDamage;
-
-        if (!shouldEnable)
-        {
-            return;
-        }
-
-        ContactDamage2D contactDamageComponent =
-            enemy.AddComponent<ContactDamage2D>();
-
-        contactDamageComponent.Initialize(
-            definition != null
-                ? definition.LegacyContactDamage
-                : contactDamage,
-            definition != null
-                ? definition.LegacyContactDamageCooldown
-                : contactDamageCooldown,
-            definition != null
-                ? definition.LegacyContactDamageTargets
-                : contactDamageTargets);
     }
 
     private void CreateVisual(
@@ -1496,11 +1434,6 @@ public sealed class EnemySpawner : MonoBehaviour
         damageInvulnerabilityTime = Mathf.Max(
             0f,
             damageInvulnerabilityTime);
-
-        contactDamage = Mathf.Max(0f, contactDamage);
-        contactDamageCooldown = Mathf.Max(
-            0f,
-            contactDamageCooldown);
 
         visualWorldHeight = Mathf.Max(
             0.05f,

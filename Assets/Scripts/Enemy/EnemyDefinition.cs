@@ -245,21 +245,6 @@ public sealed class EnemyDefinition : ScriptableObject
     [SerializeField] private Color projectileColor =
         new Color(0.82f, 0.68f, 1f, 1f);
 
-    [Header("Legacy contact damage fallback")]
-    [Tooltip(
-        "Migration-only fallback for definition-less or pre-T6 enemies. " +
-        "Formal melee profiles must leave this disabled.")]
-    [SerializeField] private bool enableLegacyContactDamage;
-
-    [Min(0f)]
-    [SerializeField] private float legacyContactDamage = 5f;
-
-    [Min(0f)]
-    [SerializeField] private float legacyContactDamageCooldown = 0.75f;
-
-    [SerializeField] private DamageFactionMask legacyContactDamageTargets =
-        DamageFactionMask.Player;
-
     [Header("Presentation")]
     [SerializeField] private Sprite enemySprite;
     [SerializeField] private CharacterAnimationProfile animationProfile;
@@ -431,16 +416,6 @@ public sealed class EnemyDefinition : ScriptableObject
     public float ProjectileVisualSize => projectileVisualSize;
     public Color ProjectileColor => projectileColor;
 
-    public bool EnableLegacyContactDamage =>
-        enableLegacyContactDamage;
-
-    public float LegacyContactDamage => legacyContactDamage;
-    public float LegacyContactDamageCooldown =>
-        legacyContactDamageCooldown;
-
-    public DamageFactionMask LegacyContactDamageTargets =>
-        legacyContactDamageTargets;
-
     public Sprite EnemySprite => enemySprite;
     public CharacterAnimationProfile AnimationProfile =>
         animationProfile;
@@ -546,14 +521,6 @@ public sealed class EnemyDefinition : ScriptableObject
                 "the enemy can stop outside attack reach.");
         }
 
-        if (attackMode == EnemyAttackMode.Melee &&
-            enableLegacyContactDamage)
-        {
-            errors.Add(
-                name +
-                ": Formal melee must disable Legacy Contact Damage.");
-        }
-
         if (attackMode == EnemyAttackMode.Projectile)
         {
             if (projectileSpeed <= 0f)
@@ -586,12 +553,6 @@ public sealed class EnemyDefinition : ScriptableObject
                     ": Projectile Lifetime, Radius and Visual Size must be positive.");
             }
 
-            if (enableLegacyContactDamage)
-            {
-                errors.Add(
-                    name +
-                    ": Formal projectile attack must disable Legacy Contact Damage.");
-            }
         }
 
         if (postKnockbackPauseDuration < 0f)
@@ -809,10 +770,6 @@ public sealed class EnemyDefinition : ScriptableObject
         attackRecovery = Mathf.Max(0f, attackRecovery);
         attackCooldown = Mathf.Max(0f, attackCooldown);
         projectileSpeed = Mathf.Max(0f, projectileSpeed);
-
-        legacyContactDamage = Mathf.Max(0f, legacyContactDamage);
-        legacyContactDamageCooldown =
-            Mathf.Max(0f, legacyContactDamageCooldown);
 
         visualWorldHeight = Mathf.Max(0.05f, visualWorldHeight);
         colliderSize.x = Mathf.Max(0.05f, colliderSize.x);

@@ -325,8 +325,8 @@ public static class CombatCB9FullSystemAudit
         if (EnemyDeathLifecycleDiagnostics.LifecycleViolationCount != 0)
         {
             errors.Add(
-                "A dead enemy retained contact damage, collider, physics, AI, " +
-                "movement or combat reaction state.");
+                "A dead enemy retained collider, physics, AI, movement or " +
+                "combat reaction state.");
         }
 
         for (int i = 0; i < liveReceivers.Count; i++)

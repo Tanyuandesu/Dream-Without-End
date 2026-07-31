@@ -98,7 +98,6 @@ public static class EnemyEA2RuntimeAudit
         int runtimeEnemyCount = 0;
         int initializedContextCount = 0;
         int initializedStateMachineCount = 0;
-        int legacyAdapterCount = 0;
         int optionalTransitionLoggingCount = 0;
         int verifiedDefinitionBindingCount = 0;
         int extendedBehaviorMachineCount = 0;
@@ -136,6 +135,7 @@ public static class EnemyEA2RuntimeAudit
         int totalAlertBroadcasts = 0;
         int totalAlertRecipients = 0;
         int totalAlertsReceived = 0;
+        int legacyContactDamageComponentCount = 0;
 
         for (int i = 0; i < allContexts.Length; i++)
         {
@@ -148,6 +148,20 @@ public static class EnemyEA2RuntimeAudit
 
             runtimeEnemyCount++;
             context.CollectValidationErrors(errors);
+
+            int retiredContactComponents =
+                CountRetiredContactDamageComponents(context);
+
+            legacyContactDamageComponentCount +=
+                retiredContactComponents;
+
+            if (retiredContactComponents > 0)
+            {
+                errors.Add(
+                    context.gameObject.name +
+                    ": T7B found retired ContactDamage2D component(s)=" +
+                    retiredContactComponents + ".");
+            }
 
             if (context.IsInitialized)
             {
@@ -168,37 +182,12 @@ public static class EnemyEA2RuntimeAudit
             EnemyStateMachine[] stateMachines =
                 context.GetComponents<EnemyStateMachine>();
 
-            TestEnemyAI[] legacyAdapters =
-                context.GetComponents<TestEnemyAI>();
-
             if (stateMachines.Length != 1)
             {
                 errors.Add(
                     context.gameObject.name +
                     ": expected exactly one EnemyStateMachine, found " +
                     stateMachines.Length + ".");
-            }
-
-            if (legacyAdapters.Length != 1)
-            {
-                errors.Add(
-                    context.gameObject.name +
-                    ": expected exactly one EA2 legacy chase adapter, found " +
-                    legacyAdapters.Length + ".");
-            }
-
-            if (legacyAdapters.Length == 1)
-            {
-                legacyAdapterCount++;
-
-                if (!legacyAdapters[0].IsInitialized ||
-                    legacyAdapters[0].Context != context)
-                {
-                    errors.Add(
-                        context.gameObject.name +
-                        ": legacy chase adapter is not initialized against " +
-                        "its runtime context.");
-                }
             }
 
             if (stateMachines.Length == 1)
@@ -494,8 +483,8 @@ public static class EnemyEA2RuntimeAudit
 
         notes.Add(
             "T6A verifies the formal melee Attack state, one timed damage " +
-            "commit per sequence, independent Windup/Recovery/Cooldown values " +
-            "and removal of runtime legacy contact damage for melee profiles.");
+            "commit per sequence and independent Windup/Recovery/Cooldown " +
+            "values. EnemyMeleeAttackController is the sole melee damage path.");
 
         notes.Add(
             "T6B.3 verifies per-Definition melee engagement hysteresis, " +
@@ -505,11 +494,20 @@ public static class EnemyEA2RuntimeAudit
 
         notes.Add(
             "T6B verifies the Gazer formal projectile Attack state, non-homing " +
-            "projectile runtime, obstacle/expiry outcomes, configurable spacing " +
-            "and removal of legacy contact damage for projectile profiles. " +
+            "projectile runtime, obstacle/expiry outcomes and configurable spacing. " +
             "T6B.1 adds authoritative attack-facing presentation. T6B.2 " +
             "keeps projectile roots at unit scale, renders a visible core/halo, " +
             "uses an explicit swept player-target test and a separate solid-wall sweep.");
+
+        notes.Add(
+            "T7A removes the retired TestEnemyAI compatibility bridge. " +
+            "EnemyStateMachine and EnemyNavigationAgent are now the sole " +
+            "runtime AI/navigation authority.");
+
+        notes.Add(
+            "T7B removes ContactDamage2D and all definition/spawner fallback " +
+            "configuration. Formal melee/projectile controllers are now the " +
+            "sole enemy damage authority.");
 
         if (optionalTransitionLoggingCount > 0)
         {
@@ -528,9 +526,13 @@ public static class EnemyEA2RuntimeAudit
             "InitializedStateMachines=" +
             initializedStateMachineCount);
         report.AppendLine(
-            "LegacyChaseAdapters=" + legacyAdapterCount);
+            "T7AuthoritativeNavigationAgents=" +
+            initializedStateMachineCount + "/" + runtimeEnemyCount);
         report.AppendLine(
             "EnemyManagerActive=" + managerEnemyCount);
+        report.AppendLine(
+            "T7BLegacyContactDamageComponents=" +
+            legacyContactDamageComponentCount);
         report.AppendLine(
             "States=" + FormatStateCounts(stateCounts));
         report.AppendLine(
@@ -785,37 +787,6 @@ public static class EnemyEA2RuntimeAudit
             valid = false;
         }
 
-        ContactDamage2D[] contactDamageComponents =
-            context.GetComponents<ContactDamage2D>();
-
-        if (definition.EnableLegacyContactDamage)
-        {
-            if (contactDamageComponents.Length != 1 ||
-                !Approximately(
-                    contactDamageComponents[0].Damage,
-                    definition.LegacyContactDamage) ||
-                !Approximately(
-                    contactDamageComponents[0].HitCooldown,
-                    definition.LegacyContactDamageCooldown) ||
-                contactDamageComponents[0].TargetFactions !=
-                    definition.LegacyContactDamageTargets)
-            {
-                errors.Add(
-                    prefix +
-                    "T4 legacy contact-damage settings do not match " +
-                    "Definition.");
-                valid = false;
-            }
-        }
-        else if (contactDamageComponents.Length != 0)
-        {
-            errors.Add(
-                prefix +
-                "T4 contact damage exists although the Definition " +
-                "disables it.");
-            valid = false;
-        }
-
         definitionBindings.Add(
             definition.Id.Value +
             " | Room=" + identity.RoomIndex +
@@ -856,10 +827,6 @@ public static class EnemyEA2RuntimeAudit
                   " | Min=" + DescribeFloat(definition.ProjectileMinimumRange) +
                   " | Retreat=" +
                   definition.ProjectileRetreatSearchRadiusInCells) +
-            " | Contact=" +
-            (definition.EnableLegacyContactDamage
-                ? DescribeFloat(definition.LegacyContactDamage)
-                : "Off") +
             " | Height=" +
             DescribeFloat(definition.VisualWorldHeight) +
             " | Color=#" +
@@ -1081,8 +1048,6 @@ public static class EnemyEA2RuntimeAudit
         bool expectsFormalMelee = ExpectsFormalMelee(definition);
         EnemyMeleeAttackController[] controllers =
             context.GetComponents<EnemyMeleeAttackController>();
-        ContactDamage2D[] contactDamageComponents =
-            context.GetComponents<ContactDamage2D>();
 
         if (!expectsFormalMelee)
         {
@@ -1157,22 +1122,6 @@ public static class EnemyEA2RuntimeAudit
             valid = false;
         }
 
-        if (contactDamageComponents.Length != 0)
-        {
-            errors.Add(
-                prefix +
-                "T6A formal melee profile still has legacy ContactDamage2D.");
-            valid = false;
-        }
-
-        if (definition.EnableLegacyContactDamage)
-        {
-            errors.Add(
-                prefix +
-                "T6A formal melee Definition still enables legacy contact damage.");
-            valid = false;
-        }
-
         if (controller.TargetHealth == null)
         {
             errors.Add(
@@ -1214,8 +1163,6 @@ public static class EnemyEA2RuntimeAudit
             ExpectsFormalProjectile(definition);
         EnemyProjectileAttackController[] controllers =
             context.GetComponents<EnemyProjectileAttackController>();
-        ContactDamage2D[] contactDamageComponents =
-            context.GetComponents<ContactDamage2D>();
 
         if (!expectsFormalProjectile)
         {
@@ -1280,15 +1227,6 @@ public static class EnemyEA2RuntimeAudit
             errors.Add(
                 prefix +
                 "T6B runtime projectile values do not match EnemyDefinition.");
-            valid = false;
-        }
-
-        if (contactDamageComponents.Length != 0 ||
-            definition.EnableLegacyContactDamage)
-        {
-            errors.Add(
-                prefix +
-                "T6B formal projectile profile still has legacy contact damage.");
             valid = false;
         }
 
@@ -1439,6 +1377,34 @@ public static class EnemyEA2RuntimeAudit
         }
 
         return activeSpawner;
+    }
+
+
+    private static int CountRetiredContactDamageComponents(
+        Component root)
+    {
+        if (root == null)
+        {
+            return 0;
+        }
+
+        MonoBehaviour[] behaviours =
+            root.GetComponents<MonoBehaviour>();
+
+        int count = 0;
+
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            MonoBehaviour behaviour = behaviours[i];
+
+            if (behaviour != null &&
+                behaviour.GetType().Name == "ContactDamage2D")
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static bool IsActiveSceneObject(Component component)

@@ -10865,7 +10865,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyCatalog: {fileID: 11400000, guid: 71fba5c7957df67b86496d59cdb93428, type: 2}
-  spawnMode: 1
   defaultEnemyDefinition: {fileID: 11400000, guid: 21bb062c0bb5826579df4a0b0860fb97, type: 2}
   enemyCount: 3
   spawnNearPlayerFirst: 1
@@ -10888,10 +10887,6 @@ MonoBehaviour:
     m_Bits: 4294967295
   maxHealth: 30
   damageInvulnerabilityTime: 0.1
-  enableContactDamage: 1
-  contactDamage: 5
-  contactDamageCooldown: 0.75
-  contactDamageTargets: 2
   enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
   defaultAnimationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
   animationProfiles:

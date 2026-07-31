@@ -71,6 +71,14 @@ public static class EnemyEA1ConfigurationAudit
             errors,
             notes);
 
+        AuditT7AAuthorityCleanup(
+            errors,
+            notes);
+
+        AuditT7BLegacyContactDamageCleanup(
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -397,6 +405,64 @@ public static class EnemyEA1ConfigurationAudit
         return builder.ToString();
     }
 
+    private static void AuditT7AAuthorityCleanup(
+        List<string> errors,
+        List<string> notes)
+    {
+        const string legacyBridgePath =
+            "Assets/Scripts/Enemy/TestEnemyAI.cs";
+
+        MonoScript legacyBridge =
+            AssetDatabase.LoadAssetAtPath<MonoScript>(
+                legacyBridgePath);
+
+        if (legacyBridge != null)
+        {
+            errors.Add(
+                "T7A cleanup incomplete: delete " +
+                legacyBridgePath +
+                " so EnemyStateMachine/EnemyNavigationAgent remain the " +
+                "only AI authority path.");
+
+            return;
+        }
+
+        notes.Add(
+            "T7A authority cleanup is installed. TestEnemyAI is absent; " +
+            "EnemyStateMachine and EnemyNavigationAgent are the sole " +
+            "runtime AI/navigation authority.");
+    }
+
+
+    private static void AuditT7BLegacyContactDamageCleanup(
+        List<string> errors,
+        List<string> notes)
+    {
+        const string legacyContactPath =
+            "Assets/Scripts/Combat/ContactDamage2D.cs";
+
+        MonoScript legacyContactScript =
+            AssetDatabase.LoadAssetAtPath<MonoScript>(
+                legacyContactPath);
+
+        if (legacyContactScript != null)
+        {
+            errors.Add(
+                "T7B cleanup incomplete: delete " +
+                legacyContactPath +
+                " so formal melee/projectile controllers remain the only " +
+                "enemy damage authority.");
+
+            return;
+        }
+
+        notes.Add(
+            "T7B legacy contact-damage cleanup is installed. " +
+            "ContactDamage2D and its EnemyDefinition/EnemySpawner fallback " +
+            "fields are absent; formal melee/projectile controllers are the " +
+            "sole enemy damage authority.");
+    }
+
     private static void AuditT4AuthoringVisibility(
         EnemyDefinition[] definitions,
         List<string> errors,
@@ -625,13 +691,6 @@ public static class EnemyEA1ConfigurationAudit
                         ": T6A Attack Range must be at least Stop Distance.");
                 }
 
-                if (definition.EnableLegacyContactDamage)
-                {
-                    errors.Add(
-                        definition.name +
-                        ": T6A formal melee must disable Legacy Contact Damage " +
-                        "to preserve a single authoritative damage path.");
-                }
             }
             else
             {
@@ -652,8 +711,8 @@ public static class EnemyEA1ConfigurationAudit
             "T6A formal melee authoring is installed. FormalMeleeProfiles=" +
             meleeCount + "/" + definitions.Length +
             ". Damage, Range, Windup, Recovery and Cooldown are read " +
-            "directly from EnemyDefinition; formal melee disables the " +
-            "legacy contact-damage path.");
+            "directly from EnemyDefinition; EnemyMeleeAttackController is " +
+            "the sole melee damage path.");
     }
 
 
@@ -708,12 +767,6 @@ public static class EnemyEA1ConfigurationAudit
                     ": T6B Projectile Retreat Search Radius cannot be negative.");
             }
 
-            if (definition.EnableLegacyContactDamage)
-            {
-                errors.Add(
-                    definition.name +
-                    ": T6B formal projectile must disable Legacy Contact Damage.");
-            }
         }
 
         if (definitions.Length == 5 && projectileCount != 1)
@@ -729,8 +782,8 @@ public static class EnemyEA1ConfigurationAudit
             definitions.Length +
             ". Speed, Lifetime, Radius, Minimum Range, retreat search and " +
             "visual presentation are read directly from EnemyDefinition; " +
-            "the projectile path is non-homing and legacy contact damage " +
-            "remains disabled.");
+            "EnemyProjectileAttackController/EnemyProjectile are the sole " +
+            "projectile damage path.");
     }
 
     private static void AuditT6B3MeleeEngagementAuthoring(

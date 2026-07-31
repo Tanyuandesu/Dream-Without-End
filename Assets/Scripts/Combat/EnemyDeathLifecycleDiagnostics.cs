@@ -10,7 +10,6 @@ public static class EnemyDeathLifecycleDiagnostics
     public static int ProcessedDeathCount { get; private set; }
     public static int PlayerAttributedDeathCount { get; private set; }
     public static int OtherAttributedDeathCount { get; private set; }
-    public static int ContactDamageShutdownCount { get; private set; }
     public static int ColliderShutdownCount { get; private set; }
     public static int PhysicsShutdownCount { get; private set; }
     public static int AiShutdownCount { get; private set; }
@@ -21,7 +20,6 @@ public static class EnemyDeathLifecycleDiagnostics
     public static bool LastStateWasDead { get; private set; }
     public static bool LastMotorWasInactive { get; private set; }
     public static bool LastReactionWasInactive { get; private set; }
-    public static bool LastContactDamageWasDisabled { get; private set; }
     public static bool LastCollidersWereDisabled { get; private set; }
     public static bool LastPhysicsWasDisabled { get; private set; }
     public static bool LastAiWasDisabled { get; private set; }
@@ -32,7 +30,6 @@ public static class EnemyDeathLifecycleDiagnostics
         ProcessedDeathCount = 0;
         PlayerAttributedDeathCount = 0;
         OtherAttributedDeathCount = 0;
-        ContactDamageShutdownCount = 0;
         ColliderShutdownCount = 0;
         PhysicsShutdownCount = 0;
         AiShutdownCount = 0;
@@ -43,7 +40,6 @@ public static class EnemyDeathLifecycleDiagnostics
         LastStateWasDead = false;
         LastMotorWasInactive = false;
         LastReactionWasInactive = false;
-        LastContactDamageWasDisabled = false;
         LastCollidersWereDisabled = false;
         LastPhysicsWasDisabled = false;
         LastAiWasDisabled = false;
@@ -55,7 +51,6 @@ public static class EnemyDeathLifecycleDiagnostics
         bool stateWasDead,
         bool motorWasInactive,
         bool reactionWasInactive,
-        bool contactDamageWasDisabled,
         bool collidersWereDisabled,
         bool physicsWasDisabled,
         bool aiWasDisabled)
@@ -69,11 +64,6 @@ public static class EnemyDeathLifecycleDiagnostics
         else
         {
             OtherAttributedDeathCount++;
-        }
-
-        if (contactDamageWasDisabled)
-        {
-            ContactDamageShutdownCount++;
         }
 
         if (collidersWereDisabled)
@@ -95,7 +85,6 @@ public static class EnemyDeathLifecycleDiagnostics
             stateWasDead &&
             motorWasInactive &&
             reactionWasInactive &&
-            contactDamageWasDisabled &&
             collidersWereDisabled &&
             physicsWasDisabled &&
             aiWasDisabled;
@@ -113,7 +102,6 @@ public static class EnemyDeathLifecycleDiagnostics
         LastStateWasDead = stateWasDead;
         LastMotorWasInactive = motorWasInactive;
         LastReactionWasInactive = reactionWasInactive;
-        LastContactDamageWasDisabled = contactDamageWasDisabled;
         LastCollidersWereDisabled = collidersWereDisabled;
         LastPhysicsWasDisabled = physicsWasDisabled;
         LastAiWasDisabled = aiWasDisabled;

@@ -279,23 +279,6 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
             newMaximumPathCostInCells);
     }
 
-    public void ApplyLegacyMovementSettings(
-        float newWaypointTolerance,
-        float newStopDistance,
-        float newLastPositionTolerance)
-    {
-        waypointTolerance = Mathf.Clamp(
-            newWaypointTolerance,
-            0.001f,
-            0.25f);
-
-        stopDistance = Mathf.Max(0f, newStopDistance);
-        lastPositionTolerance = Mathf.Clamp(
-            newLastPositionTolerance,
-            0.01f,
-            1f);
-    }
-
     public bool SetFixedDestination(
         Vector2 destination,
         int maximumPathCost = 0)

@@ -35,7 +35,6 @@ public static class EnemyEA3NavigationAudit
         int initializedAgentCount = 0;
         int initializedMotorCount = 0;
         int initializedPathfinderCount = 0;
-        int initializedBridgeCount = 0;
         int stateMachineLinkCount = 0;
         int activeFailureCount = 0;
         int immediateProbeCount = 0;
@@ -64,9 +63,6 @@ public static class EnemyEA3NavigationAudit
             EnemyPathfinder[] pathfinders =
                 context.GetComponents<EnemyPathfinder>();
 
-            TestEnemyAI[] bridges =
-                context.GetComponents<TestEnemyAI>();
-
             EnemyStateMachine[] stateMachines =
                 context.GetComponents<EnemyStateMachine>();
 
@@ -86,12 +82,6 @@ public static class EnemyEA3NavigationAudit
                 context,
                 "EnemyPathfinder facade",
                 pathfinders.Length,
-                errors);
-
-            ValidateSingleComponent(
-                context,
-                "TestEnemyAI compatibility bridge",
-                bridges.Length,
                 errors);
 
             ValidateSingleComponent(
@@ -196,37 +186,6 @@ public static class EnemyEA3NavigationAudit
                         context.gameObject.name +
                         ": navigation agent does not reference its local " +
                         "EnemyPathfinder facade.");
-                }
-            }
-
-            if (bridges.Length == 1)
-            {
-                TestEnemyAI bridge = bridges[0];
-
-                if (bridge.IsInitialized)
-                {
-                    initializedBridgeCount++;
-                }
-                else
-                {
-                    errors.Add(
-                        context.gameObject.name +
-                        ": TestEnemyAI compatibility bridge is not initialized.");
-                }
-
-                SerializedObject serializedBridge =
-                    new SerializedObject(bridge);
-
-                SerializedProperty bridgeAgentProperty =
-                    serializedBridge.FindProperty("navigationAgent");
-
-                if (agents.Length == 1 &&
-                    (bridgeAgentProperty == null ||
-                     bridgeAgentProperty.objectReferenceValue != agents[0]))
-                {
-                    errors.Add(
-                        context.gameObject.name +
-                        ": compatibility bridge does not forward to the EA3 agent.");
                 }
             }
 
@@ -384,6 +343,10 @@ public static class EnemyEA3NavigationAudit
                 runtimeEnemyCount + ").");
         }
 
+        notes.Add(
+            "T7A legacy bridge removed; no parallel navigation component " +
+            "is expected on runtime enemies.");
+
         StringBuilder report = new StringBuilder();
         report.AppendLine("[Enemy System/EA3] Navigation Audit");
         report.AppendLine("RuntimeEnemies=" + runtimeEnemyCount);
@@ -395,8 +358,7 @@ public static class EnemyEA3NavigationAudit
             "InitializedPathfinderFacades=" +
             initializedPathfinderCount);
         report.AppendLine(
-            "InitializedCompatibilityBridges=" +
-            initializedBridgeCount);
+            "T7AuthorityPath=EnemyStateMachine->EnemyNavigationAgent");
         report.AppendLine(
             "StateMachineNavigationLinks=" +
             stateMachineLinkCount);

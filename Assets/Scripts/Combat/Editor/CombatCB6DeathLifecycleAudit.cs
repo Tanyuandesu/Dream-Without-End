@@ -35,7 +35,6 @@ public static class CombatCB6DeathLifecycleAudit
         int deadObjectsStillActive = 0;
         int missingLifecycleCount = 0;
         int uninitializedLifecycleCount = 0;
-        int activeContactDamageOnDeadCount = 0;
 
         EnemyRuntimeIdentity[] identities =
             Resources.FindObjectsOfTypeAll<EnemyRuntimeIdentity>();
@@ -62,14 +61,6 @@ public static class CombatCB6DeathLifecycleAudit
             if (health.IsDead)
             {
                 deadObjectsStillActive++;
-
-                ContactDamage2D contact =
-                    identity.GetComponent<ContactDamage2D>();
-
-                if (contact != null && contact.enabled)
-                {
-                    activeContactDamageOnDeadCount++;
-                }
 
                 continue;
             }
@@ -131,13 +122,6 @@ public static class CombatCB6DeathLifecycleAudit
             errors.Add(
                 deadObjectsStillActive +
                 " dead enemy objects remain active in the loaded scene.");
-        }
-
-        if (activeContactDamageOnDeadCount > 0)
-        {
-            errors.Add(
-                activeContactDamageOnDeadCount +
-                " dead enemies still have enabled ContactDamage2D.");
         }
 
         if (manager.RecordedPlayerDeathCount !=
@@ -249,8 +233,6 @@ public static class CombatCB6DeathLifecycleAudit
             EnemyDeathLifecycleDiagnostics.ProcessedDeathCount +
             " | Player=" +
             EnemyDeathLifecycleDiagnostics.PlayerAttributedDeathCount +
-            " | Contact Shutdown=" +
-            EnemyDeathLifecycleDiagnostics.ContactDamageShutdownCount +
             " | Collider Shutdown=" +
             EnemyDeathLifecycleDiagnostics.ColliderShutdownCount +
             " | Physics Shutdown=" +

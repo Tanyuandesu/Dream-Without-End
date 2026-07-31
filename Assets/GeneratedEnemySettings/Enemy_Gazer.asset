@@ -74,10 +74,6 @@ MonoBehaviour:
   projectileRadius: 0.12
   projectileVisualSize: 0.24
   projectileColor: {r: 0.86, g: 0.7, b: 1, a: 1}
-  enableLegacyContactDamage: 0
-  legacyContactDamage: 0
-  legacyContactDamageCooldown: 1
-  legacyContactDamageTargets: 2
   enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
   animationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
   visualWorldHeight: 0.82

@@ -390,22 +390,6 @@ public sealed class EnemyStateMachine : MonoBehaviour
     }
 
     /// <summary>
-    /// EA2 source-compatibility overload. The bridge owns no movement and
-    /// exposes the EA3 agent that now performs navigation.
-    /// </summary>
-    public void Initialize(
-        EnemyRuntimeContext newContext,
-        TestEnemyAI legacyBridge)
-    {
-        EnemyNavigationAgent resolvedAgent =
-            legacyBridge != null
-                ? legacyBridge.NavigationAgent
-                : GetComponent<EnemyNavigationAgent>();
-
-        Initialize(newContext, resolvedAgent);
-    }
-
-    /// <summary>
     /// Requests a temporary Hit or Stunned interruption. When the motor is
     /// already performing knockback, the reaction timer is deferred until that
     /// movement ends. The remembered target is preserved for a fresh route.
