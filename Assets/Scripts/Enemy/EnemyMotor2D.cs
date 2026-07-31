@@ -23,7 +23,7 @@ public enum TimedNavigationSpeedEndReason
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(Rigidbody2D))]
-public sealed class EnemyMotor2D : MonoBehaviour
+public sealed class EnemyMotor2D : MonoBehaviour, ICharacterFacingSource
 {
     private const float MinimumDisplacementDistance = 0.0005f;
     private const int CastResultCapacity = 32;
@@ -97,6 +97,9 @@ public sealed class EnemyMotor2D : MonoBehaviour
         facingDirection.sqrMagnitude > 0.000001f
             ? facingDirection.normalized
             : Vector2.down;
+
+    public CharacterFacingDirection CurrentFacing =>
+        QuantizeFacingDirection(FacingDirection);
 
     public float EffectiveMoveSpeed =>
         moveSpeed * ActiveNavigationSpeedMultiplier;
@@ -269,6 +272,46 @@ public sealed class EnemyMotor2D : MonoBehaviour
         }
 
         facingDirection = direction.normalized;
+    }
+
+    private static CharacterFacingDirection QuantizeFacingDirection(
+        Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.000001f)
+        {
+            return CharacterFacingDirection.South;
+        }
+
+        float angle = Mathf.Atan2(
+            direction.y,
+            direction.x) * Mathf.Rad2Deg;
+
+        if (angle < 0f)
+        {
+            angle += 360f;
+        }
+
+        int sector = Mathf.RoundToInt(angle / 45f) % 8;
+
+        switch (sector)
+        {
+            case 0:
+                return CharacterFacingDirection.East;
+            case 1:
+                return CharacterFacingDirection.NorthEast;
+            case 2:
+                return CharacterFacingDirection.North;
+            case 3:
+                return CharacterFacingDirection.NorthWest;
+            case 4:
+                return CharacterFacingDirection.West;
+            case 5:
+                return CharacterFacingDirection.SouthWest;
+            case 6:
+                return CharacterFacingDirection.South;
+            default:
+                return CharacterFacingDirection.SouthEast;
+        }
     }
 
     /// <summary>

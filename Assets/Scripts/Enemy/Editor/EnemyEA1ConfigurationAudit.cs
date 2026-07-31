@@ -61,6 +61,16 @@ public static class EnemyEA1ConfigurationAudit
             errors,
             notes);
 
+        AuditT6BFormalProjectileAuthoring(
+            definitions,
+            errors,
+            notes);
+
+        AuditT6B3MeleeEngagementAuthoring(
+            definitions,
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -644,6 +654,124 @@ public static class EnemyEA1ConfigurationAudit
             ". Damage, Range, Windup, Recovery and Cooldown are read " +
             "directly from EnemyDefinition; formal melee disables the " +
             "legacy contact-damage path.");
+    }
+
+
+    private static void AuditT6BFormalProjectileAuthoring(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        int projectileCount = 0;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null ||
+                definition.AttackMode != EnemyAttackMode.Projectile)
+            {
+                continue;
+            }
+
+            projectileCount++;
+
+            if (definition.ProjectileSpeed <= 0f ||
+                definition.ProjectileLifetime <= 0f ||
+                definition.ProjectileRadius <= 0f ||
+                definition.ProjectileVisualSize <= 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6B projectile Speed, Lifetime, Radius and Visual Size " +
+                    "must be positive.");
+            }
+
+            if (definition.ProjectileMinimumRange < 0f ||
+                definition.ProjectileMinimumRange >=
+                    definition.AttackRange)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6B Projectile Minimum Range must be below Attack Range.");
+            }
+
+            if (definition.ProjectileRetreatSearchRadiusInCells < 0)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6B Projectile Retreat Search Radius cannot be negative.");
+            }
+
+            if (definition.EnableLegacyContactDamage)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6B formal projectile must disable Legacy Contact Damage.");
+            }
+        }
+
+        if (definitions.Length == 5 && projectileCount != 1)
+        {
+            errors.Add(
+                "T6B five-enemy baseline expects exactly one Projectile " +
+                "profile. Actual=" + projectileCount + ".");
+        }
+
+        notes.Add(
+            "T6B formal projectile authoring is installed. " +
+            "FormalProjectileProfiles=" + projectileCount + "/" +
+            definitions.Length +
+            ". Speed, Lifetime, Radius, Minimum Range, retreat search and " +
+            "visual presentation are read directly from EnemyDefinition; " +
+            "the projectile path is non-homing and legacy contact damage " +
+            "remains disabled.");
+    }
+
+    private static void AuditT6B3MeleeEngagementAuthoring(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        int meleeCount = 0;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null ||
+                definition.AttackMode != EnemyAttackMode.Melee)
+            {
+                continue;
+            }
+
+            meleeCount++;
+
+            if (definition.MeleeEngagementBuffer < 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6B.3 Melee Engagement Buffer cannot be negative.");
+            }
+        }
+
+        notes.Add(
+            "T6B.3 melee engagement authoring is installed. " +
+            "MeleeEngagementProfiles=" + meleeCount + "/" +
+            definitions.Length +
+            ". Attack Range plus a one-fixed-step catch (capped by the buffer) enters the hold; Attack Range plus the " +
+            "per-Definition buffer releases it. No GameplayRole branch " +
+            "assigns the buffer.");
     }
 
     private static void AuditT0SpawnBaseline(

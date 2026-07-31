@@ -63,6 +63,7 @@ MonoBehaviour:
   attackMode: 0
   attackDamage: 12
   attackRange: 1.15
+  meleeEngagementBuffer: 0.18
   attackWindup: 0.65
   attackRecovery: 0.8
   attackCooldown: 1.4

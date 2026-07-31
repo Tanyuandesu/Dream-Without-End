@@ -66,6 +66,12 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     [SerializeField] private bool hasQueuedRepath;
     [SerializeField] private bool waitingAtWaypointForRepath;
     [SerializeField] private bool pathRequestPending;
+
+    [Tooltip(
+        "T6B.3 external movement hold owned by EnemyStateMachine while a " +
+        "melee target remains inside the engagement hysteresis envelope.")]
+    [SerializeField] private bool externalMovementHoldActive;
+
     [SerializeField] private int pendingRequestId;
     [SerializeField] private bool pendingRequestUsesWaypointAnchor;
     [SerializeField] private Vector2Int pendingStartCell;
@@ -149,6 +155,8 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
     public int ActiveMaximumPathCostInCells =>
         activeMaximumPathCostInCells;
     public int LastPathCost => lastPathCost;
+    public bool IsExternalMovementHoldActive =>
+        externalMovementHoldActive;
 
     private void Awake()
     {
@@ -382,10 +390,37 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         }
     }
 
+    public void SetExternalMovementHold(bool active)
+    {
+        if (externalMovementHoldActive == active)
+        {
+            return;
+        }
+
+        externalMovementHoldActive = active;
+
+        if (!active || motor == null)
+        {
+            return;
+        }
+
+        motor.Stop();
+        ResetProgressTracking();
+        navigationStatus = EnemyNavigationStatus.Stopped;
+    }
+
     public void TickFixed(EnemyRuntimeState state)
     {
         if (!initialized)
         {
+            return;
+        }
+
+        if (externalMovementHoldActive)
+        {
+            motor.Stop();
+            ResetProgressTracking();
+            navigationStatus = EnemyNavigationStatus.Stopped;
             return;
         }
 
@@ -403,6 +438,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         }
 
         if (state == EnemyRuntimeState.Chase &&
+            navigationIntent == EnemyNavigationIntent.TrackingTarget &&
             detection.IsTargetDetected &&
             Vector2.Distance(
                 body.position,
@@ -1109,6 +1145,7 @@ public sealed class EnemyNavigationAgent : MonoBehaviour
         navigationIntent = EnemyNavigationIntent.None;
         destinationReached = false;
         activeMaximumPathCostInCells = maximumPathCostInCells;
+        externalMovementHoldActive = false;
         hasDesiredDestination = false;
         desiredDestination = Vector2.zero;
         hasKnownTargetCell = false;

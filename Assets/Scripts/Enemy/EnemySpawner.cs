@@ -683,11 +683,17 @@ public sealed class EnemySpawner : MonoBehaviour
             navigationAgent);
 
         EnemyMeleeAttackController meleeAttackController = null;
+        EnemyProjectileAttackController projectileAttackController = null;
 
         if (SupportsFormalMeleeAttack(definition))
         {
             meleeAttackController =
                 enemy.AddComponent<EnemyMeleeAttackController>();
+        }
+        else if (SupportsFormalProjectileAttack(definition))
+        {
+            projectileAttackController =
+                enemy.AddComponent<EnemyProjectileAttackController>();
         }
 
         EnemyStateMachine stateMachine =
@@ -700,6 +706,13 @@ public sealed class EnemySpawner : MonoBehaviour
         if (meleeAttackController != null)
         {
             meleeAttackController.Initialize(
+                runtimeContext,
+                stateMachine);
+        }
+
+        if (projectileAttackController != null)
+        {
+            projectileAttackController.Initialize(
                 runtimeContext,
                 stateMachine);
         }
@@ -802,14 +815,28 @@ public sealed class EnemySpawner : MonoBehaviour
                definition.AttackRange > 0f;
     }
 
+    private static bool SupportsFormalProjectileAttack(
+        EnemyDefinition definition)
+    {
+        return definition != null &&
+               definition.AttackMode == EnemyAttackMode.Projectile &&
+               definition.AttackDamage > 0f &&
+               definition.AttackRange > 0f &&
+               definition.ProjectileSpeed > 0f &&
+               definition.ProjectileLifetime > 0f &&
+               definition.ProjectileRadius > 0f;
+    }
+
     private void CreateContactDamage(
         GameObject enemy,
         EnemyDefinition definition)
     {
-        // T6A formal melee is the sole active damage path for melee profiles.
-        // The legacy component remains only for definition-less migration
+        // T6A/T6B formal attacks are the sole active damage paths for
+        // configured melee/projectile profiles. The legacy component remains
+        // only for definition-less migration
         // fallback and can be deleted during Enemy Legacy Cleanup.
-        if (SupportsFormalMeleeAttack(definition))
+        if (SupportsFormalMeleeAttack(definition) ||
+            SupportsFormalProjectileAttack(definition))
         {
             return;
         }

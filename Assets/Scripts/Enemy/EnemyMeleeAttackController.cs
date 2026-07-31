@@ -67,6 +67,29 @@ public sealed class EnemyMeleeAttackController : MonoBehaviour
         ? Mathf.Max(0f, Definition.AttackRange)
         : 0f;
 
+    public float ConfiguredEngagementBuffer => Definition != null
+        ? Mathf.Max(0f, Definition.MeleeEngagementBuffer)
+        : 0f;
+
+    public float ConfiguredEngagementRange =>
+        ConfiguredRange + ConfiguredEngagementBuffer;
+
+    public float ConfiguredEngagementEntryRange
+    {
+        get
+        {
+            float oneFixedStep = motor != null
+                ? motor.EffectiveMoveSpeed * Time.fixedDeltaTime
+                : 0f;
+
+            return ConfiguredRange + Mathf.Min(
+                ConfiguredEngagementBuffer,
+                Mathf.Max(0f, oneFixedStep));
+        }
+    }
+
+    public float CurrentTargetDistance => CalculateTargetDistance();
+
     public float ConfiguredWindup => Definition != null
         ? Mathf.Max(0f, Definition.AttackWindup)
         : 0f;
@@ -131,7 +154,7 @@ public sealed class EnemyMeleeAttackController : MonoBehaviour
         context != null &&
         context.Detection != null &&
         context.Detection.IsTargetDetected &&
-        IsTargetWithinConfiguredRange();
+        IsTargetWithinPermittedAttackRange();
 
     public event Action<EnemyMeleeAttackController> AttackStarted;
     public event Action<EnemyMeleeAttackController> DamageCommitted;
@@ -274,6 +297,29 @@ public sealed class EnemyMeleeAttackController : MonoBehaviour
         return CalculateTargetDistance() <= ConfiguredRange;
     }
 
+    public bool IsTargetWithinEngagementRange()
+    {
+        return CalculateTargetDistance() <= ConfiguredEngagementRange;
+    }
+
+    public void FaceTarget()
+    {
+        if (motor != null)
+        {
+            motor.FaceDirection(ResolveDirectionToTarget());
+        }
+    }
+
+    private bool IsTargetWithinPermittedAttackRange()
+    {
+        float permittedRange = stateMachine != null &&
+                stateMachine.IsMeleeEngagementHoldActive
+            ? ConfiguredEngagementRange
+            : ConfiguredRange;
+
+        return CalculateTargetDistance() <= permittedRange;
+    }
+
     private void CommitDamageOnce()
     {
         damageCommitCount++;
@@ -301,12 +347,18 @@ public sealed class EnemyMeleeAttackController : MonoBehaviour
             return;
         }
 
-        if (lastAttackDistance > ConfiguredRange)
+        float permittedRange = stateMachine != null &&
+                stateMachine.IsMeleeEngagementHoldActive
+            ? ConfiguredEngagementRange
+            : ConfiguredRange;
+
+        if (lastAttackDistance > permittedRange)
         {
             attackMissCount++;
             lastAttackOutcome =
-                "Miss: target left attack range (" +
-                lastAttackDistance.ToString("0.###") + ")";
+                "Miss: target left melee engagement range (" +
+                lastAttackDistance.ToString("0.###") +
+                " > " + permittedRange.ToString("0.###") + ")";
             DamageCommitted?.Invoke(this);
             return;
         }

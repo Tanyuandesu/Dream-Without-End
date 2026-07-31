@@ -85,11 +85,29 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private int formalMeleeAttackEnterCount;
     [SerializeField] private int formalMeleeAttackResumeCount;
 
+    [Header("T6B.3 melee engagement hysteresis")]
+    [SerializeField] private bool meleeEngagementHoldActive;
+    [SerializeField] private float lastMeleeEngagementDistance = -1f;
+    [SerializeField] private int meleeEngagementHoldEnterCount;
+    [SerializeField] private int meleeEngagementHoldReleaseCount;
+    [SerializeField] private string lastMeleeEngagementReason =
+        "Not initialized";
+
+    [Header("T6B formal projectile attack and spacing")]
+    [SerializeField] private int formalProjectileAttackEnterCount;
+    [SerializeField] private int formalProjectileAttackResumeCount;
+    [SerializeField] private bool projectileRetreatActive;
+    [SerializeField] private Vector2 projectileRetreatDestination;
+    [SerializeField] private float nextProjectileRetreatDecisionAt;
+    [SerializeField] private int projectileRetreatDestinationCount;
+    [SerializeField] private int projectileRetreatFailureCount;
+
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
     [SerializeField] private EnemyNavigationAgent navigationAgent;
     [SerializeField] private EnemyMotor2D motor;
     [SerializeField] private EnemyMeleeAttackController meleeAttackController;
+    [SerializeField] private EnemyProjectileAttackController projectileAttackController;
     [SerializeField] private EnemyManager alertManager;
 
     [Header("Optional diagnostics")]
@@ -150,6 +168,32 @@ public sealed class EnemyStateMachine : MonoBehaviour
         formalMeleeAttackEnterCount;
     public int FormalMeleeAttackResumeCount =>
         formalMeleeAttackResumeCount;
+    public bool IsMeleeEngagementHoldActive =>
+        meleeEngagementHoldActive;
+    public float LastMeleeEngagementDistance =>
+        lastMeleeEngagementDistance;
+    public int MeleeEngagementHoldEnterCount =>
+        meleeEngagementHoldEnterCount;
+    public int MeleeEngagementHoldReleaseCount =>
+        meleeEngagementHoldReleaseCount;
+    public string LastMeleeEngagementReason =>
+        lastMeleeEngagementReason;
+    public bool SupportsFormalProjectileAttack =>
+        projectileAttackController != null &&
+        projectileAttackController.IsInitialized;
+    public EnemyProjectileAttackController ProjectileAttackController =>
+        projectileAttackController;
+    public int FormalProjectileAttackEnterCount =>
+        formalProjectileAttackEnterCount;
+    public int FormalProjectileAttackResumeCount =>
+        formalProjectileAttackResumeCount;
+    public bool IsProjectileRetreatActive => projectileRetreatActive;
+    public Vector2 ProjectileRetreatDestination =>
+        projectileRetreatDestination;
+    public int ProjectileRetreatDestinationCount =>
+        projectileRetreatDestinationCount;
+    public int ProjectileRetreatFailureCount =>
+        projectileRetreatFailureCount;
 
     public bool IsCombatReactionActive => combatReactionActive;
     public CombatAttackId ActiveReactionAttackId =>
@@ -307,12 +351,27 @@ public sealed class EnemyStateMachine : MonoBehaviour
         lastAlertSourceId = string.Empty;
         formalMeleeAttackEnterCount = 0;
         formalMeleeAttackResumeCount = 0;
+        meleeEngagementHoldActive = false;
+        lastMeleeEngagementDistance = -1f;
+        meleeEngagementHoldEnterCount = 0;
+        meleeEngagementHoldReleaseCount = 0;
+        lastMeleeEngagementReason = initialized
+            ? "T6B.3 melee engagement ready"
+            : "T6B.3 runtime references incomplete";
+        formalProjectileAttackEnterCount = 0;
+        formalProjectileAttackResumeCount = 0;
+        projectileRetreatActive = false;
+        projectileRetreatDestination = Vector2.zero;
+        nextProjectileRetreatDecisionAt = 0f;
+        projectileRetreatDestinationCount = 0;
+        projectileRetreatFailureCount = 0;
 
         if (!initialized)
         {
             return;
         }
 
+        navigationAgent.SetExternalMovementHold(false);
         SubscribeToHealth();
 
         if (subscribedHealth != null &&
@@ -402,6 +461,8 @@ public sealed class EnemyStateMachine : MonoBehaviour
 
         combatReactionStartCount++;
         combatReactionTimerStarted = false;
+        ReleaseMeleeEngagementHold(
+            "Combat reaction interrupted melee engagement");
         combatReactionEndsAt = -1f;
 
         if (meleeAttackController != null)
@@ -410,6 +471,13 @@ public sealed class EnemyStateMachine : MonoBehaviour
                 "T6A attack interrupted by combat reaction");
         }
 
+        if (projectileAttackController != null)
+        {
+            projectileAttackController.CancelAttack(
+                "T6B projectile attack interrupted by combat reaction");
+        }
+
+        projectileRetreatActive = false;
         navigationAgent.StopMovement(
             clearLastKnownPosition: false);
 
@@ -570,7 +638,7 @@ public sealed class EnemyStateMachine : MonoBehaviour
     {
         if (currentState == EnemyRuntimeState.Attack)
         {
-            EvaluateFormalMeleeAttackState();
+            EvaluateFormalAttackState();
             return;
         }
 
@@ -586,6 +654,8 @@ public sealed class EnemyStateMachine : MonoBehaviour
             navigationAgent.LastFailureReason ==
                 EnemyPathFailureReason.PathCostLimitExceeded)
         {
+            ReleaseMeleeEngagementHold(
+                "T5B maximum chase path cost exceeded");
             chasePathCostBlockedUntilTargetLost = true;
             chasePathCostRejectCount++;
             lastChasePathCostRejectedAt = Time.time;
@@ -611,15 +681,29 @@ public sealed class EnemyStateMachine : MonoBehaviour
             context.SetLastKnownTargetPosition(
                 observedPosition);
 
-            navigationAgent.ObserveDetectedTarget(
-                observedPosition);
-
             if (currentState != EnemyRuntimeState.Chase)
             {
                 TryBroadcastAlert(observedPosition);
             }
 
-            if (TryEnterFormalMeleeAttack())
+            if (TryMaintainProjectileSpacing(observedPosition))
+            {
+                TransitionTo(
+                    EnemyRuntimeState.Chase,
+                    "T6B retreat to projectile spacing");
+                return;
+            }
+
+            projectileRetreatActive = false;
+            navigationAgent.ObserveDetectedTarget(
+                observedPosition);
+
+            if (TryMaintainMeleeEngagement(observedPosition))
+            {
+                return;
+            }
+
+            if (TryEnterConfiguredFormalAttack())
             {
                 return;
             }
@@ -630,6 +714,9 @@ public sealed class EnemyStateMachine : MonoBehaviour
 
             return;
         }
+
+        ReleaseMeleeEngagementHold(
+            "Target no longer detected");
 
         switch (currentState)
         {
@@ -741,6 +828,106 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
     }
 
+    private bool TryMaintainMeleeEngagement(
+        Vector2 observedPosition)
+    {
+        EnemyDefinition definition = context != null
+            ? context.Definition
+            : null;
+
+        if (definition == null ||
+            definition.AttackMode != EnemyAttackMode.Melee ||
+            meleeAttackController == null ||
+            !meleeAttackController.IsInitialized)
+        {
+            ReleaseMeleeEngagementHold(
+                "Profile does not use formal melee");
+            return false;
+        }
+
+        float distance = meleeAttackController.CurrentTargetDistance;
+        lastMeleeEngagementDistance = distance;
+
+        float entryRange =
+            meleeAttackController.ConfiguredEngagementEntryRange;
+        float releaseRange =
+            meleeAttackController.ConfiguredEngagementRange;
+
+        if (!meleeEngagementHoldActive)
+        {
+            if (distance > entryRange)
+            {
+                navigationAgent.SetExternalMovementHold(false);
+                return false;
+            }
+
+            meleeEngagementHoldActive = true;
+            meleeEngagementHoldEnterCount++;
+            lastMeleeEngagementReason =
+                "Entered melee range with fixed-step catch tolerance";
+        }
+        else if (distance > releaseRange)
+        {
+            ReleaseMeleeEngagementHold(
+                "Target exceeded Attack Range plus Engagement Buffer");
+            return false;
+        }
+
+        navigationAgent.SetExternalMovementHold(true);
+        meleeAttackController.FaceTarget();
+
+        if (TryEnterFormalMeleeAttack())
+        {
+            lastMeleeEngagementReason =
+                "Formal melee attack started inside engagement hold";
+            return true;
+        }
+
+        if (currentState != EnemyRuntimeState.Chase)
+        {
+            TransitionTo(
+                EnemyRuntimeState.Chase,
+                "T6B.3 melee engagement hold");
+        }
+
+        return true;
+    }
+
+    private void ReleaseMeleeEngagementHold(string reason)
+    {
+        if (navigationAgent != null)
+        {
+            navigationAgent.SetExternalMovementHold(false);
+        }
+
+        if (!meleeEngagementHoldActive)
+        {
+            return;
+        }
+
+        meleeEngagementHoldActive = false;
+        meleeEngagementHoldReleaseCount++;
+        lastMeleeEngagementReason = string.IsNullOrWhiteSpace(reason)
+            ? "Melee engagement released"
+            : reason;
+    }
+
+    private bool TryEnterConfiguredFormalAttack()
+    {
+        EnemyDefinition definition = context != null
+            ? context.Definition
+            : null;
+
+        if (definition == null)
+        {
+            return false;
+        }
+
+        return definition.AttackMode == EnemyAttackMode.Projectile
+            ? TryEnterFormalProjectileAttack()
+            : TryEnterFormalMeleeAttack();
+    }
+
     private bool TryEnterFormalMeleeAttack()
     {
         if (meleeAttackController == null ||
@@ -758,27 +945,91 @@ public sealed class EnemyStateMachine : MonoBehaviour
         return true;
     }
 
+    private bool TryEnterFormalProjectileAttack()
+    {
+        if (projectileAttackController == null ||
+            !projectileAttackController.IsInitialized ||
+            !projectileAttackController.TryBeginAttack())
+        {
+            return false;
+        }
+
+        formalProjectileAttackEnterCount++;
+        TransitionTo(
+            EnemyRuntimeState.Attack,
+            "T6B formal projectile windup started");
+
+        return true;
+    }
+
+    private void EvaluateFormalAttackState()
+    {
+        EnemyDefinition definition = context != null
+            ? context.Definition
+            : null;
+
+        if (definition != null &&
+            definition.AttackMode == EnemyAttackMode.Projectile)
+        {
+            EvaluateFormalProjectileAttackState();
+            return;
+        }
+
+        EvaluateFormalMeleeAttackState();
+    }
+
     private void EvaluateFormalMeleeAttackState()
     {
         if (meleeAttackController == null ||
             !meleeAttackController.IsInitialized)
         {
-            ResumeAfterFormalMeleeAttack(
-                "T6A formal melee controller unavailable");
+            ResumeAfterFormalAttack(
+                "T6A formal melee controller unavailable",
+                isProjectile: false);
             return;
         }
 
         if (!meleeAttackController.IsAttackActive ||
             meleeAttackController.TickAttack())
         {
-            ResumeAfterFormalMeleeAttack(
-                "T6A formal melee sequence completed");
+            ResumeAfterFormalAttack(
+                "T6A formal melee sequence completed",
+                isProjectile: false);
         }
     }
 
-    private void ResumeAfterFormalMeleeAttack(string reason)
+    private void EvaluateFormalProjectileAttackState()
     {
-        formalMeleeAttackResumeCount++;
+        if (projectileAttackController == null ||
+            !projectileAttackController.IsInitialized)
+        {
+            ResumeAfterFormalAttack(
+                "T6B projectile controller unavailable",
+                isProjectile: true);
+            return;
+        }
+
+        if (!projectileAttackController.IsAttackActive ||
+            projectileAttackController.TickAttack())
+        {
+            ResumeAfterFormalAttack(
+                "T6B projectile sequence completed",
+                isProjectile: true);
+        }
+    }
+
+    private void ResumeAfterFormalAttack(
+        string reason,
+        bool isProjectile)
+    {
+        if (isProjectile)
+        {
+            formalProjectileAttackResumeCount++;
+        }
+        else
+        {
+            formalMeleeAttackResumeCount++;
+        }
 
         EnemyDetection detection = context != null
             ? context.Detection
@@ -792,6 +1043,17 @@ public sealed class EnemyStateMachine : MonoBehaviour
                 detection.LastKnownTargetPosition;
 
             context.SetLastKnownTargetPosition(observedPosition);
+
+            if (isProjectile &&
+                TryMaintainProjectileSpacing(observedPosition))
+            {
+                TransitionTo(
+                    EnemyRuntimeState.Chase,
+                    "T6B projectile sequence completed; retreat spacing");
+                return;
+            }
+
+            projectileRetreatActive = false;
             navigationAgent.ObserveDetectedTarget(observedPosition);
 
             TransitionTo(
@@ -814,6 +1076,118 @@ public sealed class EnemyStateMachine : MonoBehaviour
                 ? EnemyRuntimeState.Patrol
                 : EnemyRuntimeState.ReturnToHomeOrPatrol,
             reason);
+    }
+
+    private bool TryMaintainProjectileSpacing(Vector2 targetPosition)
+    {
+        if (projectileAttackController == null ||
+            !projectileAttackController.IsInitialized ||
+            !projectileAttackController.IsTargetBelowPreferredMinimumRange)
+        {
+            projectileRetreatActive = false;
+            return false;
+        }
+
+        if (projectileRetreatActive &&
+            navigationAgent.HasDesiredDestination &&
+            !navigationAgent.HasReachedDestination)
+        {
+            return true;
+        }
+
+        if (Time.time < nextProjectileRetreatDecisionAt)
+        {
+            return false;
+        }
+
+        if (!TrySelectProjectileRetreatDestination(
+                targetPosition,
+                out Vector2 destination))
+        {
+            projectileRetreatActive = false;
+            projectileRetreatFailureCount++;
+            nextProjectileRetreatDecisionAt =
+                Time.time + BehaviorRetryDelay;
+            return false;
+        }
+
+        projectileRetreatActive = true;
+        projectileRetreatDestination = destination;
+        projectileRetreatDestinationCount++;
+        nextProjectileRetreatDecisionAt =
+            Time.time + BehaviorRetryDelay;
+
+        navigationAgent.SetFixedDestination(destination);
+        return true;
+    }
+
+    private bool TrySelectProjectileRetreatDestination(
+        Vector2 targetPosition,
+        out Vector2 destination)
+    {
+        destination = transform.position;
+
+        EnemyPathService service = context != null
+            ? context.PathService
+            : null;
+
+        if (service == null || !service.IsInitialized ||
+            projectileAttackController == null)
+        {
+            return false;
+        }
+
+        int radius = Mathf.Max(
+            0,
+            projectileAttackController.ConfiguredRetreatSearchRadiusInCells);
+
+        if (radius <= 0)
+        {
+            return false;
+        }
+
+        Vector2Int currentCell =
+            service.WorldToCell(transform.position);
+        float currentDistance = Vector2.Distance(
+            transform.position,
+            targetPosition);
+        float bestDistance = currentDistance + 0.2f;
+        bool found = false;
+        Vector2 bestDestination = transform.position;
+
+        for (int x = -radius; x <= radius; x++)
+        {
+            int remaining = radius - Mathf.Abs(x);
+
+            for (int y = -remaining; y <= remaining; y++)
+            {
+                Vector2Int candidate =
+                    currentCell + new Vector2Int(x, y);
+
+                if (candidate == currentCell ||
+                    !service.IsWalkable(candidate) ||
+                    !service.AreCellsReachable(currentCell, candidate))
+                {
+                    continue;
+                }
+
+                Vector2 world = service.CellToWorld(candidate);
+                float candidateDistance =
+                    Vector2.Distance(world, targetPosition);
+
+                if (candidateDistance <= bestDistance)
+                {
+                    continue;
+                }
+
+                bestDistance = candidateDistance;
+                bestDestination = world;
+                found = true;
+            }
+        }
+
+        destination = bestDestination;
+        return found;
     }
 
     private void ResumeAfterCombatReaction(string reason)
@@ -882,12 +1256,22 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
 
         ResetCombatReactionFields();
+        ReleaseMeleeEngagementHold(
+            "Owner died");
 
         if (meleeAttackController != null)
         {
             meleeAttackController.CancelAttack(
                 "T6A attack cancelled because owner died");
         }
+
+        if (projectileAttackController != null)
+        {
+            projectileAttackController.CancelAttack(
+                "T6B projectile attack cancelled because owner died");
+        }
+
+        projectileRetreatActive = false;
 
         if (motor != null)
         {
@@ -955,6 +1339,18 @@ public sealed class EnemyStateMachine : MonoBehaviour
         if (!initialized || navigationAgent == null)
         {
             return;
+        }
+
+        if (state != EnemyRuntimeState.Chase)
+        {
+            projectileRetreatActive = false;
+        }
+
+        if (state != EnemyRuntimeState.Chase &&
+            state != EnemyRuntimeState.Attack)
+        {
+            ReleaseMeleeEngagementHold(
+                "Entered non-combat movement state " + state);
         }
 
         switch (state)
@@ -1293,6 +1689,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
         {
             meleeAttackController =
                 GetComponent<EnemyMeleeAttackController>();
+        }
+
+        if (projectileAttackController == null)
+        {
+            projectileAttackController =
+                GetComponent<EnemyProjectileAttackController>();
         }
 
         if (alertManager == null)

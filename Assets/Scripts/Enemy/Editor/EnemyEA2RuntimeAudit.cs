@@ -44,6 +44,57 @@ public static class EnemyEA2RuntimeAudit
         EnemyRuntimeContext[] allContexts =
             Resources.FindObjectsOfTypeAll<EnemyRuntimeContext>();
 
+        EnemyProjectile[] allProjectiles =
+            Resources.FindObjectsOfTypeAll<EnemyProjectile>();
+
+        int runtimeProjectileCount = 0;
+        int initializedProjectileCount = 0;
+
+        for (int i = 0; i < allProjectiles.Length; i++)
+        {
+            EnemyProjectile projectile = allProjectiles[i];
+
+            if (!IsActiveSceneObject(projectile))
+            {
+                continue;
+            }
+
+            runtimeProjectileCount++;
+
+            if (projectile.IsInitialized)
+            {
+                initializedProjectileCount++;
+
+                if (!projectile.UsesSweptCollision)
+                {
+                    errors.Add(
+                        projectile.gameObject.name +
+                        ": T6B.1 swept collision authority is inactive.");
+                }
+
+                if (!projectile.UsesExplicitTargetSweep)
+                {
+                    errors.Add(
+                        projectile.gameObject.name +
+                        ": T6B.2 explicit player-target sweep is inactive.");
+                }
+
+                if (!projectile.VisibleCoreReady ||
+                    !projectile.VisibleHaloReady)
+                {
+                    errors.Add(
+                        projectile.gameObject.name +
+                        ": T6B.2 projectile visual core/halo is incomplete.");
+                }
+            }
+            else
+            {
+                errors.Add(
+                    projectile.gameObject.name +
+                    ": active T6B projectile is not initialized.");
+            }
+        }
+
         int runtimeEnemyCount = 0;
         int initializedContextCount = 0;
         int initializedStateMachineCount = 0;
@@ -63,6 +114,25 @@ public static class EnemyEA2RuntimeAudit
         int totalFormalMeleeRejected = 0;
         int totalFormalMeleeCompletes = 0;
         int totalFormalMeleeCancels = 0;
+        int t6b3MeleeEngagementExpectedCount = 0;
+        int t6b3MeleeEngagementBindingCount = 0;
+        int activeMeleeEngagementHoldCount = 0;
+        int totalMeleeEngagementHoldEnters = 0;
+        int totalMeleeEngagementHoldReleases = 0;
+        int t6bFormalProjectileExpectedCount = 0;
+        int t6bFormalProjectileBindingCount = 0;
+        int totalProjectileAttackStarts = 0;
+        int totalProjectileSpawns = 0;
+        int totalProjectileHits = 0;
+        int totalProjectileMisses = 0;
+        int totalProjectileRejected = 0;
+        int totalProjectileObstacleImpacts = 0;
+        int totalProjectileExpired = 0;
+        int totalProjectileCompletes = 0;
+        int totalProjectileCancels = 0;
+        int totalActiveProjectiles = 0;
+        int totalProjectileRetreatDestinations = 0;
+        int totalProjectileRetreatFailures = 0;
         int totalAlertBroadcasts = 0;
         int totalAlertRecipients = 0;
         int totalAlertsReceived = 0;
@@ -271,6 +341,34 @@ public static class EnemyEA2RuntimeAudit
                 }
             }
 
+            if (expectsFormalMelee)
+            {
+                t6b3MeleeEngagementExpectedCount++;
+
+                if (AuditT6B3MeleeEngagementBinding(
+                        context,
+                        errors))
+                {
+                    t6b3MeleeEngagementBindingCount++;
+                }
+
+                EnemyStateMachine meleeStateMachine =
+                    context.GetComponent<EnemyStateMachine>();
+
+                if (meleeStateMachine != null)
+                {
+                    if (meleeStateMachine.IsMeleeEngagementHoldActive)
+                    {
+                        activeMeleeEngagementHoldCount++;
+                    }
+
+                    totalMeleeEngagementHoldEnters +=
+                        meleeStateMachine.MeleeEngagementHoldEnterCount;
+                    totalMeleeEngagementHoldReleases +=
+                        meleeStateMachine.MeleeEngagementHoldReleaseCount;
+                }
+            }
+
             if (meleeController != null)
             {
                 totalFormalMeleeStarts +=
@@ -288,6 +386,70 @@ public static class EnemyEA2RuntimeAudit
                 totalFormalMeleeCancels +=
                     meleeController.AttackCancelCount;
             }
+
+
+            bool expectsFormalProjectile =
+                ExpectsFormalProjectile(context.Definition);
+
+            if (expectsFormalProjectile)
+            {
+                t6bFormalProjectileExpectedCount++;
+            }
+
+            if (AuditT6BFormalProjectileBinding(
+                    context,
+                    errors,
+                    out EnemyProjectileAttackController projectileController))
+            {
+                if (expectsFormalProjectile)
+                {
+                    t6bFormalProjectileBindingCount++;
+                }
+            }
+
+            if (projectileController != null)
+            {
+                totalProjectileAttackStarts +=
+                    projectileController.AttackStartCount;
+                totalProjectileSpawns +=
+                    projectileController.ProjectileSpawnCount;
+                totalProjectileHits +=
+                    projectileController.ProjectileHitCount;
+                totalProjectileMisses +=
+                    projectileController.ProjectileMissCount;
+                totalProjectileRejected +=
+                    projectileController.DamageRejectedCount;
+                totalProjectileObstacleImpacts +=
+                    projectileController.ObstacleImpactCount;
+                totalProjectileExpired +=
+                    projectileController.ProjectileExpiredCount;
+                totalProjectileCompletes +=
+                    projectileController.AttackCompleteCount;
+                totalProjectileCancels +=
+                    projectileController.AttackCancelCount;
+                totalActiveProjectiles +=
+                    projectileController.ActiveProjectileCount;
+            }
+
+            EnemyStateMachine projectileStateMachine =
+                context.GetComponent<EnemyStateMachine>();
+
+            if (projectileStateMachine != null)
+            {
+                totalProjectileRetreatDestinations +=
+                    projectileStateMachine.ProjectileRetreatDestinationCount;
+                totalProjectileRetreatFailures +=
+                    projectileStateMachine.ProjectileRetreatFailureCount;
+            }
+        }
+
+        if (totalActiveProjectiles != runtimeProjectileCount)
+        {
+            errors.Add(
+                "T6B controller active-projectile count (" +
+                totalActiveProjectiles +
+                ") does not match runtime projectile objects (" +
+                runtimeProjectileCount + ").");
         }
 
         if (runtimeEnemyCount == 0)
@@ -334,6 +496,20 @@ public static class EnemyEA2RuntimeAudit
             "T6A verifies the formal melee Attack state, one timed damage " +
             "commit per sequence, independent Windup/Recovery/Cooldown values " +
             "and removal of runtime legacy contact damage for melee profiles.");
+
+        notes.Add(
+            "T6B.3 verifies per-Definition melee engagement hysteresis, " +
+            "state-machine ownership of the hold and the navigation-agent " +
+            "movement gate. The hold catches high-speed entry by at most one fixed movement step and releases " +
+            "only beyond Attack Range plus Melee Engagement Buffer.");
+
+        notes.Add(
+            "T6B verifies the Gazer formal projectile Attack state, non-homing " +
+            "projectile runtime, obstacle/expiry outcomes, configurable spacing " +
+            "and removal of legacy contact damage for projectile profiles. " +
+            "T6B.1 adds authoritative attack-facing presentation. T6B.2 " +
+            "keeps projectile roots at unit scale, renders a visible core/halo, " +
+            "uses an explicit swept player-target test and a separate solid-wall sweep.");
 
         if (optionalTransitionLoggingCount > 0)
         {
@@ -388,6 +564,36 @@ public static class EnemyEA2RuntimeAudit
             ", Rejected:" + totalFormalMeleeRejected +
             ", Completes:" + totalFormalMeleeCompletes +
             ", Cancels:" + totalFormalMeleeCancels);
+        report.AppendLine(
+            "T6B3MeleeEngagementBindings=" +
+            t6b3MeleeEngagementBindingCount + "/" +
+            t6b3MeleeEngagementExpectedCount);
+        report.AppendLine(
+            "T6B3MeleeEngagementActivity=Active:" +
+            activeMeleeEngagementHoldCount +
+            ", Enters:" + totalMeleeEngagementHoldEnters +
+            ", Releases:" + totalMeleeEngagementHoldReleases);
+        report.AppendLine(
+            "T6BFormalProjectileBindings=" +
+            t6bFormalProjectileBindingCount + "/" +
+            t6bFormalProjectileExpectedCount);
+        report.AppendLine(
+            "T6BActiveProjectileObjects=" +
+            initializedProjectileCount + "/" + runtimeProjectileCount);
+        report.AppendLine(
+            "T6BFormalProjectileActivity=Starts:" +
+            totalProjectileAttackStarts +
+            ", Spawns:" + totalProjectileSpawns +
+            ", Hits:" + totalProjectileHits +
+            ", Misses:" + totalProjectileMisses +
+            ", Rejected:" + totalProjectileRejected +
+            ", Obstacles:" + totalProjectileObstacleImpacts +
+            ", Expired:" + totalProjectileExpired +
+            ", Completes:" + totalProjectileCompletes +
+            ", Cancels:" + totalProjectileCancels +
+            ", Active:" + totalActiveProjectiles +
+            ", Retreats:" + totalProjectileRetreatDestinations +
+            ", RetreatFailures:" + totalProjectileRetreatFailures);
 
         if (activeSpawner != null)
         {
@@ -634,10 +840,22 @@ public static class EnemyEA2RuntimeAudit
             (definition.AttackMode == EnemyAttackMode.Melee
                 ? DescribeFloat(definition.AttackDamage) +
                   "@" + DescribeFloat(definition.AttackRange) +
+                  "+" + DescribeFloat(definition.MeleeEngagementBuffer) +
                   "/" + DescribeFloat(definition.AttackWindup) +
                   "/" + DescribeFloat(definition.AttackRecovery) +
                   "/" + DescribeFloat(definition.AttackCooldown)
-                : "Projectile") +
+                : "Projectile:" +
+                  DescribeFloat(definition.AttackDamage) +
+                  "@" + DescribeFloat(definition.AttackRange) +
+                  "/" + DescribeFloat(definition.AttackWindup) +
+                  "/" + DescribeFloat(definition.AttackRecovery) +
+                  "/" + DescribeFloat(definition.AttackCooldown) +
+                  " | Shot=" + DescribeFloat(definition.ProjectileSpeed) +
+                  "x" + DescribeFloat(definition.ProjectileLifetime) +
+                  " | Radius=" + DescribeFloat(definition.ProjectileRadius) +
+                  " | Min=" + DescribeFloat(definition.ProjectileMinimumRange) +
+                  " | Retreat=" +
+                  definition.ProjectileRetreatSearchRadiusInCells) +
             " | Contact=" +
             (definition.EnableLegacyContactDamage
                 ? DescribeFloat(definition.LegacyContactDamage)
@@ -770,6 +988,73 @@ public static class EnemyEA2RuntimeAudit
         return true;
     }
 
+    private static bool AuditT6B3MeleeEngagementBinding(
+        EnemyRuntimeContext context,
+        List<string> errors)
+    {
+        if (context == null || context.Definition == null)
+        {
+            return false;
+        }
+
+        EnemyDefinition definition = context.Definition;
+
+        if (!ExpectsFormalMelee(definition))
+        {
+            return true;
+        }
+
+        string prefix = context.gameObject.name + ": ";
+        EnemyStateMachine stateMachine =
+            context.GetComponent<EnemyStateMachine>();
+        EnemyMeleeAttackController controller =
+            context.GetComponent<EnemyMeleeAttackController>();
+        EnemyNavigationAgent navigationAgent =
+            context.NavigationAgent;
+        bool valid = true;
+
+        if (stateMachine == null ||
+            controller == null ||
+            navigationAgent == null)
+        {
+            errors.Add(
+                prefix +
+                "T6B.3 melee engagement runtime references are incomplete.");
+            return false;
+        }
+
+        if (!Approximately(
+                controller.ConfiguredEngagementBuffer,
+                definition.MeleeEngagementBuffer))
+        {
+            errors.Add(
+                prefix +
+                "T6B.3 engagement buffer does not match EnemyDefinition.");
+            valid = false;
+        }
+
+        if (stateMachine.IsMeleeEngagementHoldActive !=
+            navigationAgent.IsExternalMovementHoldActive)
+        {
+            errors.Add(
+                prefix +
+                "T6B.3 state-machine hold and navigation movement gate disagree.");
+            valid = false;
+        }
+
+        if (stateMachine.IsMeleeEngagementHoldActive &&
+            stateMachine.CurrentState != EnemyRuntimeState.Chase &&
+            stateMachine.CurrentState != EnemyRuntimeState.Attack)
+        {
+            errors.Add(
+                prefix +
+                "T6B.3 engagement hold is active outside Chase/Attack.");
+            valid = false;
+        }
+
+        return valid;
+    }
+
     private static bool ExpectsFormalMelee(
         EnemyDefinition definition)
     {
@@ -854,6 +1139,9 @@ public static class EnemyEA2RuntimeAudit
                 controller.ConfiguredRange,
                 definition.AttackRange) ||
             !Approximately(
+                controller.ConfiguredEngagementBuffer,
+                definition.MeleeEngagementBuffer) ||
+            !Approximately(
                 controller.ConfiguredWindup,
                 definition.AttackWindup) ||
             !Approximately(
@@ -890,6 +1178,134 @@ public static class EnemyEA2RuntimeAudit
             errors.Add(
                 prefix +
                 "T6A formal melee target Health reference is missing.");
+            valid = false;
+        }
+
+        return valid;
+    }
+
+    private static bool ExpectsFormalProjectile(
+        EnemyDefinition definition)
+    {
+        return definition != null &&
+               definition.AttackMode == EnemyAttackMode.Projectile &&
+               definition.AttackDamage > 0f &&
+               definition.AttackRange > 0f &&
+               definition.ProjectileSpeed > 0f &&
+               definition.ProjectileLifetime > 0f &&
+               definition.ProjectileRadius > 0f;
+    }
+
+    private static bool AuditT6BFormalProjectileBinding(
+        EnemyRuntimeContext context,
+        List<string> errors,
+        out EnemyProjectileAttackController controller)
+    {
+        controller = null;
+
+        if (context == null || context.Definition == null)
+        {
+            return false;
+        }
+
+        string prefix = context.gameObject.name + ": ";
+        EnemyDefinition definition = context.Definition;
+        bool expectsFormalProjectile =
+            ExpectsFormalProjectile(definition);
+        EnemyProjectileAttackController[] controllers =
+            context.GetComponents<EnemyProjectileAttackController>();
+        ContactDamage2D[] contactDamageComponents =
+            context.GetComponents<ContactDamage2D>();
+
+        if (!expectsFormalProjectile)
+        {
+            if (controllers.Length != 0)
+            {
+                errors.Add(
+                    prefix +
+                    "T6B non-projectile profile has a projectile controller.");
+                return false;
+            }
+
+            return true;
+        }
+
+        if (controllers.Length != 1)
+        {
+            errors.Add(
+                prefix +
+                "T6B expected exactly one EnemyProjectileAttackController, found " +
+                controllers.Length + ".");
+            return false;
+        }
+
+        controller = controllers[0];
+        bool valid = true;
+
+        if (!controller.IsInitialized ||
+            controller.Context != context)
+        {
+            errors.Add(
+                prefix +
+                "T6B projectile controller is not initialized against its runtime context.");
+            valid = false;
+        }
+
+        EnemyStateMachine stateMachine =
+            context.GetComponent<EnemyStateMachine>();
+
+        if (stateMachine == null ||
+            stateMachine.ProjectileAttackController != controller ||
+            !stateMachine.SupportsFormalProjectileAttack)
+        {
+            errors.Add(
+                prefix +
+                "T6B state machine is not bound to the projectile controller.");
+            valid = false;
+        }
+
+        if (!Approximately(controller.ConfiguredDamage, definition.AttackDamage) ||
+            !Approximately(controller.ConfiguredRange, definition.AttackRange) ||
+            !Approximately(controller.ConfiguredWindup, definition.AttackWindup) ||
+            !Approximately(controller.ConfiguredRecovery, definition.AttackRecovery) ||
+            !Approximately(controller.ConfiguredCooldown, definition.AttackCooldown) ||
+            !Approximately(controller.ConfiguredProjectileSpeed, definition.ProjectileSpeed) ||
+            !Approximately(controller.ConfiguredProjectileLifetime, definition.ProjectileLifetime) ||
+            !Approximately(controller.ConfiguredProjectileRadius, definition.ProjectileRadius) ||
+            !Approximately(controller.ConfiguredProjectileVisualSize, definition.ProjectileVisualSize) ||
+            !Approximately(controller.ConfiguredMinimumRange, definition.ProjectileMinimumRange) ||
+            controller.ConfiguredRetreatSearchRadiusInCells !=
+                definition.ProjectileRetreatSearchRadiusInCells)
+        {
+            errors.Add(
+                prefix +
+                "T6B runtime projectile values do not match EnemyDefinition.");
+            valid = false;
+        }
+
+        if (contactDamageComponents.Length != 0 ||
+            definition.EnableLegacyContactDamage)
+        {
+            errors.Add(
+                prefix +
+                "T6B formal projectile profile still has legacy contact damage.");
+            valid = false;
+        }
+
+        if (controller.TargetHealth == null)
+        {
+            errors.Add(
+                prefix +
+                "T6B projectile target Health reference is missing.");
+            valid = false;
+        }
+
+        if (!(context.Motor is ICharacterFacingSource))
+        {
+            errors.Add(
+                prefix +
+                "T6B.1 projectile owner does not expose authoritative " +
+                "facing to DirectionalSpriteAnimator.");
             valid = false;
         }
 

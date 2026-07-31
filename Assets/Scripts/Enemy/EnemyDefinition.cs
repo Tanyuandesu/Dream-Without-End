@@ -205,6 +205,14 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float attackRange = 0.9f;
 
+    [Tooltip(
+        "T6B.3 melee hysteresis around Attack Range. After a melee enemy " +
+        "enters Attack Range, navigation remains held until the target " +
+        "moves beyond Attack Range plus this buffer. Projectile profiles " +
+        "ignore this value.")]
+    [Min(0f)]
+    [SerializeField] private float meleeEngagementBuffer = 0.12f;
+
     [Min(0f)]
     [SerializeField] private float attackWindup = 0.25f;
 
@@ -216,6 +224,26 @@ public sealed class EnemyDefinition : ScriptableObject
 
     [Min(0f)]
     [SerializeField] private float projectileSpeed = 0f;
+
+    [Tooltip("Preferred minimum distance before a projectile enemy tries to retreat.")]
+    [Min(0f)]
+    [SerializeField] private float projectileMinimumRange = 0f;
+
+    [Tooltip("Grid-cell search radius used to find a retreat point when the target is too close.")]
+    [Min(0)]
+    [SerializeField] private int projectileRetreatSearchRadiusInCells = 0;
+
+    [Min(0.05f)]
+    [SerializeField] private float projectileLifetime = 2f;
+
+    [Min(0.01f)]
+    [SerializeField] private float projectileRadius = 0.12f;
+
+    [Min(0.02f)]
+    [SerializeField] private float projectileVisualSize = 0.24f;
+
+    [SerializeField] private Color projectileColor =
+        new Color(0.82f, 0.68f, 1f, 1f);
 
     [Header("Legacy contact damage fallback")]
     [Tooltip(
@@ -390,10 +418,18 @@ public sealed class EnemyDefinition : ScriptableObject
     public EnemyAttackMode AttackMode => attackMode;
     public float AttackDamage => attackDamage;
     public float AttackRange => attackRange;
+    public float MeleeEngagementBuffer => meleeEngagementBuffer;
     public float AttackWindup => attackWindup;
     public float AttackRecovery => attackRecovery;
     public float AttackCooldown => attackCooldown;
     public float ProjectileSpeed => projectileSpeed;
+    public float ProjectileMinimumRange => projectileMinimumRange;
+    public int ProjectileRetreatSearchRadiusInCells =>
+        projectileRetreatSearchRadiusInCells;
+    public float ProjectileLifetime => projectileLifetime;
+    public float ProjectileRadius => projectileRadius;
+    public float ProjectileVisualSize => projectileVisualSize;
+    public Color ProjectileColor => projectileColor;
 
     public bool EnableLegacyContactDamage =>
         enableLegacyContactDamage;
@@ -487,6 +523,12 @@ public sealed class EnemyDefinition : ScriptableObject
                 name + ": Formal attack requires positive Damage and Range.");
         }
 
+        if (meleeEngagementBuffer < 0f)
+        {
+            errors.Add(
+                name + ": Melee Engagement Buffer cannot be negative.");
+        }
+
         if (attackWindup < 0f ||
             attackRecovery < 0f ||
             attackCooldown < 0f)
@@ -512,11 +554,44 @@ public sealed class EnemyDefinition : ScriptableObject
                 ": Formal melee must disable Legacy Contact Damage.");
         }
 
-        if (attackMode == EnemyAttackMode.Projectile &&
-            projectileSpeed <= 0f)
+        if (attackMode == EnemyAttackMode.Projectile)
         {
-            errors.Add(
-                name + ": Projectile attack requires Projectile Speed above zero.");
+            if (projectileSpeed <= 0f)
+            {
+                errors.Add(
+                    name + ": Projectile attack requires Projectile Speed above zero.");
+            }
+
+            if (projectileMinimumRange < 0f ||
+                projectileMinimumRange >= attackRange)
+            {
+                errors.Add(
+                    name +
+                    ": Projectile Minimum Range must be non-negative and below Attack Range.");
+            }
+
+            if (projectileRetreatSearchRadiusInCells < 0)
+            {
+                errors.Add(
+                    name +
+                    ": Projectile Retreat Search Radius cannot be negative.");
+            }
+
+            if (projectileLifetime <= 0f ||
+                projectileRadius <= 0f ||
+                projectileVisualSize <= 0f)
+            {
+                errors.Add(
+                    name +
+                    ": Projectile Lifetime, Radius and Visual Size must be positive.");
+            }
+
+            if (enableLegacyContactDamage)
+            {
+                errors.Add(
+                    name +
+                    ": Formal projectile attack must disable Legacy Contact Damage.");
+            }
         }
 
         if (postKnockbackPauseDuration < 0f)
@@ -727,6 +802,9 @@ public sealed class EnemyDefinition : ScriptableObject
 
         attackDamage = Mathf.Max(0f, attackDamage);
         attackRange = Mathf.Max(0f, attackRange);
+        meleeEngagementBuffer = Mathf.Max(
+            0f,
+            meleeEngagementBuffer);
         attackWindup = Mathf.Max(0f, attackWindup);
         attackRecovery = Mathf.Max(0f, attackRecovery);
         attackCooldown = Mathf.Max(0f, attackCooldown);
