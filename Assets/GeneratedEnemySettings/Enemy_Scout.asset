@@ -15,7 +15,7 @@ MonoBehaviour:
   enemyId:
     value: dream_scout
   displayName: Scout
-  gameplayRole: 0
+  gameplayRole: 1
   countsForEnding: 1
   gameplaySummary: Long perception and local last-known-position alert broadcaster.
   maxHealth: 18
@@ -26,15 +26,9 @@ MonoBehaviour:
   lastPositionTolerance: 0.15
   patrolRadiusInCells: 8
   patrolPauseDuration: 0.15
-  maximumChasePathCost: 32
+  maximumChasePathCost: 30
   searchRadiusInCells: 3
   searchDuration: 4
-  minimumRepathInterval: 0.08
-  stuckTimeout: 0.75
-  stuckMovementThreshold: 0.015
-  maximumRecoveryAttempts: 3
-  maximumRecoverySnapDistance: 0.8
-  failedPathRetryDelay: 0.5
   detectionRadius: 8
   loseTargetRadius: 12
   requireLineOfSight: 1
@@ -73,7 +67,7 @@ MonoBehaviour:
   attackRecovery: 0.4
   attackCooldown: 0.8
   projectileSpeed: 0
-  enableLegacyContactDamage: 1
+  enableLegacyContactDamage: 0
   legacyContactDamage: 3
   legacyContactDamageCooldown: 0.8
   legacyContactDamageTargets: 2

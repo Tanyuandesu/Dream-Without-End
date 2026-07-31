@@ -18,8 +18,9 @@ public enum EnemyAttackMode
 
 /// <summary>
 /// Authoritative data for one real enemy type.
-/// EA1 consumes the legacy-compatible fields immediately; patrol, active
-/// attacks and special behaviour fields are stable inputs for later phases.
+/// Runtime-authoritative data for one enemy type. Movement, perception,
+/// T5 behavior and T6 formal attack values are consumed directly without
+/// GameplayRole overrides.
 /// </summary>
 [CreateAssetMenu(
     fileName = "EnemyDefinition",
@@ -194,7 +195,7 @@ public sealed class EnemyDefinition : ScriptableObject
     [SerializeField, HideInInspector]
     private bool cb95TemporaryHealthBarInitialized;
 
-    [Header("Formal attack contract (activated in combat phase)")]
+    [Header("T6 formal attack contract")]
     [SerializeField] private EnemyAttackMode attackMode =
         EnemyAttackMode.Melee;
 
@@ -216,11 +217,11 @@ public sealed class EnemyDefinition : ScriptableObject
     [Min(0f)]
     [SerializeField] private float projectileSpeed = 0f;
 
-    [Header("EA1 compatibility contact damage")]
+    [Header("Legacy contact damage fallback")]
     [Tooltip(
-        "Temporary bridge that preserves the CA1 baseline. " +
-        "The formal Attack state replaces it in a later phase.")]
-    [SerializeField] private bool enableLegacyContactDamage = true;
+        "Migration-only fallback for definition-less or pre-T6 enemies. " +
+        "Formal melee profiles must leave this disabled.")]
+    [SerializeField] private bool enableLegacyContactDamage;
 
     [Min(0f)]
     [SerializeField] private float legacyContactDamage = 5f;
@@ -478,6 +479,37 @@ public sealed class EnemyDefinition : ScriptableObject
             errors.Add(
                 name + ": Animation Profile is not assigned. " +
                 "Static sprite fallback remains valid, but CA1 animation will be absent.");
+        }
+
+        if (attackDamage <= 0f || attackRange <= 0f)
+        {
+            errors.Add(
+                name + ": Formal attack requires positive Damage and Range.");
+        }
+
+        if (attackWindup < 0f ||
+            attackRecovery < 0f ||
+            attackCooldown < 0f)
+        {
+            errors.Add(
+                name + ": Attack Windup, Recovery and Cooldown cannot be negative.");
+        }
+
+        if (attackMode == EnemyAttackMode.Melee &&
+            stopDistance > attackRange)
+        {
+            errors.Add(
+                name +
+                ": Melee Attack Range must be at least Stop Distance or " +
+                "the enemy can stop outside attack reach.");
+        }
+
+        if (attackMode == EnemyAttackMode.Melee &&
+            enableLegacyContactDamage)
+        {
+            errors.Add(
+                name +
+                ": Formal melee must disable Legacy Contact Damage.");
         }
 
         if (attackMode == EnemyAttackMode.Projectile &&

@@ -54,6 +54,15 @@ public static class EnemyEA2RuntimeAudit
         int extendedNavigationAgentCount = 0;
         int t5bRuntimeBindingCount = 0;
         int t5cRuntimeBindingCount = 0;
+        int t6aFormalMeleeExpectedCount = 0;
+        int t6aFormalMeleeBindingCount = 0;
+        int totalFormalMeleeStarts = 0;
+        int totalFormalMeleeCommits = 0;
+        int totalFormalMeleeHits = 0;
+        int totalFormalMeleeMisses = 0;
+        int totalFormalMeleeRejected = 0;
+        int totalFormalMeleeCompletes = 0;
+        int totalFormalMeleeCancels = 0;
         int totalAlertBroadcasts = 0;
         int totalAlertRecipients = 0;
         int totalAlertsReceived = 0;
@@ -242,6 +251,43 @@ public static class EnemyEA2RuntimeAudit
             {
                 t5cRuntimeBindingCount++;
             }
+
+            bool expectsFormalMelee =
+                ExpectsFormalMelee(context.Definition);
+
+            if (expectsFormalMelee)
+            {
+                t6aFormalMeleeExpectedCount++;
+            }
+
+            if (AuditT6AFormalMeleeBinding(
+                    context,
+                    errors,
+                    out EnemyMeleeAttackController meleeController))
+            {
+                if (expectsFormalMelee)
+                {
+                    t6aFormalMeleeBindingCount++;
+                }
+            }
+
+            if (meleeController != null)
+            {
+                totalFormalMeleeStarts +=
+                    meleeController.AttackStartCount;
+                totalFormalMeleeCommits +=
+                    meleeController.DamageCommitCount;
+                totalFormalMeleeHits +=
+                    meleeController.DamageAcceptedCount;
+                totalFormalMeleeMisses +=
+                    meleeController.AttackMissCount;
+                totalFormalMeleeRejected +=
+                    meleeController.DamageRejectedCount;
+                totalFormalMeleeCompletes +=
+                    meleeController.AttackCompleteCount;
+                totalFormalMeleeCancels +=
+                    meleeController.AttackCancelCount;
+            }
         }
 
         if (runtimeEnemyCount == 0)
@@ -284,6 +330,11 @@ public static class EnemyEA2RuntimeAudit
             "state relay. A broadcast supplies only a last-known position; " +
             "each recipient still uses its own perception and movement profile.");
 
+        notes.Add(
+            "T6A verifies the formal melee Attack state, one timed damage " +
+            "commit per sequence, independent Windup/Recovery/Cooldown values " +
+            "and removal of runtime legacy contact damage for melee profiles.");
+
         if (optionalTransitionLoggingCount > 0)
         {
             notes.Add(
@@ -325,6 +376,18 @@ public static class EnemyEA2RuntimeAudit
             "T5CAlertActivity=Broadcasts:" + totalAlertBroadcasts +
             ", Recipients:" + totalAlertRecipients +
             ", Received:" + totalAlertsReceived);
+        report.AppendLine(
+            "T6AFormalMeleeBindings=" +
+            t6aFormalMeleeBindingCount + "/" +
+            t6aFormalMeleeExpectedCount);
+        report.AppendLine(
+            "T6AFormalMeleeActivity=Starts:" + totalFormalMeleeStarts +
+            ", Commits:" + totalFormalMeleeCommits +
+            ", Hits:" + totalFormalMeleeHits +
+            ", Misses:" + totalFormalMeleeMisses +
+            ", Rejected:" + totalFormalMeleeRejected +
+            ", Completes:" + totalFormalMeleeCompletes +
+            ", Cancels:" + totalFormalMeleeCancels);
 
         if (activeSpawner != null)
         {
@@ -567,6 +630,14 @@ public static class EnemyEA2RuntimeAudit
                   "@" +
                   DescribeFloat(definition.AlertBroadcastCooldown)
                 : "Off") +
+            " | FormalAttack=" +
+            (definition.AttackMode == EnemyAttackMode.Melee
+                ? DescribeFloat(definition.AttackDamage) +
+                  "@" + DescribeFloat(definition.AttackRange) +
+                  "/" + DescribeFloat(definition.AttackWindup) +
+                  "/" + DescribeFloat(definition.AttackRecovery) +
+                  "/" + DescribeFloat(definition.AttackCooldown)
+                : "Projectile") +
             " | Contact=" +
             (definition.EnableLegacyContactDamage
                 ? DescribeFloat(definition.LegacyContactDamage)
@@ -697,6 +768,132 @@ public static class EnemyEA2RuntimeAudit
         }
 
         return true;
+    }
+
+    private static bool ExpectsFormalMelee(
+        EnemyDefinition definition)
+    {
+        return definition != null &&
+               definition.AttackMode == EnemyAttackMode.Melee &&
+               definition.AttackDamage > 0f &&
+               definition.AttackRange > 0f;
+    }
+
+    private static bool AuditT6AFormalMeleeBinding(
+        EnemyRuntimeContext context,
+        List<string> errors,
+        out EnemyMeleeAttackController controller)
+    {
+        controller = null;
+
+        if (context == null || context.Definition == null)
+        {
+            return false;
+        }
+
+        string prefix = context.gameObject.name + ": ";
+        EnemyDefinition definition = context.Definition;
+        bool expectsFormalMelee = ExpectsFormalMelee(definition);
+        EnemyMeleeAttackController[] controllers =
+            context.GetComponents<EnemyMeleeAttackController>();
+        ContactDamage2D[] contactDamageComponents =
+            context.GetComponents<ContactDamage2D>();
+
+        if (!expectsFormalMelee)
+        {
+            if (controllers.Length != 0)
+            {
+                errors.Add(
+                    prefix +
+                    "T6A non-melee profile has a formal melee controller.");
+                return false;
+            }
+
+            return true;
+        }
+
+        if (controllers.Length != 1)
+        {
+            errors.Add(
+                prefix +
+                "T6A expected exactly one EnemyMeleeAttackController, found " +
+                controllers.Length + ".");
+            return false;
+        }
+
+        controller = controllers[0];
+        bool valid = true;
+
+        if (!controller.IsInitialized ||
+            controller.Context != context)
+        {
+            errors.Add(
+                prefix +
+                "T6A formal melee controller is not initialized against " +
+                "its runtime context.");
+            valid = false;
+        }
+
+        EnemyStateMachine stateMachine =
+            context.GetComponent<EnemyStateMachine>();
+
+        if (stateMachine == null ||
+            stateMachine.MeleeAttackController != controller ||
+            !stateMachine.SupportsFormalMeleeAttack)
+        {
+            errors.Add(
+                prefix +
+                "T6A state machine is not bound to the formal melee controller.");
+            valid = false;
+        }
+
+        if (!Approximately(
+                controller.ConfiguredDamage,
+                definition.AttackDamage) ||
+            !Approximately(
+                controller.ConfiguredRange,
+                definition.AttackRange) ||
+            !Approximately(
+                controller.ConfiguredWindup,
+                definition.AttackWindup) ||
+            !Approximately(
+                controller.ConfiguredRecovery,
+                definition.AttackRecovery) ||
+            !Approximately(
+                controller.ConfiguredCooldown,
+                definition.AttackCooldown))
+        {
+            errors.Add(
+                prefix +
+                "T6A runtime attack values do not match EnemyDefinition.");
+            valid = false;
+        }
+
+        if (contactDamageComponents.Length != 0)
+        {
+            errors.Add(
+                prefix +
+                "T6A formal melee profile still has legacy ContactDamage2D.");
+            valid = false;
+        }
+
+        if (definition.EnableLegacyContactDamage)
+        {
+            errors.Add(
+                prefix +
+                "T6A formal melee Definition still enables legacy contact damage.");
+            valid = false;
+        }
+
+        if (controller.TargetHealth == null)
+        {
+            errors.Add(
+                prefix +
+                "T6A formal melee target Health reference is missing.");
+            valid = false;
+        }
+
+        return valid;
     }
 
     private static void AuditT4SpawnModeContract(

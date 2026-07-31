@@ -257,6 +257,21 @@ public sealed class EnemyMotor2D : MonoBehaviour
     }
 
     /// <summary>
+    /// Updates the authoritative facing direction without issuing movement.
+    /// T6A uses this during attack windup so perception and presentation can
+    /// retain a coherent direction while navigation is intentionally stopped.
+    /// </summary>
+    public void FaceDirection(Vector2 direction)
+    {
+        if (direction.sqrMagnitude <= 0.000001f)
+        {
+            return;
+        }
+
+        facingDirection = direction.normalized;
+    }
+
+    /// <summary>
     /// Issues one fixed-step navigation MovePosition command.
     /// Combat displacement has higher authority and temporarily rejects this
     /// navigation command without cancelling the active displacement.

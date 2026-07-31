@@ -56,6 +56,11 @@ public static class EnemyEA1ConfigurationAudit
             errors,
             notes);
 
+        AuditT6AFormalMeleeAuthoring(
+            definitions,
+            errors,
+            notes);
+
         if (catalogs.Length == 0)
         {
             errors.Add("No Enemy Catalog asset was found.");
@@ -558,6 +563,87 @@ public static class EnemyEA1ConfigurationAudit
             ". Broadcasts Alert, Alert Radius and Alert Broadcast Cooldown " +
             "are read directly from each EnemyDefinition; no GameplayRole " +
             "branch assigns behavior.");
+    }
+
+    private static void AuditT6AFormalMeleeAuthoring(
+        EnemyDefinition[] definitions,
+        List<string> errors,
+        List<string> notes)
+    {
+        if (definitions == null || definitions.Length == 0)
+        {
+            return;
+        }
+
+        int meleeCount = 0;
+        int projectileCount = 0;
+
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            EnemyDefinition definition = definitions[i];
+
+            if (definition == null)
+            {
+                continue;
+            }
+
+            if (definition.AttackDamage <= 0f ||
+                definition.AttackRange <= 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6A formal attack requires positive Damage and Range.");
+            }
+
+            if (definition.AttackWindup < 0f ||
+                definition.AttackRecovery < 0f ||
+                definition.AttackCooldown < 0f)
+            {
+                errors.Add(
+                    definition.name +
+                    ": T6A Windup, Recovery and Cooldown cannot be negative.");
+            }
+
+            if (definition.AttackMode == EnemyAttackMode.Melee)
+            {
+                meleeCount++;
+
+                if (definition.StopDistance > definition.AttackRange)
+                {
+                    errors.Add(
+                        definition.name +
+                        ": T6A Attack Range must be at least Stop Distance.");
+                }
+
+                if (definition.EnableLegacyContactDamage)
+                {
+                    errors.Add(
+                        definition.name +
+                        ": T6A formal melee must disable Legacy Contact Damage " +
+                        "to preserve a single authoritative damage path.");
+                }
+            }
+            else
+            {
+                projectileCount++;
+            }
+        }
+
+        if (definitions.Length == 5 &&
+            (meleeCount != 4 || projectileCount != 1))
+        {
+            errors.Add(
+                "T6A five-enemy baseline expects four Melee profiles and " +
+                "one Projectile profile. Actual=Melee:" + meleeCount +
+                ", Projectile:" + projectileCount + ".");
+        }
+
+        notes.Add(
+            "T6A formal melee authoring is installed. FormalMeleeProfiles=" +
+            meleeCount + "/" + definitions.Length +
+            ". Damage, Range, Windup, Recovery and Cooldown are read " +
+            "directly from EnemyDefinition; formal melee disables the " +
+            "legacy contact-damage path.");
     }
 
     private static void AuditT0SpawnBaseline(

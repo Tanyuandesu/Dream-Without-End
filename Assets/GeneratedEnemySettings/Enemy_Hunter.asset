@@ -67,7 +67,7 @@ MonoBehaviour:
   attackRecovery: 0.32
   attackCooldown: 0.58
   projectileSpeed: 0
-  enableLegacyContactDamage: 1
+  enableLegacyContactDamage: 0
   legacyContactDamage: 4
   legacyContactDamageCooldown: 0.58
   legacyContactDamageTargets: 2

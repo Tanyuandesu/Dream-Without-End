@@ -1,8 +1,8 @@
 /// <summary>
 /// Stable runtime state vocabulary shared by every enemy type.
 /// T5A activates Patrol, Chase, InvestigateLastKnownPosition,
-/// SearchLastKnownPosition, ReturnToHomeOrPatrol and Dead. Attack and Alert
-/// remain reserved for later enemy phases.
+/// SearchLastKnownPosition, ReturnToHomeOrPatrol and Dead. T5C activates
+/// Alert; T6A activates Attack for formal melee profiles.
 /// </summary>
 public enum EnemyRuntimeState
 {

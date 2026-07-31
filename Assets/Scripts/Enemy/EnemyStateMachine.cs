@@ -81,10 +81,15 @@ public sealed class EnemyStateMachine : MonoBehaviour
     [SerializeField] private Vector2 lastAlertPosition;
     [SerializeField] private string lastAlertSourceId = string.Empty;
 
+    [Header("T6A formal melee attack state")]
+    [SerializeField] private int formalMeleeAttackEnterCount;
+    [SerializeField] private int formalMeleeAttackResumeCount;
+
     [Header("Runtime references")]
     [SerializeField] private EnemyRuntimeContext context;
     [SerializeField] private EnemyNavigationAgent navigationAgent;
     [SerializeField] private EnemyMotor2D motor;
+    [SerializeField] private EnemyMeleeAttackController meleeAttackController;
     [SerializeField] private EnemyManager alertManager;
 
     [Header("Optional diagnostics")]
@@ -136,6 +141,15 @@ public sealed class EnemyStateMachine : MonoBehaviour
     public float LastAlertReceivedAt => lastAlertReceivedAt;
     public Vector2 LastAlertPosition => lastAlertPosition;
     public string LastAlertSourceId => lastAlertSourceId;
+    public bool SupportsFormalMeleeAttack =>
+        meleeAttackController != null &&
+        meleeAttackController.IsInitialized;
+    public EnemyMeleeAttackController MeleeAttackController =>
+        meleeAttackController;
+    public int FormalMeleeAttackEnterCount =>
+        formalMeleeAttackEnterCount;
+    public int FormalMeleeAttackResumeCount =>
+        formalMeleeAttackResumeCount;
 
     public bool IsCombatReactionActive => combatReactionActive;
     public CombatAttackId ActiveReactionAttackId =>
@@ -291,6 +305,8 @@ public sealed class EnemyStateMachine : MonoBehaviour
         lastAlertReceivedAt = -1f;
         lastAlertPosition = Vector2.zero;
         lastAlertSourceId = string.Empty;
+        formalMeleeAttackEnterCount = 0;
+        formalMeleeAttackResumeCount = 0;
 
         if (!initialized)
         {
@@ -387,6 +403,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
         combatReactionStartCount++;
         combatReactionTimerStarted = false;
         combatReactionEndsAt = -1f;
+
+        if (meleeAttackController != null)
+        {
+            meleeAttackController.CancelAttack(
+                "T6A attack interrupted by combat reaction");
+        }
 
         navigationAgent.StopMovement(
             clearLastKnownPosition: false);
@@ -486,6 +508,7 @@ public sealed class EnemyStateMachine : MonoBehaviour
             source == this ||
             currentState == EnemyRuntimeState.Dead ||
             currentState == EnemyRuntimeState.Chase ||
+            currentState == EnemyRuntimeState.Attack ||
             combatReactionActive ||
             chasePathCostBlockedUntilTargetLost ||
             context == null ||
@@ -545,6 +568,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
 
     private void EvaluateBehaviorState()
     {
+        if (currentState == EnemyRuntimeState.Attack)
+        {
+            EvaluateFormalMeleeAttackState();
+            return;
+        }
+
         EnemyDetection detection = context.Detection;
 
         if (chasePathCostBlockedUntilTargetLost &&
@@ -588,6 +617,11 @@ public sealed class EnemyStateMachine : MonoBehaviour
             if (currentState != EnemyRuntimeState.Chase)
             {
                 TryBroadcastAlert(observedPosition);
+            }
+
+            if (TryEnterFormalMeleeAttack())
+            {
+                return;
             }
 
             TransitionTo(
@@ -707,6 +741,81 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
     }
 
+    private bool TryEnterFormalMeleeAttack()
+    {
+        if (meleeAttackController == null ||
+            !meleeAttackController.IsInitialized ||
+            !meleeAttackController.TryBeginAttack())
+        {
+            return false;
+        }
+
+        formalMeleeAttackEnterCount++;
+        TransitionTo(
+            EnemyRuntimeState.Attack,
+            "T6A formal melee windup started");
+
+        return true;
+    }
+
+    private void EvaluateFormalMeleeAttackState()
+    {
+        if (meleeAttackController == null ||
+            !meleeAttackController.IsInitialized)
+        {
+            ResumeAfterFormalMeleeAttack(
+                "T6A formal melee controller unavailable");
+            return;
+        }
+
+        if (!meleeAttackController.IsAttackActive ||
+            meleeAttackController.TickAttack())
+        {
+            ResumeAfterFormalMeleeAttack(
+                "T6A formal melee sequence completed");
+        }
+    }
+
+    private void ResumeAfterFormalMeleeAttack(string reason)
+    {
+        formalMeleeAttackResumeCount++;
+
+        EnemyDetection detection = context != null
+            ? context.Detection
+            : null;
+
+        if (detection != null &&
+            detection.IsTargetDetected &&
+            !chasePathCostBlockedUntilTargetLost)
+        {
+            Vector2 observedPosition =
+                detection.LastKnownTargetPosition;
+
+            context.SetLastKnownTargetPosition(observedPosition);
+            navigationAgent.ObserveDetectedTarget(observedPosition);
+
+            TransitionTo(
+                EnemyRuntimeState.Chase,
+                reason);
+            return;
+        }
+
+        if (context != null &&
+            context.HasLastKnownTargetPosition)
+        {
+            TransitionTo(
+                EnemyRuntimeState.InvestigateLastKnownPosition,
+                reason);
+            return;
+        }
+
+        TransitionTo(
+            IsNearHome()
+                ? EnemyRuntimeState.Patrol
+                : EnemyRuntimeState.ReturnToHomeOrPatrol,
+            reason);
+    }
+
     private void ResumeAfterCombatReaction(string reason)
     {
         if (currentState == EnemyRuntimeState.Dead)
@@ -773,6 +882,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
         }
 
         ResetCombatReactionFields();
+
+        if (meleeAttackController != null)
+        {
+            meleeAttackController.CancelAttack(
+                "T6A attack cancelled because owner died");
+        }
 
         if (motor != null)
         {
@@ -885,6 +1000,11 @@ public sealed class EnemyStateMachine : MonoBehaviour
                 returnHomeCount++;
                 navigationAgent.SetFixedDestination(
                     activeBehaviorDestination);
+                break;
+
+            case EnemyRuntimeState.Attack:
+                navigationAgent.StopMovement(
+                    clearLastKnownPosition: false);
                 break;
 
             case EnemyRuntimeState.Idle:
@@ -1167,6 +1287,12 @@ public sealed class EnemyStateMachine : MonoBehaviour
             motor = navigationAgent != null
                 ? navigationAgent.Motor
                 : GetComponent<EnemyMotor2D>();
+        }
+
+        if (meleeAttackController == null)
+        {
+            meleeAttackController =
+                GetComponent<EnemyMeleeAttackController>();
         }
 
         if (alertManager == null)

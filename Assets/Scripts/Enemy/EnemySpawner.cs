@@ -682,12 +682,27 @@ public sealed class EnemySpawner : MonoBehaviour
             runtimeContext,
             navigationAgent);
 
+        EnemyMeleeAttackController meleeAttackController = null;
+
+        if (SupportsFormalMeleeAttack(definition))
+        {
+            meleeAttackController =
+                enemy.AddComponent<EnemyMeleeAttackController>();
+        }
+
         EnemyStateMachine stateMachine =
             enemy.AddComponent<EnemyStateMachine>();
 
         stateMachine.Initialize(
             runtimeContext,
             navigationAgent);
+
+        if (meleeAttackController != null)
+        {
+            meleeAttackController.Initialize(
+                runtimeContext,
+                stateMachine);
+        }
 
         EnemyCombatReceiver combatReceiver =
             enemy.AddComponent<EnemyCombatReceiver>();
@@ -778,10 +793,27 @@ public sealed class EnemySpawner : MonoBehaviour
             true);
     }
 
+    private static bool SupportsFormalMeleeAttack(
+        EnemyDefinition definition)
+    {
+        return definition != null &&
+               definition.AttackMode == EnemyAttackMode.Melee &&
+               definition.AttackDamage > 0f &&
+               definition.AttackRange > 0f;
+    }
+
     private void CreateContactDamage(
         GameObject enemy,
         EnemyDefinition definition)
     {
+        // T6A formal melee is the sole active damage path for melee profiles.
+        // The legacy component remains only for definition-less migration
+        // fallback and can be deleted during Enemy Legacy Cleanup.
+        if (SupportsFormalMeleeAttack(definition))
+        {
+            return;
+        }
+
         bool shouldEnable = definition != null
             ? definition.EnableLegacyContactDamage
             : enableContactDamage;
