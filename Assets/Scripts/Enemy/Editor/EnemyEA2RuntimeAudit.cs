@@ -509,6 +509,11 @@ public static class EnemyEA2RuntimeAudit
             "configuration. Formal melee/projectile controllers are now the " +
             "sole enemy damage authority.");
 
+        notes.Add(
+            "T7C removes EnemySpawner's retired hidden data and overloads. " +
+            "Every runtime enemy now requires one catalog-owned " +
+            "EnemyDefinition; no serialized gameplay fallback remains.");
+
         if (optionalTransitionLoggingCount > 0)
         {
             notes.Add(
@@ -533,6 +538,9 @@ public static class EnemyEA2RuntimeAudit
         report.AppendLine(
             "T7BLegacyContactDamageComponents=" +
             legacyContactDamageComponentCount);
+        report.AppendLine(
+            "T7CDefinitionOnlyRuntime=" +
+            verifiedDefinitionBindingCount + "/" + runtimeEnemyCount);
         report.AppendLine(
             "States=" + FormatStateCounts(stateCounts));
         report.AppendLine(

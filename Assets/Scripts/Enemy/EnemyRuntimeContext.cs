@@ -317,7 +317,7 @@ public sealed class EnemyRuntimeContext : MonoBehaviour
             return;
         }
 
-        enemyId = "legacy_enemy";
+        enemyId = "uninitialized";
     }
 
     private void OnDrawGizmosSelected()

@@ -10,8 +10,10 @@ public enum EnemySpawnMode
 }
 
 /// <summary>
-/// 測試敵人生成器。
-/// 包含外觀、生命、接觸傷害與目前 AI 參數。
+/// Definition-driven enemy spawn authority.
+/// Enemy type data lives exclusively in EnemyDefinition assets; this
+/// component owns only spawn selection, floor navigation service settings
+/// and shared temporary-health-bar presentation.
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class EnemySpawner : MonoBehaviour
@@ -78,90 +80,13 @@ public sealed class EnemySpawner : MonoBehaviour
         "Off in EA3 so every turn remains an explicit cell-center waypoint.")]
     [SerializeField] private bool simplifyCollinearPathWaypoints;
 
-    [Header("移動參數")]
-    [Min(0.1f)]
-    [SerializeField, HideInInspector] private float moveSpeed = 3.2f;
-
-    [Range(0.001f, 0.25f)]
-    [SerializeField, HideInInspector]
-    private float waypointTolerance = 0.035f;
-
-    [Min(0f)]
-    [SerializeField, HideInInspector] private float stopDistance = 0.72f;
-
-    [Range(0.01f, 1f)]
-    [SerializeField, HideInInspector]
-    private float lastPositionTolerance = 0.15f;
-
-    [Header("索敵參數")]
-    [Min(0.1f)]
-    [SerializeField, HideInInspector] private float detectionRadius = 20f;
-
-    [Min(0.1f)]
-    [SerializeField, HideInInspector] private float loseTargetRadius = 24f;
-
-    [SerializeField, HideInInspector]
-    private bool requireLineOfSight = false;
-
-    [SerializeField, HideInInspector] private LayerMask obstacleMask = ~0;
-
-    [Header("敵人生命")]
-    [Min(1f)]
-    [SerializeField, HideInInspector] private float maxHealth = 30f;
-
-    [Min(0f)]
-    [SerializeField, HideInInspector]
-    private float damageInvulnerabilityTime =
-        0.1f;
-
-    [Header("敵人外觀")]
-    [SerializeField, HideInInspector] private Sprite enemySprite;
-
-    [Header("敌人方向动画")]
-    [Tooltip(
-        "当 Animation Profiles 为空时使用。")]
-    [SerializeField, HideInInspector]
-    private CharacterAnimationProfile defaultAnimationProfile;
-
-    [Tooltip(
-        "未来可放入多种敌人的动画配置。" +
-        "CA1 会按生成顺序循环选取，不改变 AI 或数值。")]
-    [SerializeField, HideInInspector]
-    private List<CharacterAnimationProfile> animationProfiles =
-        new List<CharacterAnimationProfile>();
-
-    [Min(0.05f)]
-    [SerializeField, HideInInspector]
-    private float visualWorldHeight = 0.8f;
-
-    [SerializeField, HideInInspector]
-    private Vector2 visualOffset =
-        Vector2.zero;
-
-    [SerializeField, HideInInspector]
-    private Color visualColor =
-        new Color(0.2f, 0.85f, 0.25f);
-
-    [SerializeField, HideInInspector] private int sortingOrder = 20;
-
     [Header("戰鬥：敵人臨時血條")]
     [SerializeField]
     private EnemyTemporaryHealthBarSettings temporaryHealthBarSettings =
         EnemyTemporaryHealthBarSettings.CreateDefault();
 
-    [Header("敵人碰撞")]
-    [SerializeField, HideInInspector]
-    private Vector2 colliderSize =
-        new Vector2(0.58f, 0.58f);
-
-    [SerializeField, HideInInspector]
-    private Vector2 colliderOffset =
-        Vector2.zero;
-
     private PhysicsMaterial2D frictionlessMaterial;
     private Sprite fallbackSprite;
-    private bool loggedMissingDefinition;
-    private bool loggedDefinitionOutsideCatalog;
 
     public EnemyCatalog Catalog => enemyCatalog;
     public EnemySpawnMode SpawnMode => spawnMode;
@@ -209,8 +134,12 @@ public sealed class EnemySpawner : MonoBehaviour
         {
             case EnemySpawnMode.BaselineSingleDefinition:
             {
-                EnemyDefinition definition =
-                    ResolveDefaultDefinition();
+                if (!TryResolveBaselineDefinition(
+                        out EnemyDefinition definition,
+                        out failureReason))
+                {
+                    return false;
+                }
 
                 for (int i = 0; i < enemyCount; i++)
                 {
@@ -244,45 +173,10 @@ public sealed class EnemySpawner : MonoBehaviour
         ValidateSettings();
     }
 
-    public List<GameObject> SpawnTestEnemies(
-        DungeonLayout layout,
-        Transform dungeonRoot,
-        DungeonRenderer dungeonRenderer,
-        Transform player)
-    {
-        return SpawnTestEnemies(
-            layout,
-            dungeonRoot,
-            dungeonRenderer,
-            player,
-            null);
-    }
-
     /// <summary>
-    /// R8.3 运行时入口。旧四参数入口完整保留；
-    /// 先解析全部安全格，再一次性实例化，避免部分提交。
-    /// 本方法只改变生成位置来源，不改变任何 AI 参数或组件。
-    /// </summary>
-    public List<GameObject> SpawnTestEnemies(
-        DungeonLayout layout,
-        Transform dungeonRoot,
-        DungeonRenderer dungeonRenderer,
-        Transform player,
-        ISet<Vector2Int> runtimeSpawnReservations)
-    {
-        return SpawnTestEnemies(
-            layout,
-            dungeonRoot,
-            dungeonRenderer,
-            player,
-            runtimeSpawnReservations,
-            0,
-            0);
-    }
-
-    /// <summary>
-    /// T3 runtime entry. Floor Session Id makes every generated enemy
-    /// traceable even when the same floor is regenerated with the same seed.
+    /// Single runtime spawn entry. Floor Session Id makes every generated
+    /// enemy traceable even when the same floor is regenerated with the same
+    /// seed. All spawned enemies must have a valid EnemyDefinition.
     /// </summary>
     public List<GameObject> SpawnTestEnemies(
         DungeonLayout layout,
@@ -527,9 +421,7 @@ public sealed class EnemySpawner : MonoBehaviour
         int roomIndex,
         EnemyPathService pathService)
     {
-        string enemyName = definition != null
-            ? definition.DisplayName
-            : "LegacyEnemy";
+        string enemyName = definition.DisplayName;
 
         GameObject enemy =
             new GameObject(enemyName + "_" + index);
@@ -556,10 +448,10 @@ public sealed class EnemySpawner : MonoBehaviour
             floorSessionId,
             roomIndex,
             spawnCell,
-            definition == null || definition.CountsForEnding);
+            definition.CountsForEnding);
 
         CreateHealth(enemy, definition);
-        CreateVisual(enemy, index, definition);
+        CreateVisual(enemy, definition);
         CreateTemporaryHealthBar(enemy, definition);
         CreatePhysics(enemy, definition);
 
@@ -573,30 +465,18 @@ public sealed class EnemySpawner : MonoBehaviour
 
         motor.Initialize(
             enemy.GetComponent<Rigidbody2D>(),
-            definition != null
-                ? definition.MoveSpeed
-                : moveSpeed);
+            definition.MoveSpeed);
 
         EnemyDetection detection =
             enemy.AddComponent<EnemyDetection>();
 
         detection.Initialize(
             player,
-            definition != null
-                ? definition.DetectionRadius
-                : detectionRadius,
-            definition != null
-                ? definition.LoseTargetRadius
-                : loseTargetRadius,
-            definition != null
-                ? definition.RequireLineOfSight
-                : requireLineOfSight,
-            definition != null
-                ? definition.ObstacleMask
-                : obstacleMask,
-            definition != null
-                ? definition.ViewAngle
-                : 360f,
+            definition.DetectionRadius,
+            definition.LoseTargetRadius,
+            definition.RequireLineOfSight,
+            definition.ObstacleMask,
+            definition.ViewAngle,
             motor);
 
         EnemyRuntimeContext runtimeContext =
@@ -623,36 +503,16 @@ public sealed class EnemySpawner : MonoBehaviour
             pathService,
             pathfinder,
             motor,
-            definition != null
-                ? definition.WaypointTolerance
-                : waypointTolerance,
-            definition != null
-                ? definition.StopDistance
-                : stopDistance,
-            definition != null
-                ? definition.LastPositionTolerance
-                : lastPositionTolerance,
-            definition != null
-                ? definition.MinimumRepathInterval
-                : 0.08f,
-            definition != null
-                ? definition.StuckTimeout
-                : 0.75f,
-            definition != null
-                ? definition.StuckMovementThreshold
-                : 0.015f,
-            definition != null
-                ? definition.MaximumRecoveryAttempts
-                : 3,
-            definition != null
-                ? definition.MaximumRecoverySnapDistance
-                : 0.8f,
-            definition != null
-                ? definition.FailedPathRetryDelay
-                : 0.5f,
-            definition != null
-                ? definition.MaximumChasePathCost
-                : 0);
+            definition.WaypointTolerance,
+            definition.StopDistance,
+            definition.LastPositionTolerance,
+            definition.MinimumRepathInterval,
+            definition.StuckTimeout,
+            definition.StuckMovementThreshold,
+            definition.MaximumRecoveryAttempts,
+            definition.MaximumRecoverySnapDistance,
+            definition.FailedPathRetryDelay,
+            definition.MaximumChasePathCost);
 
         runtimeContext.AttachNavigation(
             pathService,
@@ -772,13 +632,9 @@ public sealed class EnemySpawner : MonoBehaviour
             enemy.AddComponent<Health>();
 
         health.Initialize(
-            definition != null
-                ? definition.MaxHealth
-                : maxHealth,
+            definition.MaxHealth,
             DamageFaction.Enemy,
-            definition != null
-                ? definition.DamageInvulnerabilityTime
-                : damageInvulnerabilityTime,
+            definition.DamageInvulnerabilityTime,
             true);
     }
 
@@ -805,15 +661,12 @@ public sealed class EnemySpawner : MonoBehaviour
 
     private void CreateVisual(
         GameObject enemy,
-        int enemyIndex,
         EnemyDefinition definition)
     {
         EnemyVisual enemyVisual =
             enemy.AddComponent<EnemyVisual>();
 
-        Sprite configuredSprite = definition != null
-            ? definition.EnemySprite
-            : enemySprite;
+        Sprite configuredSprite = definition.EnemySprite;
 
         Sprite spriteToUse = configuredSprite != null
             ? configuredSprite
@@ -822,19 +675,11 @@ public sealed class EnemySpawner : MonoBehaviour
         enemyVisual.Initialize(
             spriteToUse,
             GetFallbackSprite(),
-            definition != null
-                ? definition.VisualWorldHeight
-                : visualWorldHeight,
-            definition != null
-                ? definition.VisualOffset
-                : visualOffset,
-            definition != null
-                ? definition.VisualColor
-                : visualColor,
-            definition != null
-                ? definition.SortingOrder
-                : sortingOrder,
-            GetAnimationProfile(enemyIndex, definition));
+            definition.VisualWorldHeight,
+            definition.VisualOffset,
+            definition.VisualColor,
+            definition.SortingOrder,
+            definition.AnimationProfile);
     }
 
     private void CreateTemporaryHealthBar(
@@ -844,7 +689,6 @@ public sealed class EnemySpawner : MonoBehaviour
         EnsureTemporaryHealthBarSettings();
 
         bool enemyHealthBarEnabled =
-            definition == null ||
             definition.TemporaryHealthBarEnabled;
 
         if (!temporaryHealthBarSettings.Enabled ||
@@ -869,39 +713,8 @@ public sealed class EnemySpawner : MonoBehaviour
             enemyVisual,
             temporaryHealthBarSettings,
             true,
-            definition != null
-                ? definition.TemporaryHealthBarSizeMultiplier
-                : 1f,
-            definition != null
-                ? definition.TemporaryHealthBarOffset
-                : Vector2.zero);
-    }
-
-    private CharacterAnimationProfile GetAnimationProfile(
-        int enemyIndex,
-        EnemyDefinition definition)
-    {
-        if (definition != null)
-        {
-            return definition.AnimationProfile;
-        }
-
-        if (animationProfiles != null &&
-            animationProfiles.Count > 0)
-        {
-            int safeIndex = Mathf.Abs(enemyIndex - 1) %
-                            animationProfiles.Count;
-
-            CharacterAnimationProfile selected =
-                animationProfiles[safeIndex];
-
-            if (selected != null)
-            {
-                return selected;
-            }
-        }
-
-        return defaultAnimationProfile;
+            definition.TemporaryHealthBarSizeMultiplier,
+            definition.TemporaryHealthBarOffset);
     }
 
     private void CreatePhysics(
@@ -911,13 +724,8 @@ public sealed class EnemySpawner : MonoBehaviour
         BoxCollider2D enemyCollider =
             enemy.AddComponent<BoxCollider2D>();
 
-        enemyCollider.size = definition != null
-            ? definition.ColliderSize
-            : colliderSize;
-
-        enemyCollider.offset = definition != null
-            ? definition.ColliderOffset
-            : colliderOffset;
+        enemyCollider.size = definition.ColliderSize;
+        enemyCollider.offset = definition.ColliderOffset;
         enemyCollider.sharedMaterial =
             frictionlessMaterial;
 
@@ -1189,37 +997,46 @@ public sealed class EnemySpawner : MonoBehaviour
         return true;
     }
 
-    private EnemyDefinition ResolveDefaultDefinition()
+    private bool TryResolveBaselineDefinition(
+        out EnemyDefinition definition,
+        out string failureReason)
     {
-        if (defaultEnemyDefinition == null)
+        definition = defaultEnemyDefinition;
+        failureReason = string.Empty;
+
+        if (enemyCatalog == null)
         {
-            if (!loggedMissingDefinition)
-            {
-                loggedMissingDefinition = true;
-
-                Debug.LogWarning(
-                    "[EnemySpawner/EA1] Default Enemy Definition is missing. " +
-                    "Legacy serialized values will be used for this session.",
-                    this);
-            }
-
-            return null;
+            failureReason =
+                "Baseline spawn requires an assigned Enemy Catalog.";
+            definition = null;
+            return false;
         }
 
-        if (enemyCatalog != null &&
-            !enemyCatalog.Contains(defaultEnemyDefinition) &&
-            !loggedDefinitionOutsideCatalog)
+        if (definition == null)
         {
-            loggedDefinitionOutsideCatalog = true;
-
-            Debug.LogWarning(
-                "[EnemySpawner/EA1] Default Enemy Definition '" +
-                defaultEnemyDefinition.Id +
-                "' is not registered in the assigned Enemy Catalog.",
-                this);
+            failureReason =
+                "Baseline spawn requires an assigned Default Enemy Definition.";
+            return false;
         }
 
-        return defaultEnemyDefinition;
+        if (!definition.Id.IsValid)
+        {
+            failureReason =
+                "Default Enemy Definition has an invalid EnemyId.";
+            definition = null;
+            return false;
+        }
+
+        if (!enemyCatalog.Contains(definition))
+        {
+            failureReason =
+                "Default Enemy Definition '" + definition.Id +
+                "' is not registered in the assigned Enemy Catalog.";
+            definition = null;
+            return false;
+        }
+
+        return true;
     }
 
     private static string BuildRuntimeInstanceId(
@@ -1230,9 +1047,7 @@ public sealed class EnemySpawner : MonoBehaviour
         int enemyIndex,
         Vector2Int spawnCell)
     {
-        string enemyId = definition != null
-            ? definition.Id.Value
-            : "legacy_enemy";
+        string enemyId = definition.Id.Value;
 
         return "Floor" + Mathf.Max(0, floorNumber) +
                "_Session" + Mathf.Max(0, floorSessionId) +
@@ -1320,17 +1135,12 @@ public sealed class EnemySpawner : MonoBehaviour
         {
             DungeonSpawnCellResult result = spawnResults[i];
 
-            EnemyDefinition definition =
-                spawnPlan != null && i < spawnPlan.Count
-                    ? spawnPlan[i]
-                    : null;
+            EnemyDefinition definition = spawnPlan[i];
 
             report.AppendLine(
                 "Enemy_" + (i + 1) +
                 " EnemyId=" +
-                (definition != null
-                    ? definition.Id.Value
-                    : "legacy_enemy") +
+                definition.Id.Value +
                 " | Requested=SpawnPoint(Enemy)" +
                 " | Effective=" + result.Source +
                 " | RoomIndex=" + result.RoomIndex +
@@ -1410,42 +1220,6 @@ public sealed class EnemySpawner : MonoBehaviour
                 : 1,
             1,
             4);
-
-        moveSpeed = Mathf.Max(0.1f, moveSpeed);
-
-        waypointTolerance = Mathf.Clamp(
-            waypointTolerance,
-            0.001f,
-            0.25f);
-
-        stopDistance = Mathf.Max(0f, stopDistance);
-
-        lastPositionTolerance = Mathf.Clamp(
-            lastPositionTolerance,
-            0.01f,
-            1f);
-
-        detectionRadius = Mathf.Max(0.1f, detectionRadius);
-        loseTargetRadius = Mathf.Max(
-            detectionRadius,
-            loseTargetRadius);
-
-        maxHealth = Mathf.Max(1f, maxHealth);
-        damageInvulnerabilityTime = Mathf.Max(
-            0f,
-            damageInvulnerabilityTime);
-
-        visualWorldHeight = Mathf.Max(
-            0.05f,
-            visualWorldHeight);
-
-        colliderSize.x = Mathf.Max(
-            0.05f,
-            colliderSize.x);
-
-        colliderSize.y = Mathf.Max(
-            0.05f,
-            colliderSize.y);
 
         EnsureTemporaryHealthBarSettings();
     }

@@ -10852,6 +10852,11 @@ MonoBehaviour:
   lastClearSurvivorCount: 0
   lastDeathInstanceId: 
   lastDeathAttribution: 0
+  alertBroadcastCount: 0
+  alertDeliveryCount: 0
+  lastAlertSourceId: 
+  lastAlertPosition: {x: 0, y: 0}
+  lastAlertRadius: 0
 --- !u!114 &908851853
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10865,6 +10870,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   enemyCatalog: {fileID: 11400000, guid: 71fba5c7957df67b86496d59cdb93428, type: 2}
+  spawnMode: 1
   defaultEnemyDefinition: {fileID: 11400000, guid: 21bb062c0bb5826579df4a0b0860fb97, type: 2}
   enemyCount: 3
   spawnNearPlayerFirst: 1
@@ -10875,26 +10881,6 @@ MonoBehaviour:
   maxExpandedPathNodesPerQuery: 4096
   navigationStartRecoveryRadiusInCells: 1
   simplifyCollinearPathWaypoints: 0
-  moveSpeed: 4.7
-  waypointTolerance: 0.035
-  stopDistance: 0.72
-  lastPositionTolerance: 0.15
-  detectionRadius: 20
-  loseTargetRadius: 24
-  requireLineOfSight: 0
-  obstacleMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  maxHealth: 30
-  damageInvulnerabilityTime: 0.1
-  enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
-  defaultAnimationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
-  animationProfiles:
-  - {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
-  visualWorldHeight: 0.8
-  visualOffset: {x: 0, y: 0}
-  visualColor: {r: 1, g: 1, b: 1, a: 1}
-  sortingOrder: 20
   temporaryHealthBarSettings:
     enabled: 1
     visibleDuration: 1.5
@@ -10908,8 +10894,6 @@ MonoBehaviour:
     onlyPlayerDamage: 0
     hideWhenFull: 1
     hideImmediatelyOnDeath: 1
-  colliderSize: {x: 0.58, y: 0.58}
-  colliderOffset: {x: 0, y: 0}
 --- !u!1 &947361977
 GameObject:
   m_ObjectHideFlags: 0

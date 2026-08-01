@@ -20,7 +20,7 @@ public sealed class EnemyRuntimeIdentity : MonoBehaviour
     public EnemyDefinition Definition => definition;
     public EnemyId EnemyId => definition != null
         ? definition.Id
-        : EnemyId.From("legacy_enemy");
+        : default(EnemyId);
 
     public int FloorNumber => floorNumber;
     public int FloorSessionId => floorSessionId;

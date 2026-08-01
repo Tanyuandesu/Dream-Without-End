@@ -1,13 +1,14 @@
-Enemy System EA2 / T7 Authority Note
+Enemy System EA2 / T7C Runtime Authority
 
-T7A removed the retired TestEnemyAI compatibility bridge.
-Runtime enemies now use one authority path only:
-
+Runtime enemies use one authority path only:
 EnemyStateMachine
   -> EnemyNavigationAgent
   -> EnemyPathService / EnemyPathfinder
   -> EnemyMotor2D
 
-Use Tools/Dream Dungeon/Enemy System/Run EA2 Runtime Audit in Play Mode.
-The report must show Result=PASS and T7AuthoritativeNavigationAgents matching
-RuntimeEnemies.
+Every runtime enemy must have one catalog-owned EnemyDefinition. Use
+Tools/Dream Dungeon/Enemy System/Run EA2 Runtime Audit in Play Mode.
+The report must show:
+- Result=PASS
+- T7AuthoritativeNavigationAgents matching RuntimeEnemies
+- T7CDefinitionOnlyRuntime matching RuntimeEnemies

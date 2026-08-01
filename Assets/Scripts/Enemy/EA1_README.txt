@@ -1,14 +1,15 @@
-Dream Dungeon Enemy System - Current Authority Note
+Dream Dungeon Enemy System - T7C Static Authority
 
-EA1 introduced the Definition/Catalog data contract. The current runtime has
-progressed through T6B.3, T7A and T7B. TestEnemyAI and ContactDamage2D
-are no longer part of the system.
+EA1 validates the final Definition/Catalog data contract and all current
+behavior/combat authoring. T7C removes EnemySpawner's retired hidden gameplay
+fields and old runtime overloads.
 
-Authoritative runtime path:
-EnemyStateMachine -> EnemyNavigationAgent -> EnemyPathService/EnemyPathfinder
--> EnemyMotor2D.
+EnemySpawner now owns only:
+- EnemyCatalog / SpawnMode / baseline Definition selection
+- enemy count and room-selection switches
+- shared EnemyPathService limits
+- shared temporary-health-bar presentation
 
-Enemy behavior and formal melee/projectile combat values are read from
-EnemyDefinition assets.
-Use EA1 for static configuration, EA2 for runtime bindings/activity and EA3
-for navigation/algorithm regression.
+All per-enemy gameplay and presentation data comes from EnemyDefinition.
+After importing T7C, open GameScene and save it once so Unity removes retired
+serialized field residue, then run EA1. Result must be PASS.

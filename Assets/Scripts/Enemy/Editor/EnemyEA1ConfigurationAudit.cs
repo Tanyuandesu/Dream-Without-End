@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
 using System.Text;
 using UnityEditor;
 using UnityEngine;
@@ -76,6 +78,10 @@ public static class EnemyEA1ConfigurationAudit
             notes);
 
         AuditT7BLegacyContactDamageCleanup(
+            errors,
+            notes);
+
+        AuditT7CDefinitionOnlySpawnerCleanup(
             errors,
             notes);
 
@@ -398,7 +404,7 @@ public static class EnemyEA1ConfigurationAudit
             builder.Append(
                 definition != null
                     ? definition.Id.Value
-                    : "legacy_enemy");
+                    : "<missing-definition>");
         }
 
         builder.Append(']');
@@ -461,6 +467,160 @@ public static class EnemyEA1ConfigurationAudit
             "ContactDamage2D and its EnemyDefinition/EnemySpawner fallback " +
             "fields are absent; formal melee/projectile controllers are the " +
             "sole enemy damage authority.");
+    }
+
+    private static void AuditT7CDefinitionOnlySpawnerCleanup(
+        List<string> errors,
+        List<string> notes)
+    {
+        string[] retiredFieldNames =
+        {
+            "moveSpeed",
+            "waypointTolerance",
+            "stopDistance",
+            "lastPositionTolerance",
+            "detectionRadius",
+            "loseTargetRadius",
+            "requireLineOfSight",
+            "obstacleMask",
+            "maxHealth",
+            "damageInvulnerabilityTime",
+            "enemySprite",
+            "defaultAnimationProfile",
+            "animationProfiles",
+            "visualWorldHeight",
+            "visualOffset",
+            "visualColor",
+            "sortingOrder",
+            "colliderSize",
+            "colliderOffset"
+        };
+
+        BindingFlags fieldFlags =
+            BindingFlags.Instance |
+            BindingFlags.Public |
+            BindingFlags.NonPublic;
+
+        for (int i = 0; i < retiredFieldNames.Length; i++)
+        {
+            string fieldName = retiredFieldNames[i];
+
+            if (typeof(EnemySpawner).GetField(
+                    fieldName,
+                    fieldFlags) != null)
+            {
+                errors.Add(
+                    "T7C cleanup incomplete: EnemySpawner still declares " +
+                    "retired fallback field '" + fieldName + "'.");
+            }
+        }
+
+        MethodInfo[] spawnEntries =
+            typeof(EnemySpawner).GetMethods(
+                BindingFlags.Instance |
+                BindingFlags.Public);
+
+        int spawnEntryCount = 0;
+
+        for (int i = 0; i < spawnEntries.Length; i++)
+        {
+            if (spawnEntries[i].Name == "SpawnTestEnemies")
+            {
+                spawnEntryCount++;
+            }
+        }
+
+        if (spawnEntryCount != 1)
+        {
+            errors.Add(
+                "T7C requires one authoritative SpawnTestEnemies entry. " +
+                "Actual overload count=" + spawnEntryCount + ".");
+        }
+
+        string spawnerScriptGuid =
+            AssetDatabase.AssetPathToGUID(
+                "Assets/Scripts/Enemy/EnemySpawner.cs");
+
+        AuditSerializedSpawnerResidue(
+            "t:Scene",
+            spawnerScriptGuid,
+            retiredFieldNames,
+            errors);
+
+        AuditSerializedSpawnerResidue(
+            "t:Prefab",
+            spawnerScriptGuid,
+            retiredFieldNames,
+            errors);
+
+        notes.Add(
+            "T7C Definition-only spawner cleanup is installed. " +
+            "EnemySpawner owns spawn/navigation-service settings only; " +
+            "all enemy vitals, movement, perception, presentation, collision " +
+            "and attack values come from EnemyDefinition assets. One runtime " +
+            "spawn entry remains and retired serialized fallback data is absent.");
+    }
+
+    private static void AuditSerializedSpawnerResidue(
+        string assetFilter,
+        string spawnerScriptGuid,
+        IReadOnlyList<string> retiredFieldNames,
+        List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(spawnerScriptGuid))
+        {
+            errors.Add(
+                "T7C could not resolve the EnemySpawner script GUID.");
+            return;
+        }
+
+        string[] assetGuids = AssetDatabase.FindAssets(assetFilter);
+        string scriptToken = "guid: " + spawnerScriptGuid + ",";
+
+        for (int i = 0; i < assetGuids.Length; i++)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(assetGuids[i]);
+
+            if (string.IsNullOrWhiteSpace(path) ||
+                !File.Exists(path))
+            {
+                continue;
+            }
+
+            string text = File.ReadAllText(path);
+            string[] blocks = text.Split(
+                new[] { "\n--- !u!" },
+                System.StringSplitOptions.None);
+
+            for (int blockIndex = 0;
+                 blockIndex < blocks.Length;
+                 blockIndex++)
+            {
+                string block = blocks[blockIndex];
+
+                if (!block.Contains(scriptToken))
+                {
+                    continue;
+                }
+
+                for (int fieldIndex = 0;
+                     fieldIndex < retiredFieldNames.Count;
+                     fieldIndex++)
+                {
+                    string fieldName = retiredFieldNames[fieldIndex];
+
+                    if (block.Contains("\n  " + fieldName + ":"))
+                    {
+                        errors.Add(
+                            path +
+                            ": T7C serialized EnemySpawner residue '" +
+                            fieldName +
+                            "' remains. Open this asset and save it once " +
+                            "after importing T7C.");
+                    }
+                }
+            }
+        }
     }
 
     private static void AuditT4AuthoringVisibility(
