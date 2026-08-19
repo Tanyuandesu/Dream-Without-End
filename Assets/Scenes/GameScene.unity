@@ -5730,7 +5730,7 @@ MonoBehaviour:
   socketCorridorMaximumLayoutAttempts: 20
   socketCorridorMaximumExpandedNodesPerPath: 20000
   socketCorridorTurnPenalty: 2
-  templateFirstRoomCatalog: {fileID: 11400000, guid: 7c332a017c8a109458bf5f9a8be2faa3, type: 2}
+  templateFirstRoomCatalog: {fileID: 11400000, guid: d4a362761855ad44fbc4a65c3fe83e08, type: 2}
   templateFirstMapWidth: 80
   templateFirstMapHeight: 50
   templateFirstDesiredRoomCount: 7
