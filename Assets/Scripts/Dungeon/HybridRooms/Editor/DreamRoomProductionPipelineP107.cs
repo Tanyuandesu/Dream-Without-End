@@ -92,6 +92,10 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
 
     private Vector2 scrollPosition;
 
+    // P10.7.2: AssetDatabase / Prefab save work must not run directly inside IMGUI ProcessEvent.
+    // Queue the factory action to the next editor update to avoid Unity 6 Inspector redraw assertions.
+    private bool createQueued;
+
     [MenuItem(MenuRoot + "1. Open Production Room Factory", false, 2770)]
     private static void OpenWindow()
     {
@@ -477,11 +481,18 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             "Interior 与 BlockedCells 故意保持空白，等待你按正式图片手工配置。",
             MessageType.None);
 
-        EditorGUI.BeginDisabledGroup(EditorApplication.isPlayingOrWillChangePlaymode);
-        if (GUILayout.Button("Create New Production Room", GUILayout.Height(34f)))
+        EditorGUI.BeginDisabledGroup(
+            EditorApplication.isPlayingOrWillChangePlaymode || createQueued);
+
+        string createButtonLabel = createQueued
+            ? "Creating Production Room..."
+            : "Create New Production Room";
+
+        if (GUILayout.Button(createButtonLabel, GUILayout.Height(34f)))
         {
-            CreateRoomFromWindow();
+            QueueCreateRoomFromWindow();
         }
+
         EditorGUI.EndDisabledGroup();
 
         EditorGUILayout.Space(8f);
@@ -491,6 +502,40 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             MessageType.Warning);
 
         EditorGUILayout.EndScrollView();
+    }
+
+    private void QueueCreateRoomFromWindow()
+    {
+        if (createQueued)
+        {
+            return;
+        }
+
+        createQueued = true;
+        Repaint();
+        EditorApplication.delayCall += DeferredCreateRoomFromWindow;
+    }
+
+    private void DeferredCreateRoomFromWindow()
+    {
+        createQueued = false;
+
+        if (this == null)
+        {
+            return;
+        }
+
+        try
+        {
+            CreateRoomFromWindow();
+        }
+        finally
+        {
+            if (this != null)
+            {
+                Repaint();
+            }
+        }
     }
 
     private void CreateRoomFromWindow()
