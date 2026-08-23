@@ -19,6 +19,7 @@ MonoBehaviour:
   - {fileID: 5541754156123765439, guid: 3039f601cba731d47a0769f7baf574b7, type: 3}
   - {fileID: 8428463316630497373, guid: 33e67f85f1f0aa6458ec4cca8499ef83, type: 3}
   - {fileID: 5192155167974890162, guid: a8d7f44ad3ac67e44a1b4fb4816f03d5, type: 3}
+  - {fileID: 4659512847836623048, guid: 277658a6ab4879b4ab1ee11d3da6ab4c, type: 3}
   previewFloorNumber: 1
   previewUsedTemplateId: 
   previewExistingInstances: 0

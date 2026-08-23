@@ -20,10 +20,10 @@ using UnityEngine.SceneManagement;
 /// 新房间标准：
 /// - 1 Cell = 1 Unity Unit
 /// - 64 px / Cell
-/// - Visual/Floor, Objects, Effects
+/// - Visual/Floor, Objects, Foreground, Effects
 /// - Navigation/Colliders/Interior, Perimeter
 /// - Sockets + ClosedBlockers
-/// - Runtime 三张同尺寸 PNG，可直接覆盖更新
+/// - Runtime 四张同尺寸 PNG，可直接覆盖更新
 /// - BlockedCells / Interior Collider 由每个房间按美术手工配置
 /// </summary>
 public sealed class DreamRoomProductionPipelineP107 : EditorWindow
@@ -47,6 +47,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
     private const int MaximumCellDimension = 64;
     private const float ClosedBlockerThickness = 0.35f;
     private const float PerimeterWallThickness = 0.35f;
+    private const int ForegroundSortingOrder = 30;
 
     private static readonly Regex SafeRoomKeyRegex =
         new Regex("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
@@ -95,6 +96,10 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
     // P10.7.2: AssetDatabase / Prefab save work must not run directly inside IMGUI ProcessEvent.
     // Queue the factory action to the next editor update to avoid Unity 6 Inspector redraw assertions.
     private bool createQueued;
+
+    // P10.7.4: Menu-triggered Foreground asset work is also deferred one editor tick.
+    // This prevents Unity 6 transient TooltipView/Inspector DontSaveInEditor assertions during AssetDatabase refresh.
+    private static bool foregroundRepairQueued;
 
     [MenuItem(MenuRoot + "1. Open Production Room Factory", false, 2770)]
     private static void OpenWindow()
@@ -341,6 +346,8 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             int productionCount = 0;
             int grayboxCount = 0;
             int validatedProductionRooms = 0;
+            int foregroundReadyRooms = 0;
+            int legacyThreeLayerRooms = 0;
 
             for (int i = 0; i < catalog.RoomTemplates.Count; i++)
             {
@@ -365,6 +372,15 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
                     if (roomErrors.Count == 0)
                     {
                         validatedProductionRooms++;
+
+                        if (HasForegroundLayer(prefab))
+                        {
+                            foregroundReadyRooms++;
+                        }
+                        else
+                        {
+                            legacyThreeLayerRooms++;
+                        }
                     }
                     else
                     {
@@ -399,7 +415,9 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
                 " | ValidatedProductionRooms=" + validatedProductionRooms +
                 " | GrayboxBridge=" + grayboxCount + "\n" +
                 "GameSceneSingleCatalogAuthority=" + gameSceneAuthority + "\n" +
-                "Pipeline=DreamRoomTemplate + RuntimeArt3Layers + Sockets + IndependentGeometry\n" +
+                "ForegroundReadyRooms=" + foregroundReadyRooms +
+                " | Legacy3LayerRooms=" + legacyThreeLayerRooms + "\n" +
+                "Pipeline=DreamRoomTemplate + RuntimeArt4Layers(New) + Legacy3LayerCompatible + Sockets + IndependentGeometry\n" +
                 "RuntimeCoreCodeChanged=False");
 
             EditorUtility.DisplayDialog(
@@ -416,6 +434,181 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         }
     }
 
+    [MenuItem(MenuRoot + "6. Add/Repair Foreground Layer on Selected Room", false, 2775)]
+    private static void AddOrRepairSelectedForegroundMenu()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            FailDialog("请先退出 Play Mode。");
+            return;
+        }
+
+        if (PrefabStageUtility.GetCurrentPrefabStage() != null)
+        {
+            FailDialog("请先退出 Prefab Mode，再从 Project 选择 Prefab 执行升级。");
+            return;
+        }
+
+        GameObject prefab = GetSelectedPrefabAsset();
+        if (prefab == null)
+        {
+            FailDialog("请先选择一个 Production Room Prefab。");
+            return;
+        }
+
+        string prefabPath = AssetDatabase.GetAssetPath(prefab);
+
+        if (foregroundRepairQueued)
+        {
+            Debug.LogWarning("[P10.7.4] Foreground Layer 升级已经排队，请等待当前操作完成。");
+            return;
+        }
+
+        foregroundRepairQueued = true;
+        Debug.Log(
+            "[P10.7.4] Foreground Layer 升级已排队，将在下一次 Editor Update 执行。\n" +
+            "Prefab=" + prefabPath);
+
+        EditorApplication.delayCall += () =>
+        {
+            foregroundRepairQueued = false;
+
+            if (EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                Debug.LogWarning("[P10.7.4] 已进入/即将进入 Play Mode，取消 Foreground 升级。");
+                return;
+            }
+
+            if (PrefabStageUtility.GetCurrentPrefabStage() != null)
+            {
+                Debug.LogWarning("[P10.7.4] 当前处于 Prefab Mode，取消 Foreground 升级。请退出后重试。");
+                return;
+            }
+
+            AddOrRepairForegroundDeferred(prefabPath);
+        };
+    }
+
+    private static void AddOrRepairForegroundDeferred(string prefabPath)
+    {
+        GameObject root = null;
+
+        try
+        {
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            if (prefab == null)
+            {
+                throw new InvalidOperationException("找不到待升级 Prefab：" + prefabPath);
+            }
+
+            DreamRoomTemplate assetTemplate = prefab.GetComponent<DreamRoomTemplate>();
+            if (assetTemplate == null)
+            {
+                throw new InvalidOperationException("Prefab 根节点缺少 DreamRoomTemplate。");
+            }
+
+            string templateId = assetTemplate.TemplateId;
+            Vector2Int templateSize = assetTemplate.SizeInCells;
+
+            string roomFolder = Path.GetDirectoryName(prefabPath).Replace('\\', '/');
+            string prefabName = Path.GetFileNameWithoutExtension(prefabPath);
+            string stem = prefabName.StartsWith("Room_", StringComparison.Ordinal)
+                ? prefabName
+                : "Room_" + prefab.name;
+            string runtimeFolder = roomFolder + "/Art/Runtime";
+            string foregroundPath = runtimeFolder + "/" + stem + "_Foreground.png";
+
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(foregroundPath) == null)
+            {
+                int pixelWidth = templateSize.x * PixelsPerCell;
+                int pixelHeight = templateSize.y * PixelsPerCell;
+                CreateTransparentPng(foregroundPath, pixelWidth, pixelHeight);
+                ConfigureTextureImporter(foregroundPath);
+            }
+
+            Sprite foregroundSprite = RequireSprite(foregroundPath);
+
+            root = PrefabUtility.LoadPrefabContents(prefabPath);
+            if (root == null)
+            {
+                throw new InvalidOperationException("无法加载 Prefab Contents：" + prefabPath);
+            }
+
+            Transform visual = root.transform.Find("Visual");
+            if (visual == null)
+            {
+                throw new InvalidOperationException("缺少 Visual 根节点。");
+            }
+
+            Transform foreground = visual.Find("Foreground");
+            if (foreground == null)
+            {
+                foreground = CreateEmptyChild(visual, "Foreground");
+            }
+
+            Transform runtimeNode = foreground.Find("Foreground_Runtime");
+            if (runtimeNode == null)
+            {
+                CreateRuntimeSprite(
+                    "Foreground_Runtime",
+                    foreground,
+                    foregroundSprite,
+                    ForegroundSortingOrder);
+            }
+            else
+            {
+                ValidateIdentityTransformOrThrow(runtimeNode, "Foreground_Runtime");
+                SpriteRenderer renderer = runtimeNode.GetComponent<SpriteRenderer>();
+                if (renderer == null)
+                {
+                    renderer = runtimeNode.gameObject.AddComponent<SpriteRenderer>();
+                }
+
+                renderer.sprite = foregroundSprite;
+                renderer.color = Color.white;
+                renderer.sortingOrder = ForegroundSortingOrder;
+            }
+
+            PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
+            PrefabUtility.UnloadPrefabContents(root);
+            root = null;
+
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            List<string> errors = ValidatePrefabAsset(prefab);
+            if (errors.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "Foreground 升级后校验失败：\n- " +
+                    string.Join("\n- ", errors));
+            }
+
+            Debug.Log(
+                "[P10.7.4] Foreground Layer 已建立/修复。\n" +
+                "TemplateId=" + templateId +
+                " | SortingOrder=" + ForegroundSortingOrder + "\n" +
+                "RuntimePNG=" + foregroundPath + "\n" +
+                "RuntimeCoreCodeChanged=False",
+                prefab);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
+            Debug.LogError(
+                "[P10.7.4] Foreground 升级失败。请查看上方第一条异常。\n" +
+                "Prefab=" + prefabPath);
+        }
+        finally
+        {
+            if (root != null)
+            {
+                PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+    }
+
     private void OnGUI()
     {
         scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
@@ -425,7 +618,8 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         EditorGUILayout.HelpBox(
             "此工具只建立新的正式房间资产骨架。\n" +
             "不会自动猜内部碰撞，也不会自动发布到 Production_Main。\n" +
-            "先建房 → 覆盖图片 → 手工 BlockedCells / Interior Collider → Validate → Publish。",
+            "先审图确认尺寸/Socket/碰撞 → 建房 → 覆盖图片 → 写入 BlockedCells / Interior Collider → Validate → Publish。\n" +
+            "P10.7.3 起，新房自动包含 Foreground 遮挡层。",
             MessageType.Info);
 
         EditorGUILayout.Space(8f);
@@ -477,7 +671,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
 
         EditorGUILayout.Space(12f);
         EditorGUILayout.HelpBox(
-            "Create 只生成：标准层级、三张透明 Runtime PNG、中心 Socket、ClosedBlocker、Perimeter。\n" +
+            "Create 只生成：标准层级、四张透明 Runtime PNG、中心 Socket、ClosedBlocker、Perimeter。\n" +
             "Interior 与 BlockedCells 故意保持空白，等待你按正式图片手工配置。",
             MessageType.None);
 
@@ -575,11 +769,13 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         string runtimeFolder = roomFolder + "/Art/Runtime";
         string floorPath = runtimeFolder + "/Room_" + key + "_Floor.png";
         string objectsPath = runtimeFolder + "/Room_" + key + "_Objects.png";
+        string foregroundPath = runtimeFolder + "/Room_" + key + "_Foreground.png";
         string effectsPath = runtimeFolder + "/Room_" + key + "_Effects.png";
 
         if (AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath) != null ||
             AssetDatabase.LoadAssetAtPath<Texture2D>(floorPath) != null ||
             AssetDatabase.LoadAssetAtPath<Texture2D>(objectsPath) != null ||
+            AssetDatabase.LoadAssetAtPath<Texture2D>(foregroundPath) != null ||
             AssetDatabase.LoadAssetAtPath<Texture2D>(effectsPath) != null)
         {
             FailDialog(
@@ -601,14 +797,17 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
 
             CreateTransparentPng(floorPath, pixelWidth, pixelHeight);
             CreateTransparentPng(objectsPath, pixelWidth, pixelHeight);
+            CreateTransparentPng(foregroundPath, pixelWidth, pixelHeight);
             CreateTransparentPng(effectsPath, pixelWidth, pixelHeight);
 
             ConfigureTextureImporter(floorPath);
             ConfigureTextureImporter(objectsPath);
+            ConfigureTextureImporter(foregroundPath);
             ConfigureTextureImporter(effectsPath);
 
             Sprite floorSprite = RequireSprite(floorPath);
             Sprite objectsSprite = RequireSprite(objectsPath);
+            Sprite foregroundSprite = RequireSprite(foregroundPath);
             Sprite effectsSprite = RequireSprite(effectsPath);
 
             Scene previewScene = EditorSceneManager.NewPreviewScene();
@@ -633,6 +832,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
                     RoomTags = roomTags,
                     FloorSprite = floorSprite,
                     ObjectsSprite = objectsSprite,
+                    ForegroundSprite = foregroundSprite,
                     EffectsSprite = effectsSprite
                 };
 
@@ -690,7 +890,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
                     southSocket,
                     westSocket) +
                 " | DoorWidth=" + doorWidthInCells + "\n" +
-                "Art=Floor/Objects/Effects transparent placeholders\n" +
+                "Art=Floor/Objects/Foreground/Effects transparent placeholders\n" +
                 "Geometry=Interior empty + BlockedCells empty by design\n" +
                 "Perimeter=GeneratedFromSockets\n" +
                 "ProductionMainChanged=False | GameSceneChanged=False | RuntimeCoreCodeChanged=False",
@@ -700,7 +900,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
                 "P10.7 Room Created",
                 "房间骨架已建立，但尚未加入 Production_Main。\n\n" +
                 "下一步：\n" +
-                "1. 覆盖 Art/Runtime 三张同名 PNG\n" +
+                "1. 覆盖 Art/Runtime 四张同名 PNG（Foreground 可保持全透明）\n" +
                 "2. 在 Prefab 中配置 Blocked Cells + Interior Collider\n" +
                 "3. 选择 Prefab 执行 P10.7 Validate\n" +
                 "4. 最后才 Publish 到 Production_Main",
@@ -731,10 +931,16 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         Transform visualRoot = CreateEmptyChild(root.transform, "Visual");
         Transform floorRoot = CreateEmptyChild(visualRoot, "Floor");
         Transform objectsRoot = CreateEmptyChild(visualRoot, "Objects");
+        Transform foregroundRoot = CreateEmptyChild(visualRoot, "Foreground");
         Transform effectsRoot = CreateEmptyChild(visualRoot, "Effects");
 
         CreateRuntimeSprite("Floor_Runtime", floorRoot, config.FloorSprite, -10);
         CreateRuntimeSprite("Objects_Runtime", objectsRoot, config.ObjectsSprite, 0);
+        CreateRuntimeSprite(
+            "Foreground_Runtime",
+            foregroundRoot,
+            config.ForegroundSprite,
+            ForegroundSortingOrder);
         CreateRuntimeSprite("Effects_Runtime", effectsRoot, config.EffectsSprite, 10);
 
         Transform blockersRoot = CreateEmptyChild(objectsRoot, "ClosedBlockers");
@@ -1168,7 +1374,10 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             " | Blocked=" + blocked.Count +
             " | Walkable=" + walkable.Count + "\n" +
             "Sockets=" + template.DoorSockets.Count +
-            " | ArtLayers=Floor/Objects/Effects\n" +
+            " | ArtLayers=" +
+            (HasForegroundLayer(prefab)
+                ? "Floor/Objects/Foreground/Effects"
+                : "Floor/Objects/Effects (Legacy Compatible)") + "\n" +
             "RuntimeArtPixels=" +
             (template.SizeInCells.x * PixelsPerCell) + "x" +
             (template.SizeInCells.y * PixelsPerCell) +
@@ -1237,6 +1446,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         Transform visual = prefab.transform.Find("Visual");
         Transform floor = prefab.transform.Find("Visual/Floor");
         Transform objects = prefab.transform.Find("Visual/Objects");
+        Transform foreground = prefab.transform.Find("Visual/Foreground");
         Transform effects = prefab.transform.Find("Visual/Effects");
         Transform sockets = prefab.transform.Find("Sockets");
         Transform navigation = prefab.transform.Find("Navigation");
@@ -1274,6 +1484,10 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
 
         ValidateIdentityTransform(floor, "Visual/Floor", errors);
         ValidateIdentityTransform(objects, "Visual/Objects", errors);
+        if (foreground != null)
+        {
+            ValidateIdentityTransform(foreground, "Visual/Foreground", errors);
+        }
         ValidateIdentityTransform(effects, "Visual/Effects", errors);
 
         string roomFolder = Path.GetDirectoryName(prefabPath).Replace('\\', '/');
@@ -1295,6 +1509,49 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             "Objects_Runtime",
             size,
             errors);
+
+        string foregroundPath =
+            runtimeFolder + "/" + stem + "_Foreground.png";
+        bool hasForegroundTexture =
+            AssetDatabase.LoadAssetAtPath<Texture2D>(foregroundPath) != null;
+
+        if (foreground != null || hasForegroundTexture)
+        {
+            if (foreground == null)
+            {
+                errors.Add("存在 Foreground PNG，但缺少 Visual/Foreground。");
+            }
+            else if (!hasForegroundTexture)
+            {
+                errors.Add("存在 Visual/Foreground，但缺少 Runtime Foreground PNG。");
+            }
+            else
+            {
+                ValidateRuntimeArt(
+                    foregroundPath,
+                    foreground,
+                    "Foreground_Runtime",
+                    size,
+                    errors);
+
+                Transform foregroundRuntime = foreground.Find("Foreground_Runtime");
+                if (foregroundRuntime != null)
+                {
+                    SpriteRenderer foregroundRenderer =
+                        foregroundRuntime.GetComponent<SpriteRenderer>();
+
+                    if (foregroundRenderer != null &&
+                        foregroundRenderer.sortingOrder != ForegroundSortingOrder)
+                    {
+                        errors.Add(
+                            "Foreground_Runtime Sorting Order 必须为 " +
+                            ForegroundSortingOrder +
+                            "（当前 Player/Enemy 基准为 20）。" );
+                    }
+                }
+            }
+        }
+
         ValidateRuntimeArt(
             runtimeFolder + "/" + stem + "_Effects.png",
             effects,
@@ -1375,6 +1632,10 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         // 视觉 Runtime 节点不允许携带碰撞；ClosedBlocker 是独立逻辑节点，不在 Runtime Sprite 上。
         ValidateRuntimeNodeNoCollider(floor, "Floor_Runtime", errors);
         ValidateRuntimeNodeNoCollider(objects, "Objects_Runtime", errors);
+        if (foreground != null)
+        {
+            ValidateRuntimeNodeNoCollider(foreground, "Foreground_Runtime", errors);
+        }
         ValidateRuntimeNodeNoCollider(effects, "Effects_Runtime", errors);
 
         return errors;
@@ -1526,6 +1787,40 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             runtimeNode.GetComponent<Collider2D>() != null)
         {
             errors.Add(runtimeNodeName + " 不应携带 Collider2D。");
+        }
+    }
+
+    private static bool HasForegroundLayer(GameObject prefab)
+    {
+        if (prefab == null)
+        {
+            return false;
+        }
+
+        Transform foreground = prefab.transform.Find("Visual/Foreground");
+        if (foreground == null)
+        {
+            return false;
+        }
+
+        return foreground.Find("Foreground_Runtime") != null;
+    }
+
+    private static void ValidateIdentityTransformOrThrow(
+        Transform transform,
+        string label)
+    {
+        if (transform == null)
+        {
+            throw new InvalidOperationException(label + " 为 null。");
+        }
+
+        if (transform.localPosition != Vector3.zero ||
+            transform.localRotation != Quaternion.identity ||
+            transform.localScale != Vector3.one)
+        {
+            throw new InvalidOperationException(
+                label + " 必须保持 Position=0 / Rotation=Identity / Scale=1。" );
         }
     }
 
@@ -1923,6 +2218,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
         public DreamRoomTag RoomTags;
         public Sprite FloorSprite;
         public Sprite ObjectsSprite;
+        public Sprite ForegroundSprite;
         public Sprite EffectsSprite;
     }
 }
