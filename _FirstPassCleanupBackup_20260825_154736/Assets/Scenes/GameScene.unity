@@ -232,6 +232,7 @@ GameObject:
   m_Component:
   - component: {fileID: 247294342}
   - component: {fileID: 247294344}
+  - component: {fileID: 247294343}
   - component: {fileID: 247294345}
   m_Layer: 0
   m_Name: FogLayer_B
@@ -255,6 +256,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1774352368}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &247294343
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 247294341}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e9b4375cd130e040879e16213a9360e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!212 &247294344
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -5637,6 +5650,7 @@ GameObject:
   - component: {fileID: 621725370}
   - component: {fileID: 621725369}
   - component: {fileID: 621725376}
+  - component: {fileID: 621725377}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -5783,6 +5797,32 @@ MonoBehaviour:
   floorColor: {r: 0.16, g: 0.17, b: 0.21, a: 1}
   wallColor: {r: 0.35, g: 0.37, b: 0.44, a: 1}
   corridorVisualProfile: {fileID: 11400000, guid: c2d7a61a3bf947a5b0b41ee7b9ce2231, type: 2}
+--- !u!114 &621725377
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 621725368}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c3ecd5d887c304b48ab6182aa03b5462, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  dungeonGenerator: {fileID: 621725373}
+  previewFloorNumber: 1
+  previewFixedSeed: 12345
+  changedSeedSearchCount: 8
+  cellSize: 1
+  drawMapBounds: 1
+  drawRoomBounds: 1
+  drawTreeCorridors: 1
+  drawExtraCorridors: 1
+  drawUsedSockets: 1
+  drawStartAndExit: 1
+  treeCorridorColor: {r: 0.2, g: 0.9, b: 1, a: 0.55}
+  extraCorridorColor: {r: 1, g: 0.58, b: 0.12, a: 0.6}
+  socketColor: {r: 1, g: 0.95, b: 0.25, a: 1}
 --- !u!1 &624218977
 GameObject:
   m_ObjectHideFlags: 0
@@ -11021,6 +11061,7 @@ GameObject:
   - component: {fileID: 1036781218}
   - component: {fileID: 1036781217}
   - component: {fileID: 1036781216}
+  - component: {fileID: 1036781219}
   m_Layer: 0
   m_Name: PlayerSystem
   m_TagString: Untagged
@@ -11122,6 +11163,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1036781219
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1036781215}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81f531289b036c14d9a542579b23fd6c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerManager: {fileID: 0}
 --- !u!1 &1200585799
 GameObject:
   m_ObjectHideFlags: 0
@@ -11404,6 +11458,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1244888844}
   - component: {fileID: 1244888846}
+  - component: {fileID: 1244888845}
   - component: {fileID: 1244888847}
   m_Layer: 0
   m_Name: FogLayer_A
@@ -11427,6 +11482,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1774352368}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1244888845
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1244888843}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e9b4375cd130e040879e16213a9360e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!212 &1244888846
 SpriteRenderer:
   m_ObjectHideFlags: 0
@@ -11688,6 +11755,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1774352368}
   - component: {fileID: 1774352369}
+  - component: {fileID: 1774352370}
   - component: {fileID: 1774352371}
   m_Layer: 0
   m_Name: DreamBackgroundSystem
@@ -11737,6 +11805,22 @@ MonoBehaviour:
   dustParticles: {fileID: 249912580}
   glowParticles: {fileID: 624218980}
   logStageChanges: 1
+--- !u!114 &1774352370
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1774352367}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 48d474bb2ac47a04faa1b2a339113b99, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  controller: {fileID: 1774352369}
+  showDebugButtons: 0
+  enableKeyboardPreview: 1
+  panelPosition: {x: 15, y: 15}
 --- !u!114 &1774352371
 MonoBehaviour:
   m_ObjectHideFlags: 0

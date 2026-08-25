@@ -1,0 +1,65 @@
+Dream Dungeon First-Pass Cleanup
+Unity=6000.0.26f1
+Time=2026-08-25T15:47:37.4819935+09:00
+Backup=C:\Users\pg401\OneDrive\Desktop\Tanyaun\2D\dream\Dream-Without-End\_FirstPassCleanupBackup_20260825_154736
+
+Deleted assets:
+- Assets/TextMesh Pro/Examples & Extras
+- Assets/TutorialInfo
+- Assets/Readme.asset
+- Assets/DreamDungeon/Generated/R9_1_NonRectSample
+- Assets/DreamDungeon/Generated/R9_4_1_RoleTags_Clean
+- Assets/DreamDungeon/Generated/R9_4_2_Rare
+- Assets/DreamDungeon/Generated/R9_4_3_CoreItem
+- Assets/DreamDungeon/Generated/R9_4_4_Special
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamCorridorPassAuditC1.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomCoreItemRoomAuditR943.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomGeometryContractAuditR93.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomGrayboxLibraryGenerator.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomNonRectRuntimeAuditR92.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomNonRectSampleGeneratorR91.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionArtLayersP104.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionBootstrapP100.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionCatalogCommitP106.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionClosedBlockerP105.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionGeometryP101.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionGeometryRefineP1025.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionRuntimeProbeP103.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomProductionVisualP102.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomRareRuleAuditR942.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomRoleTagAuditR941.cs
+- Assets/Scripts/Dungeon/HybridRooms/Editor/DreamRoomSpecialRoomAuditR944.cs
+- Assets/Scripts/Combat/Editor/CombatCB0ContractAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB1RuntimeAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB2DecayAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB35FacingAttackAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB3ActionTimingAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB45MultiInputAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB4PostKnockbackRecoveryAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB5DirectAttackAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB6DeathLifecycleAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB7WeakHitReactionAudit.cs
+- Assets/Scripts/Combat/Editor/CombatCB8ActionArbitrationAudit.cs
+- Assets/Scripts/Enemy/Editor/EnemyEA1ConfigurationAudit.cs
+- Assets/Scripts/Enemy/Editor/EnemyEA2RuntimeAudit.cs
+- Assets/Scripts/Item/Editor/GenerateTestItemAssets.cs
+- Assets/Scripts/Background/Editor/GenerateDreamBackgroundProgressionProfile.cs
+- Assets/Scripts/Dungeon/HybridRooms/DreamRoomDataPreview.cs
+- Assets/Scripts/Dungeon/HybridRooms/DungeonLayoutR2Preview.cs
+- Assets/Scripts/Dungeon/HybridRooms/DungeonTemplatePlacementR4Preview.cs
+- Assets/Scripts/Dungeon/HybridRooms/DungeonRoomGraphR5Preview.cs
+- Assets/Scripts/Dungeon/HybridRooms/DungeonGenerator.SpawnResolverR81.cs
+- Assets/Scripts/Dungeon/HybridRooms/DungeonSocketCorridorR6Preview.cs
+- Assets/Scripts/Combat/HealthDebugHUD.cs
+- Assets/Scripts/Background/DreamBackgroundProgressionDebug.cs
+- Assets/Scripts/Dungeon/HybridRooms/DungeonRenderer_Backup.cs.txt
+- Assets/Scripts/Background/DreamFogDrift _Backup.cs.txt
+
+Already absent:
+
+Removed GameScene components:
+- DreamBackgroundProgressionDebug x1
+- DungeonSocketCorridorR6Preview x1
+- HealthDebugHUD x1
+
+Cleanup tool source=Assets/Editor/DreamDungeonFirstPassCleanupApplier.cs
