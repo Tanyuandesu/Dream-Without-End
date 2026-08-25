@@ -5,6 +5,21 @@ TextureImporter:
   - first:
       213: 3812606802382791130
     second: Room_MusicRoom_01_Foreground_0
+  - first:
+      213: 6130287415559892502
+    second: Room_MusicRoom_01_Foreground_1
+  - first:
+      213: -5465208628474668688
+    second: Room_MusicRoom_01_Foreground_2
+  - first:
+      213: -674235052213000683
+    second: Room_MusicRoom_01_Foreground_3
+  - first:
+      213: -2672119530838076238
+    second: Room_MusicRoom_01_Foreground_4
+  - first:
+      213: 3809797977341374736
+    second: Room_MusicRoom_01_Foreground_5
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -48,7 +63,7 @@ TextureImporter:
   compressionQuality: 50
   spriteMode: 1
   spriteExtrude: 1
-  spriteMeshType: 1
+  spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 64
@@ -103,10 +118,10 @@ TextureImporter:
       name: Room_MusicRoom_01_Foreground_0
       rect:
         serializedVersion: 2
-        x: 0
-        y: 0
-        width: 1024
-        height: 704
+        x: 205
+        y: 486
+        width: 86
+        height: 125
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -117,6 +132,116 @@ TextureImporter:
       bones: []
       spriteID: ad1a34ccfa919e430800000000000000
       internalID: 3812606802382791130
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Room_MusicRoom_01_Foreground_1
+      rect:
+        serializedVersion: 2
+        x: 311
+        y: 483
+        width: 54
+        height: 30
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 61eae7fbce7231550800000000000000
+      internalID: 6130287415559892502
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Room_MusicRoom_01_Foreground_2
+      rect:
+        serializedVersion: 2
+        x: 491
+        y: 367
+        width: 60
+        height: 83
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0791e5455bda724b0800000000000000
+      internalID: -5465208628474668688
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Room_MusicRoom_01_Foreground_3
+      rect:
+        serializedVersion: 2
+        x: 603
+        y: 348
+        width: 62
+        height: 98
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 5162ab1dac2a4a6f0800000000000000
+      internalID: -674235052213000683
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Room_MusicRoom_01_Foreground_4
+      rect:
+        serializedVersion: 2
+        x: 783
+        y: 416
+        width: 56
+        height: 35
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2b45307b179baead0800000000000000
+      internalID: -2672119530838076238
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Room_MusicRoom_01_Foreground_5
+      rect:
+        serializedVersion: 2
+        x: 718
+        y: 206
+        width: 107
+        height: 31
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0113f61431f1fd430800000000000000
+      internalID: 3809797977341374736
       vertices: []
       indices: 
       edges: []
@@ -136,6 +261,11 @@ TextureImporter:
       entries: []
     nameFileIdTable:
       Room_MusicRoom_01_Foreground_0: 3812606802382791130
+      Room_MusicRoom_01_Foreground_1: 6130287415559892502
+      Room_MusicRoom_01_Foreground_2: -5465208628474668688
+      Room_MusicRoom_01_Foreground_3: -674235052213000683
+      Room_MusicRoom_01_Foreground_4: -2672119530838076238
+      Room_MusicRoom_01_Foreground_5: 3809797977341374736
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

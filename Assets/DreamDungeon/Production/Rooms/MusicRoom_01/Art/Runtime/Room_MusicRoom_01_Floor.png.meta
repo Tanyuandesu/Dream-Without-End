@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 2dea91b3b34f68647ae8858cf5f13a07
+guid: ad824e67a19493641b33757fbf512752
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: 3266098971514559711
-    second: Room_MusicRoom_01_Floor_0
+      213: -4373184736405950995
+    second: floor_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -48,7 +48,7 @@ TextureImporter:
   compressionQuality: 50
   spriteMode: 1
   spriteExtrude: 1
-  spriteMeshType: 1
+  spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
   spritePixelsToUnits: 64
@@ -100,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Room_MusicRoom_01_Floor_0
+      name: floor_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 1024
-        height: 704
+        width: 1107
+        height: 768
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -115,8 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: fdcd466c5b3835d20800000000000000
-      internalID: 3266098971514559711
+      spriteID: dedec5107a35f43c0800000000000000
+      internalID: -4373184736405950995
       vertices: []
       indices: 
       edges: []
@@ -135,7 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Room_MusicRoom_01_Floor_0: 3266098971514559711
+      floor_0: -4373184736405950995
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
