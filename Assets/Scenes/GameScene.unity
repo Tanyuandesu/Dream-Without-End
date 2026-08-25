@@ -5709,7 +5709,7 @@ MonoBehaviour:
   maxPlacementAttempts: 250
   corridorWidth: 2
   extraConnections: 2
-  useRandomSeed: 0
+  useRandomSeed: 1
   fixedSeed: 12345
   socketCorridorWidthMode: 2
   mixedCorridorDoorApronLength: 2
