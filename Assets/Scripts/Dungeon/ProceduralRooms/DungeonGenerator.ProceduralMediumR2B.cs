@@ -3,14 +3,16 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// P10.12B-2：受控 Procedural Family Authority Commit。
+/// P10.12B-4：受控 Procedural Family Authority Commit。
 ///
-/// 当前正式接入：
-/// - Medium 13x09
+/// 当前正式接入全部四种 Graybox Family：
 /// - Small 08x06
+/// - Medium 13x09
+/// - Wide 18x07
+/// - Tall 09x16
 ///
 /// 每个 Family 每层最多只转换第一个对应 Graybox Placement。
-/// Wide / Tall 仍保持 Graybox，不在本阶段启用。
+/// 四种尺寸继续共用同一 Generic Family Kernel 与同一 Authority Path。
 ///
 /// 注意：为了不增加第二条权威链，仍沿用原 R2B 文件位置与 RuntimeHybrid 调用点；
 /// 但实现已经升级为 Generic Family Kernel。
@@ -24,9 +26,9 @@ public sealed partial class DungeonGenerator
         "Graybox_08x06";
 
     private const string P1012B2SourcePrefix =
-        "P10.12B-2_Family_";
+        "P10.12B-4_Family_";
 
-    [Header("P10.12B-2 中精度 Family 权威接入")]
+    [Header("P10.12B-4 中精度 Family 权威接入")]
     [Tooltip(
         "保留原序列化字段名以兼容现有 GameScene。" +
         "开启时每层第一个 Graybox_13x09 使用 Generic Family Kernel。")]
@@ -40,6 +42,18 @@ public sealed partial class DungeonGenerator
     private bool p1012B2EnableSmall08x06AuthorityCommit = true;
 
     [Tooltip(
+        "B3 新增：每层第一个 Graybox_18x07 转换为 Wide Procedural Family。" +
+        "关闭后 Wide 会完整回退为原 Graybox。")]
+    [SerializeField]
+    private bool p1012B3EnableWide18x07AuthorityCommit = true;
+
+    [Tooltip(
+        "B4 新增：每层第一个 Graybox_09x16 转换为 Tall Procedural Family。" +
+        "关闭后 Tall 会完整回退为原 Graybox。")]
+    [SerializeField]
+    private bool p1012B4EnableTall09x16AuthorityCommit = true;
+
+    [Tooltip(
         "R2B/A3 调试桥。A3.1 Structural Skin 提交后会关闭旧红色 Debug Renderer；" +
         "此开关不会影响 FloorCells / Collider。")]
     [SerializeField]
@@ -50,6 +64,12 @@ public sealed partial class DungeonGenerator
 
     public bool P1012B2Small08x06Enabled =>
         p1012B2EnableSmall08x06AuthorityCommit;
+
+    public bool P1012B3Wide18x07Enabled =>
+        p1012B3EnableWide18x07AuthorityCommit;
+
+    public bool P1012B4Tall09x16Enabled =>
+        p1012B4EnableTall09x16AuthorityCommit;
 
     /// <summary>
     /// 保留原方法名，避免修改已经稳定的 RuntimeHybrid 插入点。
@@ -63,10 +83,12 @@ public sealed partial class DungeonGenerator
         committedLayout = sourceLayout;
 
         if (!p1012R2BEnableMedium13x9AuthorityCommit &&
-            !p1012B2EnableSmall08x06AuthorityCommit)
+            !p1012B2EnableSmall08x06AuthorityCommit &&
+            !p1012B3EnableWide18x07AuthorityCommit &&
+            !p1012B4EnableTall09x16AuthorityCommit)
         {
             report =
-                "[DungeonGenerator/P10.12B-2] Family Authority Commit disabled." +
+                "[DungeonGenerator/P10.12B-4] Family Authority Commit disabled." +
                 " LayoutUnchanged=True";
             return true;
         }
@@ -79,7 +101,7 @@ public sealed partial class DungeonGenerator
                 P1012B2BuildFailureReport(
                     "BaseLayout",
                     -1,
-                    "B2 只接受有效 Hybrid DungeonLayout。");
+                    "B4 只接受有效 Hybrid DungeonLayout。");
             return false;
         }
 
@@ -140,15 +162,73 @@ public sealed partial class DungeonGenerator
             }
         }
 
+        if (p1012B3EnableWide18x07AuthorityCommit)
+        {
+            string wideFailure;
+
+            if (!P1012B2TryBuildPlanForFirstFamilyInstance(
+                    sourceLayout,
+                    DreamProceduralRoomFamilyRegistryP1012B1.Wide18x07,
+                    out P1012B2Plan widePlan,
+                    out wideFailure))
+            {
+                committedLayout = null;
+                report =
+                    P1012B2BuildFailureReport(
+                        "WidePlan",
+                        widePlan == null
+                            ? -1
+                            : widePlan.RoomIndex,
+                        wideFailure);
+                return false;
+            }
+
+            if (widePlan != null)
+            {
+                plans.Add(widePlan);
+            }
+        }
+
+        if (p1012B4EnableTall09x16AuthorityCommit)
+        {
+            string tallFailure;
+
+            if (!P1012B2TryBuildPlanForFirstFamilyInstance(
+                    sourceLayout,
+                    DreamProceduralRoomFamilyRegistryP1012B1.Tall09x16,
+                    out P1012B2Plan tallPlan,
+                    out tallFailure))
+            {
+                committedLayout = null;
+                report =
+                    P1012B2BuildFailureReport(
+                        "TallPlan",
+                        tallPlan == null
+                            ? -1
+                            : tallPlan.RoomIndex,
+                        tallFailure);
+                return false;
+            }
+
+            if (tallPlan != null)
+            {
+                plans.Add(tallPlan);
+            }
+        }
+
         // 某些随机楼层恰好没有 Medium / Small Graybox，这不是失败。
         if (plans.Count == 0)
         {
             report =
-                "[DungeonGenerator/P10.12B-2] No enabled Family target this floor." +
+                "[DungeonGenerator/P10.12B-4] No enabled Family target this floor." +
                 " MediumEnabled=" +
                 p1012R2BEnableMedium13x9AuthorityCommit +
                 " | SmallEnabled=" +
                 p1012B2EnableSmall08x06AuthorityCommit +
+                " | WideEnabled=" +
+                p1012B3EnableWide18x07AuthorityCommit +
+                " | TallEnabled=" +
+                p1012B4EnableTall09x16AuthorityCommit +
                 " | LayoutUnchanged=True";
             return true;
         }
@@ -883,7 +963,7 @@ public sealed partial class DungeonGenerator
         }
 
         return
-            "[DungeonGenerator/P10.12B-2] Controlled Family Authority Commit PASS" +
+            "[DungeonGenerator/P10.12B-4] Controlled Family Authority Commit PASS" +
             "\nProceduralFamilies=" +
             plans.Count +
             " | " +
@@ -914,7 +994,7 @@ public sealed partial class DungeonGenerator
         string reason)
     {
         return
-            "[DungeonGenerator/P10.12B-2] Controlled Family Authority Commit FAILED" +
+            "[DungeonGenerator/P10.12B-4] Controlled Family Authority Commit FAILED" +
             "\nStage=" +
             stage +
             " | RoomIndex=" +
