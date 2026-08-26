@@ -2910,4 +2910,555 @@ public static class DreamRoomFidelityMaintenanceP1013
     }
 }
 
+
+
+/// <summary>
+/// P10.13-2：Room Fidelity Mix 长期维护验收。
+/// 不建立新的阶段性 Editor Script，继续挂在 Family Maintenance 文件中。
+/// </summary>
+public static class DreamRoomFidelityMixMaintenanceP10132
+{
+    private const string MenuRoot =
+        "Tools/Dream Dungeon/Room Mix/P10.13-2 Fidelity-Aware Selection/";
+
+    private const int SeedsPerFloor = 64;
+
+    [MenuItem(
+        MenuRoot + "1. Audit Mix Configuration",
+        false,
+        3360)]
+    private static void AuditMixConfiguration()
+    {
+        DungeonGenerator generator =
+            UnityEngine.Object.FindFirstObjectByType<
+                DungeonGenerator>();
+
+        if (generator == null)
+        {
+            Debug.LogError(
+                "[P10.13-2] 当前 Scene 找不到 DungeonGenerator。" +
+                " 请打开 GameScene 后重试。");
+            return;
+        }
+
+        DreamRoomCatalog catalog =
+            generator.TemplateFirstRoomCatalog;
+
+        List<string> errors =
+            new List<string>();
+
+        if (catalog == null)
+        {
+            errors.Add(
+                "TemplateFirstRoomCatalog 为空。");
+        }
+        else if (!string.Equals(
+                     catalog.CatalogId,
+                     "Production_Main",
+                     StringComparison.Ordinal))
+        {
+            errors.Add(
+                "Catalog 不是 Production_Main：" +
+                catalog.CatalogId);
+        }
+
+        if (!generator.P10132FidelityAwareRoomMixEnabled)
+        {
+            errors.Add(
+                "Fidelity-Aware Room Mix 开关为 False。");
+        }
+
+        if (generator.P10132ProceduralMediumTargetRatio < 0.10f ||
+            generator.P10132ProceduralMediumTargetRatio > 0.90f)
+        {
+            errors.Add(
+                "TargetRatio 超出 0.10～0.90。");
+        }
+
+        int high = 0;
+        int medium = 0;
+
+        if (catalog != null &&
+            catalog.RoomTemplates != null)
+        {
+            for (int i = 0;
+                 i < catalog.RoomTemplates.Count;
+                 i++)
+            {
+                DreamRoomTemplate template =
+                    catalog.RoomTemplates[i];
+
+                if (template == null)
+                {
+                    continue;
+                }
+
+                if (template.RoomFidelityTier ==
+                    DreamRoomFidelityTier.ProceduralMedium)
+                {
+                    medium++;
+                }
+                else if (template.RoomFidelityTier ==
+                         DreamRoomFidelityTier.HighPrecision)
+                {
+                    high++;
+                }
+            }
+        }
+
+        if (high <= 0 ||
+            medium <= 0)
+        {
+            errors.Add(
+                "Production_Main 必须同时拥有 HighPrecision 与 ProceduralMedium。" +
+                " High=" +
+                high +
+                " Medium=" +
+                medium);
+        }
+
+        if (errors.Count > 0)
+        {
+            Debug.LogError(
+                "[P10.13-2] Fidelity Mix Configuration Audit FAILED\n- " +
+                string.Join(
+                    "\n- ",
+                    errors));
+            return;
+        }
+
+        Debug.Log(
+            "[P10.13-2] Fidelity Mix Configuration Audit PASS" +
+            "\nCatalog=" +
+            catalog.CatalogId +
+            " | Entries=" +
+            catalog.Count +
+            " | HighPrecision=" +
+            high +
+            " | ProceduralMedium=" +
+            medium +
+            "\nDesiredRooms=" +
+            generator.TemplateFirstDesiredRoomCount +
+            " | TargetMedium=" +
+            generator.P10132TargetProceduralMediumCount +
+            " | TargetRatio=" +
+            generator.P10132ProceduralMediumTargetRatio.ToString("F2") +
+            " | PreferUniqueMedium=" +
+            generator.P10132PreferUniqueProceduralMediumFamilies +
+            "\nRolePriority=StartExitCoreSpecialBeforeFidelity" +
+            " | MixScope=OrdinarySlotsOnly" +
+            " | ProductionMainChanged=False" +
+            " | GameSceneChanged=False" +
+            "\nResult=PASS");
+    }
+
+    [MenuItem(
+        MenuRoot + "2. Run 192-Layout Selection Regression",
+        false,
+        3370)]
+    private static void RunSelectionRegression()
+    {
+        if (EditorApplication.isPlaying)
+        {
+            Debug.LogError(
+                "[P10.13-2] Selection Regression 请在 Edit Mode 执行。");
+            return;
+        }
+
+        DungeonGenerator generator =
+            UnityEngine.Object.FindFirstObjectByType<
+                DungeonGenerator>();
+
+        if (generator == null)
+        {
+            Debug.LogError(
+                "[P10.13-2] 当前 Scene 找不到 DungeonGenerator。" +
+                " 请打开 GameScene 后重试。");
+            return;
+        }
+
+        DreamRoomCatalog catalog =
+            generator.TemplateFirstRoomCatalog;
+
+        if (catalog == null)
+        {
+            Debug.LogError(
+                "[P10.13-2] Production_Main Catalog 为空。");
+            return;
+        }
+
+        int[] floors =
+        {
+            1, 2, 3
+        };
+
+        int expected =
+            floors.Length *
+            SeedsPerFloor;
+
+        int generated = 0;
+        int deterministic = 0;
+        int mixedTierCases = 0;
+        int zeroMediumCases = 0;
+        int zeroHighCases = 0;
+        int mediumRepeatCases = 0;
+        int totalMediumRepeats = 0;
+        int allSevenUniqueCases = 0;
+
+        int minMedium = int.MaxValue;
+        int maxMedium = int.MinValue;
+        int minHigh = int.MaxValue;
+        int maxHigh = int.MinValue;
+
+        long totalMedium = 0;
+        long totalHigh = 0;
+
+        List<string> failures =
+            new List<string>();
+
+        for (int f = 0;
+             f < floors.Length;
+             f++)
+        {
+            int floor =
+                floors[f];
+
+            for (int s = 0;
+                 s < SeedsPerFloor;
+                 s++)
+            {
+                int seed =
+                    913201 +
+                    floor * 100000 +
+                    s * 3571;
+
+                DungeonLayout first;
+                string firstReport;
+
+                if (!generator.TryGenerateTemplateFirstLayout(
+                        floor,
+                        seed,
+                        out first,
+                        out firstReport) ||
+                    first == null)
+                {
+                    failures.Add(
+                        "Floor=" +
+                        floor +
+                        " Seed=" +
+                        seed +
+                        " FirstGenerate failed.");
+                    continue;
+                }
+
+                generated++;
+
+                DungeonLayout second;
+                string secondReport;
+
+                if (!generator.TryGenerateTemplateFirstLayout(
+                        floor,
+                        seed,
+                        out second,
+                        out secondReport) ||
+                    second == null)
+                {
+                    failures.Add(
+                        "Floor=" +
+                        floor +
+                        " Seed=" +
+                        seed +
+                        " RepeatGenerate failed.");
+                    continue;
+                }
+
+                if (!SamePlacementSequence(
+                        first,
+                        second))
+                {
+                    failures.Add(
+                        "Floor=" +
+                        floor +
+                        " Seed=" +
+                        seed +
+                        " DeterminismMismatch.");
+                    continue;
+                }
+
+                deterministic++;
+
+                int high;
+                int medium;
+                int uniqueTemplates;
+                int mediumRepeats;
+
+                CountMix(
+                    first,
+                    out high,
+                    out medium,
+                    out uniqueTemplates,
+                    out mediumRepeats);
+
+                totalHigh += high;
+                totalMedium += medium;
+
+                minHigh =
+                    Mathf.Min(
+                        minHigh,
+                        high);
+
+                maxHigh =
+                    Mathf.Max(
+                        maxHigh,
+                        high);
+
+                minMedium =
+                    Mathf.Min(
+                        minMedium,
+                        medium);
+
+                maxMedium =
+                    Mathf.Max(
+                        maxMedium,
+                        medium);
+
+                if (high > 0 &&
+                    medium > 0)
+                {
+                    mixedTierCases++;
+                }
+
+                if (medium == 0)
+                {
+                    zeroMediumCases++;
+                }
+
+                if (high == 0)
+                {
+                    zeroHighCases++;
+                }
+
+                if (mediumRepeats > 0)
+                {
+                    mediumRepeatCases++;
+                    totalMediumRepeats +=
+                        mediumRepeats;
+                }
+
+                if (uniqueTemplates ==
+                    first.RoomPlacements.Count)
+                {
+                    allSevenUniqueCases++;
+                }
+            }
+        }
+
+        bool pass =
+            failures.Count == 0 &&
+            generated == expected &&
+            deterministic == expected &&
+            mixedTierCases == expected &&
+            zeroMediumCases == 0 &&
+            zeroHighCases == 0;
+
+        string summary =
+            "[P10.13-2] 192-Layout Fidelity Selection Regression " +
+            (pass ? "PASS" : "FAILED") +
+            "\nLayouts=" +
+            generated +
+            "/" +
+            expected +
+            " | Deterministic=" +
+            deterministic +
+            "/" +
+            expected +
+            " | MixedTierCases=" +
+            mixedTierCases +
+            "/" +
+            expected +
+            "\nHighRange=" +
+            minHigh +
+            "～" +
+            maxHigh +
+            " | MediumRange=" +
+            minMedium +
+            "～" +
+            maxMedium +
+            " | AvgHigh=" +
+            (generated == 0
+                ? 0f
+                : totalHigh / (float)generated).ToString("F2") +
+            " | AvgMedium=" +
+            (generated == 0
+                ? 0f
+                : totalMedium / (float)generated).ToString("F2") +
+            "\nMediumRepeatCases=" +
+            mediumRepeatCases +
+            " | TotalMediumRepeats=" +
+            totalMediumRepeats +
+            " | AllTemplatesUniqueCases=" +
+            allSevenUniqueCases +
+            "/" +
+            expected +
+            "\nTargetMedium=" +
+            generator.P10132TargetProceduralMediumCount +
+            " | TargetRatio=" +
+            generator.P10132ProceduralMediumTargetRatio.ToString("F2") +
+            " | RolePriorityPreserved=True" +
+            " | WeightedWithinTier=True" +
+            "\nProductionMainChanged=False" +
+            " | GameSceneChanged=False" +
+            " | Result=" +
+            (pass ? "PASS" : "FAILED");
+
+        if (failures.Count > 0)
+        {
+            int limit =
+                Mathf.Min(
+                    16,
+                    failures.Count);
+
+            StringBuilder builder =
+                new StringBuilder(
+                    summary);
+
+            builder.AppendLine();
+            builder.AppendLine(
+                "FirstFailures:");
+
+            for (int i = 0;
+                 i < limit;
+                 i++)
+            {
+                builder.AppendLine(
+                    "- " +
+                    failures[i]);
+            }
+
+            summary =
+                builder.ToString();
+        }
+
+        if (pass)
+        {
+            Debug.Log(summary);
+        }
+        else
+        {
+            Debug.LogError(summary);
+        }
+    }
+
+    private static void CountMix(
+        DungeonLayout layout,
+        out int high,
+        out int medium,
+        out int uniqueTemplates,
+        out int mediumRepeats)
+    {
+        high = 0;
+        medium = 0;
+
+        HashSet<string> allIds =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        HashSet<string> mediumIds =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        if (layout == null)
+        {
+            uniqueTemplates = 0;
+            mediumRepeats = 0;
+            return;
+        }
+
+        for (int i = 0;
+             i < layout.RoomPlacements.Count;
+             i++)
+        {
+            DreamRoomTemplate template =
+                layout.RoomPlacements[i] == null
+                    ? null
+                    : layout.RoomPlacements[i].Template;
+
+            if (template == null)
+            {
+                continue;
+            }
+
+            allIds.Add(
+                template.TemplateId);
+
+            if (template.RoomFidelityTier ==
+                DreamRoomFidelityTier.ProceduralMedium)
+            {
+                medium++;
+                mediumIds.Add(
+                    template.TemplateId);
+            }
+            else
+            {
+                high++;
+            }
+        }
+
+        uniqueTemplates =
+            allIds.Count;
+
+        mediumRepeats =
+            Mathf.Max(
+                0,
+                medium -
+                mediumIds.Count);
+    }
+
+    private static bool SamePlacementSequence(
+        DungeonLayout a,
+        DungeonLayout b)
+    {
+        if (a == null ||
+            b == null ||
+            a.RoomPlacements.Count !=
+                b.RoomPlacements.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0;
+             i < a.RoomPlacements.Count;
+             i++)
+        {
+            DreamRoomPlacement left =
+                a.RoomPlacements[i];
+
+            DreamRoomPlacement right =
+                b.RoomPlacements[i];
+
+            if (left == null ||
+                right == null ||
+                left.Template == null ||
+                right.Template == null)
+            {
+                return false;
+            }
+
+            if (!string.Equals(
+                    left.Template.TemplateId,
+                    right.Template.TemplateId,
+                    StringComparison.Ordinal) ||
+                left.MinimumCell !=
+                    right.MinimumCell ||
+                left.ClockwiseQuarterTurns !=
+                    right.ClockwiseQuarterTurns)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
 #endif

@@ -322,6 +322,9 @@ public sealed partial class DungeonGenerator
             floorNumber,
             errors);
 
+        R10132AppendConfigurationErrors(
+            errors);
+
         if (errors.Count > 0)
         {
             return errors;
@@ -481,6 +484,8 @@ public sealed partial class DungeonGenerator
                     return false;
                 }
 
+                bool useFidelityOrdinaryMix = false;
+
                 if (requiredRole ==
                         R941RequiredRoomRole.None)
                 {
@@ -521,6 +526,9 @@ public sealed partial class DungeonGenerator
                             R942RestrictCandidatesForOrdinarySlot(
                                 fittingTemplates,
                                 out slotSelectionFailure);
+
+                        useFidelityOrdinaryMix =
+                            validSlotCandidates;
                     }
 
                     if (!validSlotCandidates)
@@ -536,6 +544,35 @@ public sealed partial class DungeonGenerator
                                     : "R9.4.2 普通") +
                             "候选无效：" +
                             slotSelectionFailure;
+
+                        return false;
+                    }
+                }
+
+                // P10.13-2：
+                // RoomTag 角色筛选已经完成后，才允许 Fidelity 介入。
+                // 所有槽位先做 Medium Family 去重复偏好；
+                // 只有真正的 R9.4.2 普通槽位才执行 High/Medium 软配额。
+                R10132ApplyProceduralMediumDiversityPreference(
+                    fittingTemplates,
+                    placements);
+
+                if (useFidelityOrdinaryMix)
+                {
+                    string fidelityFailure;
+
+                    if (!R10132RestrictOrdinaryCandidatesByFidelity(
+                            roomIndex,
+                            attempt,
+                            placements,
+                            fittingTemplates,
+                            out fidelityFailure))
+                    {
+                        failureReason =
+                            "第 " +
+                            (roomIndex + 1) +
+                            " 个房间的 P10.13-2 Fidelity Mix 候选无效：" +
+                            fidelityFailure;
 
                         return false;
                     }
