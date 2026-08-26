@@ -297,11 +297,16 @@ public sealed class DreamProceduralRoomSoftDecorP1012A2 :
             DreamProceduralDecorCategoryP1012A2.ForegroundProp,
             occupiedSlots);
 
-        if (slots.Count == 0)
-        {
-            return Fail(
-                "没有生成任何 Soft Decor Slot。");
-        }
+        // P10.12B-2.1：
+        // Small 08x06 + NEWS 四门全开时，门内 2 格安全带 + R2B Hard Structure
+        // 可能合法地吃掉全部 Soft Decor 候选。
+        //
+        // Soft Decor 是纯视觉层，不拥有 Collider / FloorCells / A*。
+        // 因此“0 个合法 Slot”应该视为 Graceful Degrade，而不是房间失败。
+        // 仍然创建空的 RuntimeSoftDecor Root 并 Commit，
+        // 让权威玩法保持完整，同时明确记录本局因空间不足抑制软装饰。
+        bool suppressedBySpace =
+            slots.Count == 0;
 
         Transform oldRoot =
             transform.Find(DecorRootName);
@@ -461,6 +466,8 @@ public sealed class DreamProceduralRoomSoftDecorP1012A2 :
             " | Theme=" + ThemeId +
             "\nSlots=" + slots.Count +
             " | Renderers=" + rendererCount +
+            " | SuppressedBySpace=" +
+            suppressedBySpace +
             " | Floor=" +
             CountCategory(
                 DreamProceduralDecorCategoryP1012A2.FloorClutter) +
