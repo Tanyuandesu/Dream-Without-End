@@ -40,23 +40,36 @@ public sealed partial class DungeonGenerator
             return false;
         }
 
+        DungeonLayout authorityLayout;
+        string authorityReport;
+
+        if (!P1012R2BTryApplyControlledMedium13x9Authority(
+                r6Layout,
+                out authorityLayout,
+                out authorityReport))
+        {
+            layout = null;
+            report = authorityReport + "\n" + r6Report;
+            return false;
+        }
+
         DungeonLayout r82Layout;
         string r82Report;
 
         if (!R82TryApplyPlayerAndExitSpawnCells(
-                r6Layout,
+                authorityLayout,
                 out r82Layout,
                 out r82Report))
         {
             layout = null;
-            report = r6Report + "\n" + r82Report;
+            report = authorityReport + "\n" + r6Report + "\n" + r82Report;
             return false;
         }
 
         layout = r82Layout;
         // 让正常 Console 的首行直接显示 R8.2 的 Requested／Effective
         // Spawn Source；完整 R6 报告仍保留在同一条多行日志下方。
-        report = r82Report + "\n" + r6Report;
+        report = r82Report + "\n" + authorityReport + "\n" + r6Report;
         return true;
     }
 }

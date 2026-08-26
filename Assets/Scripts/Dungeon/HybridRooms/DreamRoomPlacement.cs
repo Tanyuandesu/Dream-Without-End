@@ -24,6 +24,23 @@ public sealed class DreamRoomPlacement
     [SerializeField]
     private int clockwiseQuarterTurns;
 
+    // P10.12A-1 R2B：仅存在于本次运行时 RoomPlacement 的程序化几何覆盖。
+    // 不写回 DreamRoomTemplate asset，不参与 Prefab 序列化。
+    [NonSerialized]
+    private HashSet<Vector2Int> runtimeProceduralBlockedLocalCells;
+
+    [NonSerialized]
+    private int runtimeProceduralSeed;
+
+    [NonSerialized]
+    private DreamProceduralRoomArchetype runtimeProceduralArchetype;
+
+    [NonSerialized]
+    private string runtimeProceduralSourceId = string.Empty;
+
+    [NonSerialized]
+    private bool runtimeProceduralDebugVisible;
+
     public DreamRoomTemplate Template => template;
     public Vector2Int MinimumCell => minimumCell;
 
@@ -32,6 +49,27 @@ public sealed class DreamRoomPlacement
 
     public float ClockwiseRotationDegrees =>
         ClockwiseQuarterTurns * 90f;
+
+    public bool HasRuntimeProceduralOverride =>
+        runtimeProceduralBlockedLocalCells != null &&
+        runtimeProceduralBlockedLocalCells.Count > 0;
+
+    public int RuntimeProceduralSeed =>
+        runtimeProceduralSeed;
+
+    public DreamProceduralRoomArchetype RuntimeProceduralArchetype =>
+        runtimeProceduralArchetype;
+
+    public string RuntimeProceduralSourceId =>
+        runtimeProceduralSourceId ?? string.Empty;
+
+    public bool RuntimeProceduralDebugVisible =>
+        runtimeProceduralDebugVisible;
+
+    public int RuntimeProceduralBlockedCellCount =>
+        runtimeProceduralBlockedLocalCells == null
+            ? 0
+            : runtimeProceduralBlockedLocalCells.Count;
 
     /// <summary>
     /// Unity 的正 Z 角度是逆时针，所以顺时针使用负角度。
@@ -255,6 +293,119 @@ public sealed class DreamRoomPlacement
         TransformLocalCellsToGlobal(results);
     }
 
+    public bool TryApplyRuntimeProceduralOverride(
+        IEnumerable<Vector2Int> blockedLocalCells,
+        int seed,
+        DreamProceduralRoomArchetype archetype,
+        string sourceId,
+        bool drawDebug,
+        out string failureReason)
+    {
+        failureReason = string.Empty;
+
+        if (template == null)
+        {
+            failureReason =
+                "Runtime Procedural Override 需要有效 Room Template。";
+            return false;
+        }
+
+        if (blockedLocalCells == null)
+        {
+            failureReason =
+                "Runtime Procedural Blocked Cells 不能为空。";
+            return false;
+        }
+
+        HashSet<Vector2Int> candidate =
+            new HashSet<Vector2Int>();
+
+        foreach (Vector2Int cell in blockedLocalCells)
+        {
+            if (!template.ContainsLocalCell(cell))
+            {
+                failureReason =
+                    "Runtime Procedural Blocked Cell 超出模板：" +
+                    cell + "。";
+                return false;
+            }
+
+            if (!template.IsWalkableCell(cell))
+            {
+                failureReason =
+                    "Runtime Procedural Blocked Cell 必须来自模板原始 Walkable Cells：" +
+                    cell + "。";
+                return false;
+            }
+
+            candidate.Add(cell);
+        }
+
+        if (candidate.Count == 0)
+        {
+            failureReason =
+                "Runtime Procedural Override 至少需要一个 Blocked Cell。";
+            return false;
+        }
+
+        runtimeProceduralBlockedLocalCells = candidate;
+        runtimeProceduralSeed = seed;
+        runtimeProceduralArchetype = archetype;
+        runtimeProceduralSourceId =
+            string.IsNullOrWhiteSpace(sourceId)
+                ? "ProceduralRuntime"
+                : sourceId.Trim();
+        runtimeProceduralDebugVisible = drawDebug;
+        return true;
+    }
+
+    public void ClearRuntimeProceduralOverride()
+    {
+        if (runtimeProceduralBlockedLocalCells != null)
+        {
+            runtimeProceduralBlockedLocalCells.Clear();
+        }
+
+        runtimeProceduralBlockedLocalCells = null;
+        runtimeProceduralSeed = 0;
+        runtimeProceduralArchetype =
+            DreamProceduralRoomArchetype.EdgeHeavy;
+        runtimeProceduralSourceId = string.Empty;
+        runtimeProceduralDebugVisible = false;
+    }
+
+    public void GetRuntimeProceduralBlockedLocalCells(
+        List<Vector2Int> results)
+    {
+        RequireResults(results);
+        results.Clear();
+
+        if (runtimeProceduralBlockedLocalCells == null)
+        {
+            return;
+        }
+
+        results.AddRange(
+            runtimeProceduralBlockedLocalCells);
+
+        results.Sort(
+            delegate(Vector2Int a, Vector2Int b)
+            {
+                int x = a.x.CompareTo(b.x);
+                return x != 0
+                    ? x
+                    : a.y.CompareTo(b.y);
+            });
+    }
+
+    public bool IsRuntimeProceduralBlockedLocalCell(
+        Vector2Int localCell)
+    {
+        return
+            runtimeProceduralBlockedLocalCells != null &&
+            runtimeProceduralBlockedLocalCells.Contains(localCell);
+    }
+
     public void GetWalkableGlobalCells(
         List<Vector2Int> results)
     {
@@ -267,6 +418,22 @@ public sealed class DreamRoomPlacement
         }
 
         template.GetWalkableCells(results);
+
+        if (runtimeProceduralBlockedLocalCells != null &&
+            runtimeProceduralBlockedLocalCells.Count > 0)
+        {
+            for (int i = results.Count - 1;
+                 i >= 0;
+                 i--)
+            {
+                if (runtimeProceduralBlockedLocalCells.Contains(
+                        results[i]))
+                {
+                    results.RemoveAt(i);
+                }
+            }
+        }
+
         TransformLocalCellsToGlobal(results);
     }
 
@@ -282,6 +449,19 @@ public sealed class DreamRoomPlacement
         }
 
         template.GetBlockedCells(results);
+
+        if (runtimeProceduralBlockedLocalCells != null)
+        {
+            foreach (Vector2Int runtimeBlocked in
+                     runtimeProceduralBlockedLocalCells)
+            {
+                if (!results.Contains(runtimeBlocked))
+                {
+                    results.Add(runtimeBlocked);
+                }
+            }
+        }
+
         TransformLocalCellsToGlobal(results);
     }
 
@@ -479,6 +659,22 @@ public sealed class DreamRoomPlacement
         if (size.x < 1 || size.y < 1)
         {
             errors.Add("旋转后的房间尺寸必须为正数。");
+        }
+
+        if (runtimeProceduralBlockedLocalCells != null)
+        {
+            foreach (Vector2Int runtimeBlocked in
+                     runtimeProceduralBlockedLocalCells)
+            {
+                if (!template.ContainsLocalCell(runtimeBlocked) ||
+                    !template.IsWalkableCell(runtimeBlocked))
+                {
+                    errors.Add(
+                        "Runtime Procedural Blocked Cell 非法：" +
+                        runtimeBlocked + "。");
+                    break;
+                }
+            }
         }
 
         return errors;

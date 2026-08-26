@@ -293,6 +293,18 @@ public sealed class DungeonRenderer : MonoBehaviour
                 roomInstance.transform.localScale =
                     Vector3.one;
 
+                if (placement.HasRuntimeProceduralOverride)
+                {
+                    DreamProceduralRoomRuntimeInstanceP1012R2B
+                        runtimeProceduralInstance =
+                            roomInstance.AddComponent<
+                                DreamProceduralRoomRuntimeInstanceP1012R2B>();
+
+                    runtimeProceduralInstance.Initialize(
+                        placement,
+                        roomIndex);
+                }
+
                 // 必须操作实例组件，绝不能修改 assetTemplate。
                 instanceTemplate.SetAllSocketsOpen(false);
 
