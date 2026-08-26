@@ -304,6 +304,17 @@ public sealed class DungeonRenderer : MonoBehaviour
                         placement,
                         roomIndex);
 
+                    // P10.12A-3.2：Procedural Shell / Floor / Wall / Socket Transition
+                    // 只负责视觉。真正的门、墙、碰撞、导航仍由既有系统负责。
+                    DreamProceduralRoomShellSkinP1012A32
+                        runtimeShellSkin =
+                            roomInstance.AddComponent<
+                                DreamProceduralRoomShellSkinP1012A32>();
+
+                    runtimeShellSkin.Prepare(
+                        placement,
+                        roomIndex);
+
                     // P10.12A-3.1：Hard Structure 的视觉皮肤与 R2B 几何分离。
                     // StructuralSkin 只读取 RuntimeProceduralBlockedLocalCells，
                     // 不拥有 Collider / FloorCells / A*。
