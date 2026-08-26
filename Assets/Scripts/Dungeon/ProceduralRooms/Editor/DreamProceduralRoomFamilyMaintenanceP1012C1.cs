@@ -2431,4 +2431,483 @@ public static class DreamProceduralRoomFamilyRuntimeRegressionP1012C2
     }
 }
 
+
+
+/// <summary>
+/// P10.13-1：Production_Main 的房间精度层级契约。
+///
+/// 这是长期维护入口，不改变 Runtime 选择算法：
+/// 1. P10.12 注册的四个 Graybox bridge 明确标记为 ProceduralMedium；
+/// 2. Production_* 正式 Prefab 保持 HighPrecision；
+/// 3. RoomTag、RandomWeight、Floor gate、MaximumInstancesPerFloor 全部保持原权威；
+/// 4. P10.13-2 才会在普通房槽位接入“高精度 + 中精度”的软配额策略。
+/// </summary>
+public static class DreamRoomFidelityMaintenanceP1013
+{
+    private const string MenuRoot =
+        "Tools/Dream Dungeon/Room Mix/P10.13-1 Fidelity Contract/";
+
+    private const string ProductionCatalogPath =
+        "Assets/DreamDungeon/Production/Catalog/RoomCatalog_Production.asset";
+
+    private const string ProductionCatalogId =
+        "Production_Main";
+
+    [MenuItem(
+        MenuRoot + "1. Apply Current Fidelity Labels",
+        false,
+        3200)]
+    private static void ApplyCurrentFidelityLabels()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            Fail("必须退出 Play Mode。", null);
+            return;
+        }
+
+        DreamRoomCatalog catalog =
+            AssetDatabase.LoadAssetAtPath<DreamRoomCatalog>(
+                ProductionCatalogPath);
+
+        if (!ValidateCatalogIdentity(catalog, out string failure))
+        {
+            Fail(failure, catalog);
+            return;
+        }
+
+        int changed = 0;
+        int alreadyCorrect = 0;
+        int unresolved = 0;
+
+        List<string> details = new List<string>();
+
+        for (int i = 0;
+             i < catalog.RoomTemplates.Count;
+             i++)
+        {
+            DreamRoomTemplate template =
+                catalog.RoomTemplates[i];
+
+            if (template == null)
+            {
+                unresolved++;
+                details.Add("Element " + i + " = Null");
+                continue;
+            }
+
+            DreamRoomFidelityTier targetTier;
+
+            DreamProceduralRoomFamilyProfileP1012B1 family;
+            bool isMediumFamily =
+                DreamProceduralRoomFamilyRegistryP1012B1
+                    .TryGetByTemplateId(
+                        template.TemplateId,
+                        out family);
+
+            if (isMediumFamily)
+            {
+                targetTier =
+                    DreamRoomFidelityTier.ProceduralMedium;
+            }
+            else if (template.TemplateId.StartsWith(
+                         "Production_",
+                         StringComparison.Ordinal))
+            {
+                targetTier =
+                    DreamRoomFidelityTier.HighPrecision;
+            }
+            else
+            {
+                unresolved++;
+                details.Add(
+                    template.TemplateId +
+                    " = 未识别，未自动改写");
+                continue;
+            }
+
+            if (template.RoomFidelityTier == targetTier)
+            {
+                alreadyCorrect++;
+                continue;
+            }
+
+            string prefabPath =
+                AssetDatabase.GetAssetPath(template.gameObject);
+
+            if (string.IsNullOrEmpty(prefabPath))
+            {
+                unresolved++;
+                details.Add(
+                    template.TemplateId +
+                    " = 无法取得 Prefab 路径");
+                continue;
+            }
+
+            GameObject prefabRoot = null;
+
+            try
+            {
+                prefabRoot =
+                    PrefabUtility.LoadPrefabContents(prefabPath);
+
+                DreamRoomTemplate editable =
+                    prefabRoot.GetComponent<DreamRoomTemplate>();
+
+                if (editable == null)
+                {
+                    unresolved++;
+                    details.Add(
+                        template.TemplateId +
+                        " = Prefab Root 缺少 DreamRoomTemplate");
+                    continue;
+                }
+
+                SerializedObject serialized =
+                    new SerializedObject(editable);
+
+                SerializedProperty fidelity =
+                    serialized.FindProperty(
+                        "roomFidelityTier");
+
+                if (fidelity == null)
+                {
+                    unresolved++;
+                    details.Add(
+                        template.TemplateId +
+                        " = 找不到 roomFidelityTier");
+                    continue;
+                }
+
+                fidelity.enumValueIndex =
+                    (int)targetTier;
+
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                PrefabUtility.SaveAsPrefabAsset(
+                    prefabRoot,
+                    prefabPath);
+
+                changed++;
+
+                details.Add(
+                    template.TemplateId +
+                    " -> " + targetTier);
+            }
+            catch (Exception exception)
+            {
+                unresolved++;
+                details.Add(
+                    template.TemplateId +
+                    " = 写入失败：" +
+                    exception.GetType().Name +
+                    ": " + exception.Message);
+            }
+            finally
+            {
+                if (prefabRoot != null)
+                {
+                    PrefabUtility.UnloadPrefabContents(
+                        prefabRoot);
+                }
+            }
+        }
+
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+
+        StringBuilder report = new StringBuilder();
+        report.AppendLine(
+            "[P10.13-1] Fidelity Labels APPLY");
+        report.AppendLine(
+            "Catalog=Production_Main" +
+            " | Entries=" + catalog.Count);
+        report.AppendLine(
+            "PrefabAssetsChanged=" + changed +
+            " | AlreadyCorrect=" + alreadyCorrect +
+            " | Unresolved=" + unresolved);
+        report.AppendLine(
+            "ProductionMainCatalogChanged=False" +
+            " | GameSceneChanged=False" +
+            " | RuntimeSelectionChanged=False");
+        report.AppendLine(
+            "RoomTagsChanged=False" +
+            " | RandomWeightChanged=False" +
+            " | FloorGateChanged=False" +
+            " | InstanceCapChanged=False");
+
+        for (int i = 0; i < details.Count; i++)
+        {
+            report.AppendLine("- " + details[i]);
+        }
+
+        report.Append(
+            "Result=" +
+            (unresolved == 0 ? "PASS" : "FAILED"));
+
+        if (unresolved == 0)
+        {
+            Debug.Log(report.ToString(), catalog);
+        }
+        else
+        {
+            Debug.LogError(report.ToString(), catalog);
+        }
+    }
+
+    [MenuItem(
+        MenuRoot + "2. Audit Fidelity Contract",
+        false,
+        3201)]
+    private static void AuditFidelityContract()
+    {
+        DreamRoomCatalog catalog =
+            AssetDatabase.LoadAssetAtPath<DreamRoomCatalog>(
+                ProductionCatalogPath);
+
+        List<string> errors = new List<string>();
+
+        if (!ValidateCatalogIdentity(catalog, out string failure))
+        {
+            errors.Add(failure);
+        }
+
+        int high = 0;
+        int medium = 0;
+        int familyEntries = 0;
+        int familyMedium = 0;
+        int productionEntries = 0;
+        int productionHigh = 0;
+        int nonFamilyMedium = 0;
+
+        HashSet<string> catalogTemplateIds =
+            new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
+        if (catalog != null &&
+            catalog.RoomTemplates != null)
+        {
+            for (int i = 0;
+                 i < catalog.RoomTemplates.Count;
+                 i++)
+            {
+                DreamRoomTemplate template =
+                    catalog.RoomTemplates[i];
+
+                if (template == null)
+                {
+                    errors.Add(
+                        "Production_Main Element " + i +
+                        " 是空引用。");
+                    continue;
+                }
+
+                catalogTemplateIds.Add(
+                    template.TemplateId);
+
+                if (template.RoomFidelityTier ==
+                    DreamRoomFidelityTier.HighPrecision)
+                {
+                    high++;
+                }
+                else if (template.RoomFidelityTier ==
+                         DreamRoomFidelityTier.ProceduralMedium)
+                {
+                    medium++;
+                }
+                else
+                {
+                    errors.Add(
+                        template.TemplateId +
+                        " 使用未知 Fidelity Tier=" +
+                        (int)template.RoomFidelityTier + "。");
+                }
+
+                DreamProceduralRoomFamilyProfileP1012B1 family;
+                bool isFamily =
+                    DreamProceduralRoomFamilyRegistryP1012B1
+                        .TryGetByTemplateId(
+                            template.TemplateId,
+                            out family);
+
+                if (isFamily)
+                {
+                    familyEntries++;
+
+                    if (template.RoomFidelityTier ==
+                        DreamRoomFidelityTier.ProceduralMedium)
+                    {
+                        familyMedium++;
+                    }
+                    else
+                    {
+                        errors.Add(
+                            template.TemplateId +
+                            " 已注册为 P10.12 Family，" +
+                            "但 Fidelity 不是 ProceduralMedium。");
+                    }
+                }
+                else if (template.RoomFidelityTier ==
+                         DreamRoomFidelityTier.ProceduralMedium)
+                {
+                    nonFamilyMedium++;
+                    errors.Add(
+                        template.TemplateId +
+                        " 被标记为 ProceduralMedium，" +
+                        "但没有 P10.12 Family Profile。");
+                }
+
+                if (template.TemplateId.StartsWith(
+                        "Production_",
+                        StringComparison.Ordinal))
+                {
+                    productionEntries++;
+
+                    if (template.RoomFidelityTier ==
+                        DreamRoomFidelityTier.HighPrecision)
+                    {
+                        productionHigh++;
+                    }
+                    else
+                    {
+                        errors.Add(
+                            template.TemplateId +
+                            " 是 Production Prefab，" +
+                            "但 Fidelity 不是 HighPrecision。");
+                    }
+                }
+            }
+        }
+
+        IReadOnlyList<DreamProceduralRoomFamilyProfileP1012B1>
+            allFamilies =
+                DreamProceduralRoomFamilyRegistryP1012B1.All;
+
+        for (int i = 0; i < allFamilies.Count; i++)
+        {
+            if (!catalogTemplateIds.Contains(
+                    allFamilies[i].TemplateId))
+            {
+                errors.Add(
+                    "Production_Main 缺少 P10.12 Family bridge：" +
+                    allFamilies[i].TemplateId + "。");
+            }
+        }
+
+        if (high == 0)
+        {
+            errors.Add("HighPrecision 候选数为 0。");
+        }
+
+        if (medium == 0)
+        {
+            errors.Add("ProceduralMedium 候选数为 0。");
+        }
+
+        if (familyEntries != allFamilies.Count ||
+            familyMedium != allFamilies.Count)
+        {
+            errors.Add(
+                "P10.12 Family Fidelity 覆盖不是 " +
+                allFamilies.Count + "/" +
+                allFamilies.Count + "。");
+        }
+
+        StringBuilder report = new StringBuilder();
+        report.AppendLine(
+            "[P10.13-1] Room Fidelity Contract Audit " +
+            (errors.Count == 0 ? "PASS" : "FAILED"));
+        report.AppendLine(
+            "Catalog=" +
+            (catalog == null ? "Missing" : catalog.CatalogId) +
+            " | Entries=" +
+            (catalog == null ? 0 : catalog.Count));
+        report.AppendLine(
+            "HighPrecision=" + high +
+            " | ProceduralMedium=" + medium);
+        report.AppendLine(
+            "MediumFamilies=" + familyMedium +
+            "/" + allFamilies.Count +
+            " | NonFamilyMedium=" + nonFamilyMedium);
+        report.AppendLine(
+            "ProductionPrefabsHigh=" + productionHigh +
+            "/" + productionEntries);
+        report.AppendLine(
+            "FactoryDefault=HighPrecision" +
+            " | RoomTagsOrthogonal=True" +
+            " | RuntimeSelectionChanged=False");
+        report.AppendLine(
+            "ProductionMainCatalogChanged=False" +
+            " | GameSceneChanged=False");
+        report.Append(
+            "Result=" +
+            (errors.Count == 0 ? "PASS" : "FAILED"));
+
+        if (errors.Count > 0)
+        {
+            report.AppendLine();
+            report.AppendLine("Errors:");
+
+            for (int i = 0; i < errors.Count; i++)
+            {
+                report.AppendLine("- " + errors[i]);
+            }
+
+            Debug.LogError(
+                report.ToString(),
+                catalog);
+            return;
+        }
+
+        Debug.Log(
+            report.ToString(),
+            catalog);
+    }
+
+    private static bool ValidateCatalogIdentity(
+        DreamRoomCatalog catalog,
+        out string failure)
+    {
+        failure = string.Empty;
+
+        if (catalog == null)
+        {
+            failure =
+                "找不到 Production_Main Catalog：" +
+                ProductionCatalogPath;
+            return false;
+        }
+
+        if (!string.Equals(
+                catalog.CatalogId,
+                ProductionCatalogId,
+                StringComparison.Ordinal))
+        {
+            failure =
+                "CatalogId 不是 Production_Main，而是 " +
+                catalog.CatalogId + "。";
+            return false;
+        }
+
+        if (catalog.RoomTemplates == null ||
+            catalog.RoomTemplates.Count == 0)
+        {
+            failure =
+                "Production_Main 没有 Room Templates。";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static void Fail(
+        string failure,
+        UnityEngine.Object context)
+    {
+        Debug.LogError(
+            "[P10.13-1] Fidelity Contract FAILED\n" +
+            failure,
+            context);
+    }
+}
+
 #endif

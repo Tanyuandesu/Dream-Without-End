@@ -1148,6 +1148,7 @@ MonoBehaviour:
   maximumInstancesPerFloor: 0
   allowQuarterTurns: 1
   roomTags: 1
+  roomFidelityTier: 1
   occupiedCells: []
   walkableCells: []
   blockedCells: []

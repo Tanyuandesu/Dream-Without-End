@@ -7,6 +7,17 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
+
+/// <summary>
+/// P10.13：房间视觉／内容精度层级。
+/// 这是“房间如何被生产与填充”的分类，不取代 RoomTag 的玩法角色。
+/// </summary>
+public enum DreamRoomFidelityTier
+{
+    HighPrecision = 0,
+    ProceduralMedium = 1
+}
+
 /// <summary>
 /// 一个可被混合地牢系统选择和摆放的房间模板。
 ///
@@ -58,6 +69,15 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     [Header("房间用途（R9.4 分阶段参与正式选择）")]
     [SerializeField]
     private DreamRoomTag roomTags = DreamRoomTag.Standard;
+
+    [Header("房间精度层级（P10.13）")]
+    [Tooltip(
+        "High Precision：正式美术 Prefab，内部视觉不做程序化替换。" +
+        "Procedural Medium：由 P10.12 中精度 Family 在运行时接管内部几何与皮肤。" +
+        "此字段只描述精度层级，不替代 Standard/Rare/Core/Special 等 Room Tags。")]
+    [SerializeField]
+    private DreamRoomFidelityTier roomFidelityTier =
+        DreamRoomFidelityTier.HighPrecision;
 
     [Header("格子覆盖（空列表使用完整矩形默认值）")]
     [Tooltip(
@@ -134,6 +154,8 @@ public sealed class DreamRoomTemplate : MonoBehaviour
     public int MaximumInstancesPerFloor => maximumInstancesPerFloor;
     public bool AllowQuarterTurns => allowQuarterTurns;
     public DreamRoomTag RoomTags => roomTags;
+    public DreamRoomFidelityTier RoomFidelityTier =>
+        roomFidelityTier;
     public IReadOnlyList<Vector2Int> OccupiedCellOverrides =>
         occupiedCells;
     public IReadOnlyList<Vector2Int> WalkableCellOverrides =>

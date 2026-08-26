@@ -1080,6 +1080,9 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             .boolValue = config.AllowQuarterTurns;
         RequireProperty(serialized, "roomTags")
             .intValue = (int)config.RoomTags;
+        RequireProperty(serialized, "roomFidelityTier")
+            .enumValueIndex =
+                (int)DreamRoomFidelityTier.HighPrecision;
 
         // 通用建房器不猜内部玩法几何。
         // 完整矩形 Occupied + 默认 Walkable，之后只由房间作者写 BlockedCells。
