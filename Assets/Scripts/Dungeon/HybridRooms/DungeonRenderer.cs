@@ -303,6 +303,19 @@ public sealed class DungeonRenderer : MonoBehaviour
                     runtimeProceduralInstance.Initialize(
                         placement,
                         roomIndex);
+
+                    // P10.12A-2：软装饰与硬碰撞严格分离。
+                    // 此时 Rooms Root 仍为 inactive；
+                    // SoftDecor.Start 会等 R7.4 正式开门并激活 Rooms 后才执行，
+                    // 因此能读取真实 IsOpen Socket，同时绝不修改导航数据。
+                    DreamProceduralRoomSoftDecorP1012A2
+                        runtimeSoftDecor =
+                            roomInstance.AddComponent<
+                                DreamProceduralRoomSoftDecorP1012A2>();
+
+                    runtimeSoftDecor.Prepare(
+                        placement,
+                        roomIndex);
                 }
 
                 // 必须操作实例组件，绝不能修改 assetTemplate。

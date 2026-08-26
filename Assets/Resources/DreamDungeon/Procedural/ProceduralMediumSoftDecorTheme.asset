@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 535b0854c3b5a8741b2d2c07503fb8ff, type: 3}
+  m_Name: ProceduralMediumSoftDecorTheme
+  m_EditorClassIdentifier: 
+  themeId: Procedural_Medium_Default
+  floorClutterCount: 4
+  edgePropCount: 2
+  nearStructureCount: 3
+  foregroundPropCount: 2
+  floorClutterSprites: []
+  edgePropSprites: []
+  nearStructureSprites: []
+  foregroundPropSprites: []
+  positionJitter: 0.12
+  floorClutterScale: 0.34
+  edgePropScale: 0.48
+  nearStructureScale: 0.42
+  foregroundPropScale: 0.58
+  floorClutterSortingOrder: 1
+  edgePropSortingOrder: 2
+  nearStructureSortingOrder: 2
+  foregroundPropSortingOrder: 30
+  floorClutterFallbackColor: {r: 0.4, g: 0.82, b: 1, a: 0.72}
+  edgePropFallbackColor: {r: 1, g: 0.82, b: 0.25, a: 0.72}
+  nearStructureFallbackColor: {r: 0.5, g: 1, b: 0.45, a: 0.72}
+  foregroundFallbackColor: {r: 0.95, g: 0.45, b: 1, a: 0.78}
