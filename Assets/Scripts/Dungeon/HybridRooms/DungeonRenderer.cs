@@ -304,6 +304,18 @@ public sealed class DungeonRenderer : MonoBehaviour
                         placement,
                         roomIndex);
 
+                    // P10.12A-3.1：Hard Structure 的视觉皮肤与 R2B 几何分离。
+                    // StructuralSkin 只读取 RuntimeProceduralBlockedLocalCells，
+                    // 不拥有 Collider / FloorCells / A*。
+                    DreamProceduralRoomStructuralSkinP1012A31
+                        runtimeStructuralSkin =
+                            roomInstance.AddComponent<
+                                DreamProceduralRoomStructuralSkinP1012A31>();
+
+                    runtimeStructuralSkin.Prepare(
+                        placement,
+                        roomIndex);
+
                     // P10.12A-2：软装饰与硬碰撞严格分离。
                     // 此时 Rooms Root 仍为 inactive；
                     // SoftDecor.Start 会等 R7.4 正式开门并激活 Rooms 后才执行，
