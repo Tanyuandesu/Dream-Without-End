@@ -358,7 +358,8 @@ public sealed class PlayerCombatController : MonoBehaviour
 
     private void Update()
     {
-        if (!initialized ||
+        if (!GameFlowManager.AllowsGameplayInput ||
+            !initialized ||
             !combatInputEnabled ||
             health == null ||
             health.IsDead ||

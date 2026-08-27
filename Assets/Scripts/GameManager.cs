@@ -95,6 +95,11 @@ public sealed class GameManager : MonoBehaviour
 
     private void Update()
     {
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            return;
+        }
+
         if (Input.GetKeyDown(KeyCode.R))
         {
             RegenerateCurrentFloor();
@@ -103,6 +108,11 @@ public sealed class GameManager : MonoBehaviour
 
     public void PlayerReachedExit()
     {
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            return;
+        }
+
         TryGenerateNextFloor();
     }
 
@@ -112,6 +122,11 @@ public sealed class GameManager : MonoBehaviour
     /// </summary>
     public bool TryPlayerReachedExit()
     {
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            return false;
+        }
+
         return TryGenerateNextFloor();
     }
 

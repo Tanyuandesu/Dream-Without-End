@@ -113,12 +113,25 @@ public sealed class RuntimeDungeonPlayer : MonoBehaviour, ICharacterFacingSource
     private void Update()
     {
         TickTimedMovementScale(Time.time);
+
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            input = Vector2.zero;
+            return;
+        }
+
         SampleMovementInputAndFacing();
     }
 
     private void FixedUpdate()
     {
         TickTimedMovementScale(Time.time);
+
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            input = Vector2.zero;
+            return;
+        }
 
         if (body == null)
         {
@@ -142,6 +155,13 @@ public sealed class RuntimeDungeonPlayer : MonoBehaviour, ICharacterFacingSource
     public bool RefreshInputAndFacingForCombat()
     {
         combatFacingRefreshCount++;
+
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            input = Vector2.zero;
+            return false;
+        }
+
         SampleMovementInputAndFacing();
 
         bool changedThisFrame =

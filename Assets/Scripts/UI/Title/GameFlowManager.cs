@@ -23,6 +23,18 @@ public sealed class GameFlowManager : MonoBehaviour
     public GameFlowState State { get; private set; }
     public bool IsLoading => isLoading;
 
+    /// <summary>
+    /// SYS1 authoritative gameplay-input gate. Runtime gameplay input is
+    /// accepted only while the application flow is actively Playing.
+    /// When no flow manager exists, input remains allowed for isolated
+    /// component/test scenes that intentionally do not use the app flow.
+    /// </summary>
+    public bool IsGameplayInputAllowed =>
+        !isLoading && State == GameFlowState.Playing;
+
+    public static bool AllowsGameplayInput =>
+        Instance == null || Instance.IsGameplayInputAllowed;
+
     public string TitleSceneName => titleSceneName;
     public string GameSceneName => gameSceneName;
     public string EndingSceneName => endingSceneName;
@@ -74,6 +86,105 @@ public sealed class GameFlowManager : MonoBehaviour
     {
         LoadGameAfter(0f);
     }
+
+    /// <summary>
+    /// Enters the global paused state. SYS5 will bind UI/ESC controls to
+    /// this API; SYS1 only establishes the authoritative state boundary.
+    /// </summary>
+    public bool TryPauseGame()
+    {
+        if (isLoading || State != GameFlowState.Playing)
+        {
+            return false;
+        }
+
+        SetState(GameFlowState.Paused);
+        Time.timeScale = 0f;
+        return true;
+    }
+
+    public bool TryResumeGame()
+    {
+        if (isLoading || State != GameFlowState.Paused)
+        {
+            return false;
+        }
+
+        Time.timeScale = 1f;
+        SetState(GameFlowState.Playing);
+        return true;
+    }
+
+    /// <summary>
+    /// Reserves one authoritative dialogue state for the later NPC/dialogue
+    /// phase. Dialogue does not alter timeScale here; its world-freeze policy
+    /// remains a dialogue-system decision while gameplay input is still gated.
+    /// </summary>
+    public bool TryBeginDialogue()
+    {
+        if (isLoading || State != GameFlowState.Playing)
+        {
+            return false;
+        }
+
+        SetState(GameFlowState.Dialogue);
+        return true;
+    }
+
+    public bool TryEndDialogue()
+    {
+        if (isLoading || State != GameFlowState.Dialogue)
+        {
+            return false;
+        }
+
+        SetState(GameFlowState.Playing);
+        return true;
+    }
+
+#if UNITY_EDITOR
+    // SYS1 verification hooks. These do not ship in player builds and let the
+    // current stage be tested before the real Pause UI exists in SYS5.
+    [ContextMenu("SYS1 Debug/Pause Game")]
+    private void DebugPauseGame()
+    {
+        Debug.Log(
+            "[SYS1] Pause request: " + TryPauseGame() +
+            " | State=" + State +
+            " | timeScale=" + Time.timeScale,
+            this);
+    }
+
+    [ContextMenu("SYS1 Debug/Resume Game")]
+    private void DebugResumeGame()
+    {
+        Debug.Log(
+            "[SYS1] Resume request: " + TryResumeGame() +
+            " | State=" + State +
+            " | timeScale=" + Time.timeScale,
+            this);
+    }
+
+    [ContextMenu("SYS1 Debug/Begin Dialogue Gate")]
+    private void DebugBeginDialogue()
+    {
+        Debug.Log(
+            "[SYS1] Dialogue begin request: " + TryBeginDialogue() +
+            " | State=" + State +
+            " | timeScale=" + Time.timeScale,
+            this);
+    }
+
+    [ContextMenu("SYS1 Debug/End Dialogue Gate")]
+    private void DebugEndDialogue()
+    {
+        Debug.Log(
+            "[SYS1] Dialogue end request: " + TryEndDialogue() +
+            " | State=" + State +
+            " | timeScale=" + Time.timeScale,
+            this);
+    }
+#endif
 
     public void LoadGameAfter(float delay)
     {
