@@ -1,0 +1,94 @@
+{
+  "entries": [
+    {
+      "key": "SYS3_TEST_GREETING",
+      "english": "Localization ready.",
+      "japanese": "ローカライズ準備完了。",
+      "traditionalChinese": "本地化系統已就緒。"
+    },
+    {
+      "key": "SYS3_TEST_FALLBACK",
+      "english": "Fallback test.",
+      "japanese": "フォールバックテスト。",
+      "traditionalChinese": ""
+    },
+    {
+      "key": "UI_TITLE_START",
+      "english": "New Game",
+      "japanese": "ニューゲーム",
+      "traditionalChinese": "新遊戲"
+    },
+    {
+      "key": "UI_TITLE_CONTINUE",
+      "english": "Continue",
+      "japanese": "コンティニュー",
+      "traditionalChinese": "繼續遊戲"
+    },
+    {
+      "key": "UI_TITLE_SETTINGS",
+      "english": "Settings",
+      "japanese": "設定",
+      "traditionalChinese": "設定"
+    },
+    {
+      "key": "UI_TITLE_QUIT",
+      "english": "Quit",
+      "japanese": "終了",
+      "traditionalChinese": "結束遊戲"
+    },
+    {
+      "key": "UI_PAUSE_RESUME",
+      "english": "Resume",
+      "japanese": "ゲームに戻る",
+      "traditionalChinese": "繼續遊戲"
+    },
+    {
+      "key": "UI_PAUSE_ITEMS",
+      "english": "Items",
+      "japanese": "アイテム",
+      "traditionalChinese": "道具"
+    },
+    {
+      "key": "UI_PAUSE_SETTINGS",
+      "english": "Settings",
+      "japanese": "設定",
+      "traditionalChinese": "設定"
+    },
+    {
+      "key": "UI_PAUSE_RETURN_TITLE",
+      "english": "Return to Title",
+      "japanese": "タイトルへ戻る",
+      "traditionalChinese": "返回標題"
+    },
+    {
+      "key": "UI_CONFIRM_YES",
+      "english": "Yes",
+      "japanese": "はい",
+      "traditionalChinese": "是"
+    },
+    {
+      "key": "UI_CONFIRM_NO",
+      "english": "No",
+      "japanese": "いいえ",
+      "traditionalChinese": "否"
+    },
+    {
+      "key": "UI_SETTINGS_LANGUAGE",
+      "english": "Language",
+      "japanese": "言語",
+      "traditionalChinese": "語言"
+    },
+    {
+      "key": "UI_SETTINGS_MASTER_VOLUME",
+      "english": "Master Volume",
+      "japanese": "マスター音量",
+      "traditionalChinese": "主音量"
+    },
+    {
+      "key": "UI_SETTINGS_BGM_VOLUME",
+      "english": "BGM Volume",
+      "japanese": "BGM音量",
+      "traditionalChinese": "背景音樂音量"
+    }
+  ]
+}
