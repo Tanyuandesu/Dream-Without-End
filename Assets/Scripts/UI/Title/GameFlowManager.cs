@@ -285,6 +285,79 @@ public sealed class GameFlowManager : MonoBehaviour
             " | timeScale=" + Time.timeScale,
             this);
     }
+
+    [ContextMenu("SYS11 Debug/Print Lifecycle Audit")]
+    private void DebugPrintLifecycleAudit()
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+
+        int flowCount = FindObjectsOfType<GameFlowManager>(true).Length;
+        int settingsCount = FindObjectsOfType<SystemSettingsManager>(true).Length;
+        int localizationCount = FindObjectsOfType<LocalizationManager>(true).Length;
+        int audioCount = FindObjectsOfType<AudioManager>(true).Length;
+        int saveCount = FindObjectsOfType<SaveSystemManager>(true).Length;
+        int pauseCount = FindObjectsOfType<PauseMenuController>(true).Length;
+        int gameManagerCount = FindObjectsOfType<GameManager>(true).Length;
+        int titleControllerCount = FindObjectsOfType<TitleScreenController>(true).Length;
+
+        bool titleSceneClean =
+            activeScene.name != titleSceneName ||
+            (pauseCount == 0 && gameManagerCount == 0);
+
+        bool gameSceneClean =
+            activeScene.name != gameSceneName ||
+            (pauseCount == 1 && gameManagerCount == 1);
+
+        bool persistentSingletonsClean =
+            flowCount == 1 &&
+            settingsCount == 1 &&
+            localizationCount == 1 &&
+            audioCount == 1 &&
+            saveCount == 1;
+
+        bool timeScaleClean =
+            State == GameFlowState.Paused
+                ? Mathf.Approximately(Time.timeScale, 0f)
+                : Mathf.Approximately(Time.timeScale, 1f);
+
+        bool launchCleanOnTitle =
+            activeScene.name != titleSceneName ||
+            !RunLaunchContext.HasPendingRequest;
+
+        bool overall =
+            titleSceneClean &&
+            gameSceneClean &&
+            persistentSingletonsClean &&
+            timeScaleClean &&
+            launchCleanOnTitle;
+
+        Debug.Log(
+            "[SYS11] Lifecycle audit | PASS=" + overall +
+            " | Scene=" + activeScene.name +
+            " | State=" + State +
+            " | Loading=" + isLoading +
+            " | TimeScale=" + Time.timeScale.ToString("0.##") +
+            " | CursorVisible=" + Cursor.visible +
+            " | CursorLock=" + Cursor.lockState +
+            " | PendingLaunch=" + RunLaunchContext.PendingMode +
+            "\nPersistentCounts" +
+            " | Flow=" + flowCount +
+            " | Settings=" + settingsCount +
+            " | Localization=" + localizationCount +
+            " | Audio=" + audioCount +
+            " | Save=" + saveCount +
+            "\nSceneCounts" +
+            " | PauseUI=" + pauseCount +
+            " | GameManager=" + gameManagerCount +
+            " | TitleController=" + titleControllerCount +
+            "\nChecks" +
+            " | PersistentSingletons=" + persistentSingletonsClean +
+            " | TitleSceneClean=" + titleSceneClean +
+            " | GameSceneClean=" + gameSceneClean +
+            " | TimeScaleClean=" + timeScaleClean +
+            " | LaunchCleanOnTitle=" + launchCleanOnTitle,
+            this);
+    }
 #endif
 
     public void LoadGameAfter(float delay)
