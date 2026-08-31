@@ -15,13 +15,13 @@
     {
       "key": "UI_TITLE_START",
       "english": "New Game",
-      "japanese": "ニューゲーム",
+      "japanese": "はじめから",
       "traditionalChinese": "新遊戲"
     },
     {
       "key": "UI_TITLE_CONTINUE",
       "english": "Continue",
-      "japanese": "コンティニュー",
+      "japanese": "つづきから",
       "traditionalChinese": "繼續遊戲"
     },
     {
@@ -33,7 +33,7 @@
     {
       "key": "UI_TITLE_QUIT",
       "english": "Quit",
-      "japanese": "終了",
+      "japanese": "やめる",
       "traditionalChinese": "結束遊戲"
     },
     {
