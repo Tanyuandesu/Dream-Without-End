@@ -1,0 +1,88 @@
+{
+  "entries": [
+    {
+      "key": "ITEM_FIRST_MEMORY_NAME",
+      "english": "First Memory",
+      "japanese": "最初の記憶",
+      "traditionalChinese": "第一段記憶"
+    },
+    {
+      "key": "ITEM_FIRST_MEMORY_DESC",
+      "english": "Placeholder description for the first memory. Replace this text with the final item description later.",
+      "japanese": "最初の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第一段記憶的暫定說明。之後請替換為正式的道具說明。"
+    },
+    {
+      "key": "ITEM_SECOND_MEMORY_NAME",
+      "english": "Second Memory",
+      "japanese": "二つ目の記憶",
+      "traditionalChinese": "第二段記憶"
+    },
+    {
+      "key": "ITEM_SECOND_MEMORY_DESC",
+      "english": "Placeholder description for the second memory. Replace this text with the final item description later.",
+      "japanese": "二つ目の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第二段記憶的暫定說明。之後請替換為正式的道具說明。"
+    },
+    {
+      "key": "ITEM_THIRD_MEMORY_NAME",
+      "english": "Third Memory",
+      "japanese": "三つ目の記憶",
+      "traditionalChinese": "第三段記憶"
+    },
+    {
+      "key": "ITEM_THIRD_MEMORY_DESC",
+      "english": "Placeholder description for the third memory. Replace this text with the final item description later.",
+      "japanese": "三つ目の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第三段記憶的暫定說明。之後請替換為正式的道具說明。"
+    },
+    {
+      "key": "ITEM_FOURTH_MEMORY_NAME",
+      "english": "Fourth Memory",
+      "japanese": "四つ目の記憶",
+      "traditionalChinese": "第四段記憶"
+    },
+    {
+      "key": "ITEM_FOURTH_MEMORY_DESC",
+      "english": "Placeholder description for the fourth memory. Replace this text with the final item description later.",
+      "japanese": "四つ目の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第四段記憶的暫定說明。之後請替換為正式的道具說明。"
+    },
+    {
+      "key": "ITEM_FIFTH_MEMORY_NAME",
+      "english": "Fifth Memory",
+      "japanese": "五つ目の記憶",
+      "traditionalChinese": "第五段記憶"
+    },
+    {
+      "key": "ITEM_FIFTH_MEMORY_DESC",
+      "english": "Placeholder description for the fifth memory. Replace this text with the final item description later.",
+      "japanese": "五つ目の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第五段記憶的暫定說明。之後請替換為正式的道具說明。"
+    },
+    {
+      "key": "ITEM_SIXTH_MEMORY_NAME",
+      "english": "Sixth Memory",
+      "japanese": "六つ目の記憶",
+      "traditionalChinese": "第六段記憶"
+    },
+    {
+      "key": "ITEM_SIXTH_MEMORY_DESC",
+      "english": "Placeholder description for the sixth memory. Replace this text with the final item description later.",
+      "japanese": "六つ目の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第六段記憶的暫定說明。之後請替換為正式的道具說明。"
+    },
+    {
+      "key": "ITEM_SEVENTH_MEMORY_NAME",
+      "english": "Seventh Memory",
+      "japanese": "七つ目の記憶",
+      "traditionalChinese": "第七段記憶"
+    },
+    {
+      "key": "ITEM_SEVENTH_MEMORY_DESC",
+      "english": "Placeholder description for the seventh memory. Replace this text with the final item description later.",
+      "japanese": "七つ目の記憶の仮説明です。後で正式なアイテム説明に差し替えてください。",
+      "traditionalChinese": "第七段記憶的暫定說明。之後請替換為正式的道具說明。"
+    }
+  ]
+}

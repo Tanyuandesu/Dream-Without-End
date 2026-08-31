@@ -84,7 +84,43 @@ public sealed class GameFlowManager : MonoBehaviour
 
     public void StartNewGame()
     {
+        if (isLoading)
+        {
+            return;
+        }
+
+        RunLaunchContext.RequestNewGame();
         LoadGameAfter(0f);
+    }
+
+    /// <summary>
+    /// SYS8 Continue entry. It validates/loads the save before GameScene is
+    /// requested, then queues a detached launch snapshot for SYS9 to consume.
+    /// Title UI wiring remains intentionally deferred to SYS10.
+    /// </summary>
+    public bool TryStartContinueGame()
+    {
+        if (isLoading)
+        {
+            return false;
+        }
+
+        SaveSystemManager saveSystem =
+            SaveSystemManager.GetOrCreate();
+
+        if (!saveSystem.TryLoadSave(
+                out SaveGameData data,
+                out string error))
+        {
+            Debug.LogWarning(
+                "[SYS8] Continue rejected | " + error,
+                this);
+            return false;
+        }
+
+        RunLaunchContext.RequestContinue(data);
+        LoadGameAfter(0f);
+        return true;
     }
 
     /// <summary>
@@ -100,6 +136,8 @@ public sealed class GameFlowManager : MonoBehaviour
 
         SetState(GameFlowState.Paused);
         Time.timeScale = 0f;
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
         return true;
     }
 
@@ -112,6 +150,7 @@ public sealed class GameFlowManager : MonoBehaviour
 
         Time.timeScale = 1f;
         SetState(GameFlowState.Playing);
+        ApplyGameplayCursorState();
         return true;
     }
 
@@ -143,6 +182,68 @@ public sealed class GameFlowManager : MonoBehaviour
     }
 
 #if UNITY_EDITOR
+    [ContextMenu("SYS8 Debug/Queue New Game Request (No Load)")]
+    private void DebugQueueNewGameRequest()
+    {
+        RunLaunchContext.RequestNewGame();
+        DebugPrintLaunchRequest();
+    }
+
+    [ContextMenu("SYS8 Debug/Queue Continue Request From Save (No Load)")]
+    private void DebugQueueContinueRequest()
+    {
+        SaveSystemManager saveSystem =
+            SaveSystemManager.GetOrCreate();
+
+        if (!saveSystem.TryLoadSave(
+                out SaveGameData data,
+                out string error))
+        {
+            Debug.LogWarning(
+                "[SYS8] Cannot queue Continue | " + error,
+                this);
+            return;
+        }
+
+        RunLaunchContext.RequestContinue(data);
+        DebugPrintLaunchRequest();
+    }
+
+    [ContextMenu("SYS9 Debug/Start Continue From Save")]
+    private void DebugStartContinueFromSave()
+    {
+        bool success = TryStartContinueGame();
+
+        Debug.Log(
+            "[SYS9] Debug start Continue=" + success,
+            this);
+    }
+
+    [ContextMenu("SYS8 Debug/Print Pending Launch Request")]
+    private void DebugPrintLaunchRequest()
+    {
+        if (!RunLaunchContext.TryPeek(
+                out RunLaunchRequest request))
+        {
+            Debug.Log(
+                "[SYS8] Launch request | Mode=None",
+                this);
+            return;
+        }
+
+        SaveGameData data = request.SaveData;
+
+        Debug.Log(
+            "[SYS8] Launch request | Mode=" + request.Mode +
+            (data == null
+                ? string.Empty
+                : " | Floor=" + data.floorIndex +
+                  " | HP=" + data.currentHP.ToString("0.##") +
+                  " | Items=" + data.collectedItemIds.Count +
+                  " | Kills=" + data.killCount),
+            this);
+    }
+
     // SYS1 verification hooks. These do not ship in player builds and let the
     // current stage be tested before the real Pause UI exists in SYS5.
     [ContextMenu("SYS1 Debug/Pause Game")]
@@ -210,6 +311,8 @@ public sealed class GameFlowManager : MonoBehaviour
         {
             return;
         }
+
+        RunLaunchContext.Clear();
 
         StartCoroutine(
             LoadSceneRoutine(
@@ -329,6 +432,7 @@ public sealed class GameFlowManager : MonoBehaviour
     {
         if (sceneName == titleSceneName)
         {
+            RunLaunchContext.Clear();
             SetState(GameFlowState.Title);
             Time.timeScale = 1f;
 
@@ -344,13 +448,7 @@ public sealed class GameFlowManager : MonoBehaviour
         if (sceneName == gameSceneName)
         {
             SetState(GameFlowState.Playing);
-
-            if (hideCursorDuringGame)
-            {
-                Cursor.visible = false;
-                Cursor.lockState = CursorLockMode.Locked;
-            }
-
+            ApplyGameplayCursorState();
             return;
         }
 
@@ -369,6 +467,19 @@ public sealed class GameFlowManager : MonoBehaviour
         }
 
         SetState(GameFlowState.Loading);
+    }
+
+    private void ApplyGameplayCursorState()
+    {
+        if (hideCursorDuringGame)
+        {
+            Cursor.visible = false;
+            Cursor.lockState = CursorLockMode.Locked;
+            return;
+        }
+
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
     }
 
     private void SetState(GameFlowState newState)

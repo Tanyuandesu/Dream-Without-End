@@ -277,6 +277,125 @@ public sealed class ItemManager :
         activePickup = null;
     }
 
+    /// <summary>
+    /// SYS9 restore entry. Rebuilds only the run-level collected-item state
+    /// from stable Item IDs. Floor plans, active pickup and collection timing
+    /// history are intentionally discarded. The loaded floor therefore starts
+    /// its post-load spawn pacing from the configured base chance.
+    /// </summary>
+    public bool TryRestoreRunProgress(
+        IEnumerable<string> savedItemIds,
+        int loadedFloorNumber,
+        out string error)
+    {
+        error = string.Empty;
+        CacheComponents();
+
+        if (itemCatalog == null)
+        {
+            error = "Item Catalog is not assigned.";
+            return false;
+        }
+
+        if (spawnPolicy == null)
+        {
+            error = "Item Spawn Policy is not assigned.";
+            return false;
+        }
+
+        if (loadedFloorNumber < 1)
+        {
+            error = "Loaded floor must be at least 1.";
+            return false;
+        }
+
+        List<ItemDefinition> restoredItems =
+            new List<ItemDefinition>();
+        HashSet<string> restoredIds =
+            new HashSet<string>(StringComparer.Ordinal);
+        int restoredScore = 0;
+
+        if (savedItemIds != null)
+        {
+            foreach (string rawId in savedItemIds)
+            {
+                if (string.IsNullOrWhiteSpace(rawId))
+                {
+                    continue;
+                }
+
+                string itemId = rawId.Trim();
+
+                if (!restoredIds.Add(itemId))
+                {
+                    continue;
+                }
+
+                ItemDefinition definition =
+                    itemCatalog.FindById(itemId);
+
+                if (definition == null)
+                {
+                    error =
+                        "Save references unknown Item ID: " +
+                        itemId;
+                    return false;
+                }
+
+                restoredItems.Add(definition);
+                restoredScore +=
+                    Mathf.Max(0, definition.ProgressionValue);
+            }
+        }
+
+        ClearFloor();
+        floorPlans.Clear();
+        collectedItems.Clear();
+        collectedItemIds.Clear();
+        candidatePoolExhaustionReported = false;
+
+        for (int i = 0; i < restoredItems.Count; i++)
+        {
+            ItemDefinition definition = restoredItems[i];
+            collectedItems.Add(definition);
+            collectedItemIds.Add(definition.ItemId);
+        }
+
+        progressionScore = restoredScore;
+
+        if (collectedItems.Count > 0)
+        {
+            int minimumGap = Mathf.Max(
+                1,
+                spawnPolicy.MinimumFloorGapAfterCollection);
+
+            // At the loaded floor, floorGap == minimumGap, which is exactly
+            // the policy's base chance with zero accumulated pity increase.
+            lastCollectedFloor =
+                loadedFloorNumber - minimumGap;
+        }
+        else
+        {
+            lastCollectedFloor = -1;
+        }
+
+        ItemProgressSnapshot snapshot =
+            CreateProgressSnapshot();
+
+        ProgressChanged?.Invoke(snapshot);
+
+        Debug.Log(
+            "[SYS9] Item progress restored" +
+            " | Items=" + CollectedItemCount +
+            " | Score=" + progressionScore +
+            " | LoadedFloor=" + loadedFloorNumber +
+            " | LastCollectedFloorBaseline=" +
+            lastCollectedFloor,
+            this);
+
+        return true;
+    }
+
     private FloorItemPlan GetOrCreateFloorPlan(
         int floorNumber,
         DungeonLayout layout)

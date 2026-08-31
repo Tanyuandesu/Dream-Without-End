@@ -96,6 +96,67 @@ public sealed class PlayerManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// SYS9 restore entry. The player must already exist on the freshly
+    /// generated floor. Saved health is clamped to the current MaxHealth so
+    /// later balance changes cannot make an old save invalid.
+    /// </summary>
+    public bool TryRestoreCurrentHealth(
+        float savedHealth,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (currentPlayer == null || currentHealth == null)
+        {
+            error = "Player Health is not available after floor generation.";
+            return false;
+        }
+
+        if (float.IsNaN(savedHealth) ||
+            float.IsInfinity(savedHealth) ||
+            savedHealth <= 0f)
+        {
+            error = "Saved HP must be greater than 0.";
+            return false;
+        }
+
+        float restoredHealth = Mathf.Clamp(
+            savedHealth,
+            1f,
+            currentHealth.MaxHealth);
+
+        currentHealth.Revive(restoredHealth);
+
+        RuntimeDungeonPlayer controller =
+            currentPlayer.GetComponent<RuntimeDungeonPlayer>();
+
+        if (controller != null)
+        {
+            controller.enabled = true;
+        }
+
+        Rigidbody2D body =
+            currentPlayer.GetComponent<Rigidbody2D>();
+
+        if (body != null)
+        {
+            body.simulated = true;
+            body.linearVelocity = Vector2.zero;
+            body.angularVelocity = 0f;
+            body.WakeUp();
+        }
+
+        Debug.Log(
+            "[SYS9] Player HP restored" +
+            " | Saved=" + savedHealth.ToString("0.##") +
+            " | Applied=" + restoredHealth.ToString("0.##") +
+            " | Max=" + currentHealth.MaxHealth.ToString("0.##"),
+            this);
+
+        return true;
+    }
+
     private void BindHealth()
     {
         if (currentPlayer == null)

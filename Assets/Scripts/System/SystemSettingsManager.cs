@@ -12,7 +12,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class SystemSettingsManager : MonoBehaviour
 {
-    private const int CurrentSettingsVersion = 1;
+    private const int CurrentSettingsVersion = 2;
 
     private const string KeyVersion =
         "DreamDungeon.Settings.Version";
@@ -22,17 +22,21 @@ public sealed class SystemSettingsManager : MonoBehaviour
         "DreamDungeon.Settings.MasterVolume";
     private const string KeyBgmVolume =
         "DreamDungeon.Settings.BgmVolume";
+    private const string KeySfxVolume =
+        "DreamDungeon.Settings.SfxVolume";
 
     public const GameLanguage DefaultLanguage =
         GameLanguage.Japanese;
     public const float DefaultMasterVolume = 1f;
     public const float DefaultBgmVolume = 1f;
+    public const float DefaultSfxVolume = 1f;
 
     public static SystemSettingsManager Instance { get; private set; }
 
     private GameLanguage language = DefaultLanguage;
     private float masterVolume = DefaultMasterVolume;
     private float bgmVolume = DefaultBgmVolume;
+    private float sfxVolume = DefaultSfxVolume;
     private bool initialized;
 
     public GameLanguage Language
@@ -62,11 +66,21 @@ public sealed class SystemSettingsManager : MonoBehaviour
         }
     }
 
+    public float SfxVolume
+    {
+        get
+        {
+            EnsureInitialized();
+            return sfxVolume;
+        }
+    }
+
     public bool IsInitialized => initialized;
 
     public event Action<GameLanguage> LanguageChanged;
     public event Action<float> MasterVolumeChanged;
     public event Action<float> BgmVolumeChanged;
+    public event Action<float> SfxVolumeChanged;
     public event Action<SystemSettingsSnapshot> SettingsChanged;
 
     [RuntimeInitializeOnLoadMethod(
@@ -143,7 +157,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
         return new SystemSettingsSnapshot(
             language,
             masterVolume,
-            bgmVolume);
+            bgmVolume,
+            sfxVolume);
     }
 
     public void SetLanguage(
@@ -222,6 +237,32 @@ public sealed class SystemSettingsManager : MonoBehaviour
         NotifySettingsChanged();
     }
 
+
+    public void SetSfxVolume(
+        float value,
+        bool persistImmediately = true)
+    {
+        EnsureInitialized();
+
+        float sanitized = SanitizeVolume(value);
+
+        if (Mathf.Approximately(sfxVolume, sanitized))
+        {
+            return;
+        }
+
+        sfxVolume = sanitized;
+        PlayerPrefs.SetFloat(KeySfxVolume, sfxVolume);
+
+        if (persistImmediately)
+        {
+            Flush();
+        }
+
+        SfxVolumeChanged?.Invoke(sfxVolume);
+        NotifySettingsChanged();
+    }
+
     public void ResetToDefaults(bool persistImmediately = true)
     {
         EnsureInitialized();
@@ -236,10 +277,15 @@ public sealed class SystemSettingsManager : MonoBehaviour
             !Mathf.Approximately(
                 bgmVolume,
                 DefaultBgmVolume);
+        bool sfxChanged =
+            !Mathf.Approximately(
+                sfxVolume,
+                DefaultSfxVolume);
 
         language = DefaultLanguage;
         masterVolume = DefaultMasterVolume;
         bgmVolume = DefaultBgmVolume;
+        sfxVolume = DefaultSfxVolume;
 
         WriteAllToPlayerPrefs();
 
@@ -263,7 +309,12 @@ public sealed class SystemSettingsManager : MonoBehaviour
             BgmVolumeChanged?.Invoke(bgmVolume);
         }
 
-        if (languageChanged || masterChanged || bgmChanged)
+        if (sfxChanged)
+        {
+            SfxVolumeChanged?.Invoke(sfxVolume);
+        }
+
+        if (languageChanged || masterChanged || bgmChanged || sfxChanged)
         {
             NotifySettingsChanged();
         }
@@ -275,6 +326,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
         GameLanguage previousLanguage = language;
         float previousMaster = masterVolume;
         float previousBgm = bgmVolume;
+        float previousSfx = sfxVolume;
 
         LoadFromPlayerPrefs();
         initialized = true;
@@ -299,9 +351,15 @@ public sealed class SystemSettingsManager : MonoBehaviour
             BgmVolumeChanged?.Invoke(bgmVolume);
         }
 
+        if (!Mathf.Approximately(previousSfx, sfxVolume))
+        {
+            SfxVolumeChanged?.Invoke(sfxVolume);
+        }
+
         if (previousLanguage != language ||
             !Mathf.Approximately(previousMaster, masterVolume) ||
-            !Mathf.Approximately(previousBgm, bgmVolume))
+            !Mathf.Approximately(previousBgm, bgmVolume) ||
+            !Mathf.Approximately(previousSfx, sfxVolume))
         {
             NotifySettingsChanged();
         }
@@ -341,6 +399,11 @@ public sealed class SystemSettingsManager : MonoBehaviour
                 KeyBgmVolume,
                 DefaultBgmVolume));
 
+        sfxVolume = SanitizeVolume(
+            PlayerPrefs.GetFloat(
+                KeySfxVolume,
+                DefaultSfxVolume));
+
         // Write sanitized/default values back so the stored schema is always
         // complete and future systems can rely on all current fields existing.
         WriteAllToPlayerPrefs();
@@ -352,6 +415,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
         PlayerPrefs.SetInt(KeyLanguage, (int)language);
         PlayerPrefs.SetFloat(KeyMasterVolume, masterVolume);
         PlayerPrefs.SetFloat(KeyBgmVolume, bgmVolume);
+        PlayerPrefs.SetFloat(KeySfxVolume, sfxVolume);
     }
 
     private void NotifySettingsChanged()
@@ -399,7 +463,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
             "[SYS2] Settings" +
             " | Language=" + snapshot.Language +
             " | Master=" + snapshot.MasterVolume.ToString("0.00") +
-            " | BGM=" + snapshot.BgmVolume.ToString("0.00"),
+            " | BGM=" + snapshot.BgmVolume.ToString("0.00") +
+            " | SFX=" + snapshot.SfxVolume.ToString("0.00"),
             this);
     }
 
@@ -409,13 +474,15 @@ public sealed class SystemSettingsManager : MonoBehaviour
         SetLanguage(GameLanguage.TraditionalChinese, false);
         SetMasterVolume(0.37f, false);
         SetBgmVolume(0.62f, false);
+        SetSfxVolume(0.24f, false);
         Flush();
 
         Debug.Log(
             "[SYS2] Persistence test values saved" +
             " | Language=" + language +
             " | Master=" + masterVolume.ToString("0.00") +
-            " | BGM=" + bgmVolume.ToString("0.00"),
+            " | BGM=" + bgmVolume.ToString("0.00") +
+            " | SFX=" + sfxVolume.ToString("0.00"),
             this);
     }
 
@@ -428,7 +495,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
             "[SYS2] Defaults restored" +
             " | Language=" + language +
             " | Master=" + masterVolume.ToString("0.00") +
-            " | BGM=" + bgmVolume.ToString("0.00"),
+            " | BGM=" + bgmVolume.ToString("0.00") +
+            " | SFX=" + sfxVolume.ToString("0.00"),
             this);
     }
 #endif

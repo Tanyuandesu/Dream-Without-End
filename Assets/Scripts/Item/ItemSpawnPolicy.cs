@@ -42,6 +42,8 @@ public sealed class ItemSpawnPolicy : ScriptableObject
     public int FirstGuaranteedFloor => firstGuaranteedFloor;
     public bool KeepOfferingFirstItemUntilCollected =>
         keepOfferingFirstItemUntilCollected;
+    public int MinimumFloorGapAfterCollection =>
+        minimumFloorGapAfterCollection;
 
     public float GetSpawnChance(
         int floorNumber,

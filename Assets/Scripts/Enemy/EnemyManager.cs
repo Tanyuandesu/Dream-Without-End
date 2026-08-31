@@ -511,4 +511,40 @@ public sealed class EnemyManager : MonoBehaviour
         lastDeathAttribution = DamageAttribution.Unspecified;
         ResetFloorAlertDiagnostics();
     }
+
+    /// <summary>
+    /// SYS9 restores only the cumulative player-kill count. Detailed enemy
+    /// instance/floor history intentionally starts fresh after Continue.
+    /// </summary>
+    public bool TryRestoreSavedPlayerKillCount(
+        int savedKillCount,
+        out string error)
+    {
+        error = string.Empty;
+        RemoveDestroyedReferences();
+
+        if (savedKillCount < 0)
+        {
+            error = "Saved kill count cannot be negative.";
+            return false;
+        }
+
+        if (activeEnemies.Count > 0)
+        {
+            error =
+                "Kill count must be restored before the first floor spawns enemies.";
+            return false;
+        }
+
+        ResetRunRecord();
+        recordedPlayerDeathCount = savedKillCount;
+
+        Debug.Log(
+            "[SYS9] Player kill count restored" +
+            " | Kills=" + recordedPlayerDeathCount +
+            " | DetailedEnemyHistory=Reset",
+            this);
+
+        return true;
+    }
 }

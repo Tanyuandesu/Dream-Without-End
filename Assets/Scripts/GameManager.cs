@@ -87,10 +87,32 @@ public sealed class GameManager : MonoBehaviour
 
     private void Start()
     {
-        if (generateOnStart)
+        if (!generateOnStart)
         {
-            GenerateNextFloor();
+            return;
         }
+
+        if (RunLaunchContext.TryConsume(
+                out RunLaunchRequest launchRequest))
+        {
+            if (launchRequest.Mode == RunLaunchMode.Continue)
+            {
+                TryStartFromSave(launchRequest.SaveData);
+                return;
+            }
+
+            if (launchRequest.Mode == RunLaunchMode.NewGame)
+            {
+                PrepareNewRunState();
+                GenerateFloor(1);
+                return;
+            }
+        }
+
+        // Direct GameScene launches used by development/testing keep the
+        // historical behaviour: start a fresh floor 1 run.
+        PrepareNewRunState();
+        GenerateFloor(1);
     }
 
     private void Update()
@@ -152,6 +174,223 @@ public sealed class GameManager : MonoBehaviour
 
         GenerateFloor(targetFloorNumber);
     }
+
+    /// <summary>
+    /// SYS9 gameplay-to-save mapping. Saves only the lightweight run contract:
+    /// floor, current HP, collected stable Item IDs and cumulative player kills.
+    /// Generated world state is deliberately excluded.
+    /// </summary>
+    public bool TrySaveCurrentRun(out string error)
+    {
+        error = string.Empty;
+        CacheComponents();
+
+        if (CurrentFloor < 1)
+        {
+            error = "No generated floor is available to save.";
+            return false;
+        }
+
+        if (playerManager == null ||
+            playerManager.CurrentHealth == null)
+        {
+            error = "Player Health is not available.";
+            return false;
+        }
+
+        float currentHp =
+            playerManager.CurrentHealth.CurrentHealth;
+
+        if (currentHp <= 0f)
+        {
+            error = "A defeated player cannot create a run save.";
+            return false;
+        }
+
+        if (itemManager == null || enemyManager == null)
+        {
+            error = "ItemManager or EnemyManager is not available.";
+            return false;
+        }
+
+        ItemProgressSnapshot itemSnapshot =
+            itemManager.CreateProgressSnapshot();
+        List<string> itemIds = new List<string>();
+
+        IReadOnlyList<ItemDefinition> collected =
+            itemSnapshot.CollectedItems;
+
+        for (int i = 0; i < collected.Count; i++)
+        {
+            ItemDefinition definition = collected[i];
+
+            if (definition == null ||
+                string.IsNullOrWhiteSpace(definition.ItemId))
+            {
+                error =
+                    "Collected item progress contains an invalid Item ID.";
+                return false;
+            }
+
+            itemIds.Add(definition.ItemId);
+        }
+
+        SaveGameData data = new SaveGameData(
+            CurrentFloor,
+            currentHp,
+            itemIds,
+            enemyManager.RecordedPlayerDeathCount);
+
+        bool success =
+            SaveSystemManager.GetOrCreate().TryWriteSave(
+                data,
+                out error);
+
+        if (success)
+        {
+            Debug.Log(
+                "[SYS9] Current run saved" +
+                " | Floor=" + CurrentFloor +
+                " | HP=" + currentHp.ToString("0.##") +
+                " | Items=" + itemIds.Count +
+                " | Kills=" +
+                enemyManager.RecordedPlayerDeathCount,
+                this);
+        }
+
+        return success;
+    }
+
+    private void PrepareNewRunState()
+    {
+        CacheComponents();
+
+        if (enemyManager != null)
+        {
+            enemyManager.ResetRunRecord();
+        }
+    }
+
+    private bool TryStartFromSave(SaveGameData data)
+    {
+        CacheComponents();
+
+        if (data == null)
+        {
+            return FailContinueStartup(
+                "Continue launch data is null.");
+        }
+
+        if (playerManager == null ||
+            enemyManager == null ||
+            itemManager == null)
+        {
+            return FailContinueStartup(
+                "PlayerManager, EnemyManager or ItemManager is missing.");
+        }
+
+        Debug.Log(
+            "[SYS9] Continue startup" +
+            " | TargetFloor=" + data.floorIndex +
+            " | SavedHP=" + data.currentHP.ToString("0.##") +
+            " | SavedItems=" + data.collectedItemIds.Count +
+            " | SavedKills=" + data.killCount +
+            " | WorldSnapshot=Reset",
+            this);
+
+        if (!itemManager.TryRestoreRunProgress(
+                data.collectedItemIds,
+                data.floorIndex,
+                out string itemError))
+        {
+            return FailContinueStartup(
+                "Item restore failed: " + itemError);
+        }
+
+        if (!enemyManager.TryRestoreSavedPlayerKillCount(
+                data.killCount,
+                out string enemyError))
+        {
+            return FailContinueStartup(
+                "Kill-count restore failed: " + enemyError);
+        }
+
+        if (!GenerateFloor(data.floorIndex))
+        {
+            return FailContinueStartup(
+                "Requested floor generation failed.");
+        }
+
+        if (!playerManager.TryRestoreCurrentHealth(
+                data.currentHP,
+                out string healthError))
+        {
+            return FailContinueStartup(
+                "Player HP restore failed: " + healthError);
+        }
+
+        Debug.Log(
+            "[SYS9] Continue restore complete" +
+            " | Floor=" + CurrentFloor +
+            " | HP=" +
+            playerManager.CurrentHealth.CurrentHealth.ToString("0.##") +
+            " | Items=" + itemManager.CollectedItemCount +
+            " | Kills=" + enemyManager.RecordedPlayerDeathCount +
+            " | GeneratedOnce=True",
+            this);
+
+        return true;
+    }
+
+    private bool FailContinueStartup(string reason)
+    {
+        Debug.LogError(
+            "[SYS9] Continue restore failed | " + reason,
+            this);
+
+        GameFlowManager flow = GameFlowManager.Instance;
+
+        if (flow != null)
+        {
+            flow.ReturnToTitle();
+        }
+
+        return false;
+    }
+
+#if UNITY_EDITOR
+    [ContextMenu("SYS9 Debug/Save Current Run")]
+    private void DebugSaveCurrentRun()
+    {
+        bool success = TrySaveCurrentRun(out string error);
+
+        Debug.Log(
+            "[SYS9] Debug save current run=" + success +
+            (success ? string.Empty : " | Error=" + error),
+            this);
+    }
+
+    [ContextMenu("SYS9 Debug/Print Live Save State")]
+    private void DebugPrintLiveSaveState()
+    {
+        CacheComponents();
+
+        Debug.Log(
+            "[SYS9] Live state" +
+            " | Floor=" + CurrentFloor +
+            " | HP=" +
+            (playerManager != null && playerManager.CurrentHealth != null
+                ? playerManager.CurrentHealth.CurrentHealth.ToString("0.##")
+                : "<none>") +
+            " | Items=" +
+            (itemManager != null ? itemManager.CollectedItemCount : -1) +
+            " | Kills=" +
+            (enemyManager != null
+                ? enemyManager.RecordedPlayerDeathCount
+                : -1),
+            this);
+    }
+#endif
 
     private bool GenerateFloor(int targetFloorNumber)
     {
@@ -1028,7 +1267,9 @@ public sealed class GameManager : MonoBehaviour
             "Run Enemies: " +
             combatSnapshot.EligibleSpawnedCount +
             "    Player Kills: " +
-            combatSnapshot.PlayerKillCount +
+            (enemyManager != null
+                ? enemyManager.RecordedPlayerDeathCount
+                : 0) +
             "    Other Deaths: " +
             combatSnapshot.OtherDeathCount +
             "    Survived Floors: " +

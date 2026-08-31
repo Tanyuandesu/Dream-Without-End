@@ -89,6 +89,78 @@
       "english": "BGM Volume",
       "japanese": "BGM音量",
       "traditionalChinese": "背景音樂音量"
+    },
+    {
+      "key": "UI_SETTINGS_SFX_VOLUME",
+      "english": "SFX Volume",
+      "japanese": "効果音量",
+      "traditionalChinese": "音效音量"
+    },
+    {
+      "key": "UI_PAUSE_TITLE",
+      "english": "Paused",
+      "japanese": "ポーズ",
+      "traditionalChinese": "暫停"
+    },
+    {
+      "key": "UI_PAUSE_BACK",
+      "english": "Back",
+      "japanese": "戻る",
+      "traditionalChinese": "返回"
+    },
+    {
+      "key": "UI_PAUSE_RETURN_CONFIRM",
+      "english": "Return to the title screen?",
+      "japanese": "タイトル画面に戻りますか？",
+      "traditionalChinese": "返回標題畫面？"
+    },
+    {
+      "key": "UI_LANGUAGE_ENGLISH",
+      "english": "English",
+      "japanese": "英語",
+      "traditionalChinese": "英文"
+    },
+    {
+      "key": "UI_LANGUAGE_JAPANESE",
+      "english": "Japanese",
+      "japanese": "日本語",
+      "traditionalChinese": "日文"
+    },
+    {
+      "key": "UI_LANGUAGE_TRADITIONAL_CHINESE",
+      "english": "Traditional Chinese",
+      "japanese": "繁体字中国語",
+      "traditionalChinese": "繁體中文"
+    },
+    {
+      "key": "UI_ITEMS_EMPTY",
+      "english": "No items acquired yet.",
+      "japanese": "まだアイテムを入手していません。",
+      "traditionalChinese": "尚未取得任何道具。"
+    },
+    {
+      "key": "UI_ITEMS_NO_SELECTION",
+      "english": "Select an acquired item to view its details.",
+      "japanese": "入手済みのアイテムを選択すると詳細を確認できます。",
+      "traditionalChinese": "選擇已取得的道具以查看詳細說明。"
+    },
+    {
+      "key": "UI_PAUSE_SAVE",
+      "english": "Save Game",
+      "japanese": "セーブ",
+      "traditionalChinese": "儲存遊戲"
+    },
+    {
+      "key": "UI_SAVE_SUCCESS",
+      "english": "Game saved.",
+      "japanese": "セーブしました。",
+      "traditionalChinese": "遊戲已儲存。"
+    },
+    {
+      "key": "UI_SAVE_FAILED",
+      "english": "Save failed.",
+      "japanese": "セーブに失敗しました。",
+      "traditionalChinese": "儲存失敗。"
     }
   ]
 }
