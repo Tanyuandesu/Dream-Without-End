@@ -262,14 +262,25 @@ public sealed class ItemSpawner : MonoBehaviour
             return instance;
         }
 
-        return dungeonRenderer.CreateSquare(
-            "Item_" + definition.ItemId,
-            spawnCell,
-            definition.FallbackColor,
-            floorRoot,
-            fallbackSortingOrder,
-            false,
-            definition.FallbackVisualScale);
+        GameObject fallbackPickup =
+            dungeonRenderer.CreateSquare(
+                "Item_" + definition.ItemId,
+                spawnCell,
+                new Color(0.86f, 0.89f, 0.94f, 1f),
+                floorRoot,
+                fallbackSortingOrder,
+                false,
+                definition.FallbackVisualScale);
+
+        BreathingPickupVisual pulse =
+            fallbackPickup.GetComponent<BreathingPickupVisual>();
+
+        if (pulse == null)
+        {
+            pulse = fallbackPickup.AddComponent<BreathingPickupVisual>();
+        }
+
+        return fallbackPickup;
     }
 
     private static void EnsurePickupCollider(

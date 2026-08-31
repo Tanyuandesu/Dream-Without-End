@@ -1,15 +1,15 @@
 using UnityEngine;
 
 /// <summary>
-/// 只負責建立出口物件。
+/// 只负责建立出口物件。
+/// VIS-HF1：把纯色方块出口替换成简易向下梯子，提升可读性。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class ExitSpawner : MonoBehaviour
 {
-    [Header("出口")]
-    [SerializeField] private float visualScale = 0.75f;
-    [SerializeField] private Color exitColor =
-        new Color(1f, 0.78f, 0.12f);
+    [Header("出口可读性热修")]
+    [SerializeField] private int exitSortingOrder = 10;
+    [SerializeField] private float triggerRadius = 0.42f;
 
     public GameObject Spawn(
         Vector2Int exitCell,
@@ -17,20 +17,22 @@ public sealed class ExitSpawner : MonoBehaviour
         DungeonRenderer dungeonRenderer,
         GameManager gameManager)
     {
-        GameObject exit = dungeonRenderer.CreateSquare(
-            "Exit",
-            exitCell,
-            exitColor,
-            dungeonRoot,
-            10,
-            false,
-            visualScale);
+        GameObject exit = new GameObject("Exit");
+        exit.transform.SetParent(dungeonRoot, false);
+        exit.transform.position =
+            dungeonRenderer.CellToWorld(exitCell);
+
+        PixelLadderExitVisual visual =
+            exit.AddComponent<PixelLadderExitVisual>();
+        visual.Build(
+            dungeonRenderer.CellSize,
+            exitSortingOrder);
 
         CircleCollider2D trigger =
             exit.AddComponent<CircleCollider2D>();
 
         trigger.isTrigger = true;
-        trigger.radius = 0.5f;
+        trigger.radius = Mathf.Max(0.1f, triggerRadius);
 
         RuntimeDungeonExit exitController =
             exit.AddComponent<RuntimeDungeonExit>();
