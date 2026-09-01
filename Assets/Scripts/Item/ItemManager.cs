@@ -10,9 +10,7 @@ using UnityEngine;
 /// </summary>
 [DisallowMultipleComponent]
 [RequireComponent(typeof(ItemSpawner))]
-public sealed class ItemManager :
-    MonoBehaviour,
-    IItemProgressionReader
+public sealed class ItemManager : MonoBehaviour
 {
     [Header("資料")]
     [SerializeField] private ItemCatalog itemCatalog;

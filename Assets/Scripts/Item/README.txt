@@ -16,7 +16,6 @@
 - ItemCatalog.cs
 - ItemSpawnPolicy.cs
 - ItemProgressSnapshot.cs
-- IItemProgressionReader.cs
 - RunProgressionContext.cs
 - ItemCollectedEvent.cs
 - ItemSpawnDecision.cs
@@ -124,15 +123,12 @@ Keep Offering First Item Until Collected = 開啟
 6. Debug Overlay 的 Items 與 Progression Score 增加。
 7. 後續樓層按概率刷新第二至第七件不同色道具。
 8. 七件都設為 Unique In Run，同一局不會重複抽到。
-9. 收集第七件後，Required Value = 7 應觸發結局。
+9. 收集第七件後，當前樓層繼續存在；下一次普通出口進入 Final Legacy 迷宮。
 10. 在同一層按 R，刷新結果不會重新擲骰。
 
 七、配置防呆
 ------------
-DemoVictoryController 啟動時，會把目前的：
-- Condition Mode
-- Required Value
-
+GameManager 準備進入 Final Legacy 前，會把核心道具需求數
 交給 ItemManager 與 ItemCatalog 聯合檢查。
 
 會檢查：

@@ -1102,7 +1102,6 @@ GameObject:
   m_Component:
   - component: {fileID: 4463555983257805410}
   - component: {fileID: 8428463316630497373}
-  - component: {fileID: 5319560688466658398}
   m_Layer: 0
   m_Name: ProcRoom_Medium_13x09
   m_TagString: Untagged
@@ -1168,25 +1167,6 @@ MonoBehaviour:
   drawDoorCells: 1
   drawCellOverrides: 1
   drawSpawnPoints: 1
---- !u!114 &5319560688466658398
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5045287306827424330}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c5d2fb0c5173f594e95c9d41f72bf63c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  previewSeed: 12345
-  useNorth: 1
-  useEast: 1
-  useSouth: 1
-  useWest: 1
-  drawBlockedCells: 1
-  drawReservedMainRoute: 1
 --- !u!1 &5920300623906782045
 GameObject:
   m_ObjectHideFlags: 0

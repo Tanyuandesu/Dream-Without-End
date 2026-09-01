@@ -5,7 +5,7 @@ using UnityEngine;
 /// 玩家、敵人與將來可破壞物件共用的生命組件。
 /// </summary>
 [DisallowMultipleComponent]
-public sealed class Health : MonoBehaviour, IDamageable
+public sealed class Health : MonoBehaviour
 {
     [Header("目前生命")]
     [SerializeField] private float maxHealth = 100f;

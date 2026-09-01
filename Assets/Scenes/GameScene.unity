@@ -5535,8 +5535,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2a8325c344094724b89b6c6e8974f27f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  exitSortingOrder: 10
-  triggerRadius: 0.42
+  visualScale: 0.75
+  exitColor: {r: 1, g: 0.78, b: 0.12, a: 1}
 --- !u!114 &621725373
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5573,9 +5573,6 @@ MonoBehaviour:
   layeredCorridorOpenPrimaryRoute: 1
   layeredCorridorOpenJunctions: 1
   r82InjectNoLegalPlayerCellForControlledFailure: 0
-  p10132EnableFidelityAwareRoomMix: 1
-  p10132ProceduralMediumTargetRatio: 0.43
-  p10132PreferUniqueProceduralMediumFamilies: 1
   roomGraphMinimumExtraConnections: 1
   roomGraphMaximumExtraConnections: 2
   socketCorridorWidth: 2
@@ -5591,11 +5588,6 @@ MonoBehaviour:
   templateFirstMaximumPlacementAttemptsPerRoom: 100
   templateFirstMaximumFloorAttempts: 20
   templateFirstUseAllowedQuarterTurns: 1
-  p1012R2BEnableMedium13x9AuthorityCommit: 1
-  p1012B2EnableSmall08x06AuthorityCommit: 1
-  p1012B3EnableWide18x07AuthorityCommit: 1
-  p1012B4EnableTall09x16AuthorityCommit: 1
-  p1012R2BDrawDebugObstacles: 1
 --- !u!114 &621725374
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5616,8 +5608,6 @@ MonoBehaviour:
   enemyManager: {fileID: 908851852}
   itemManager: {fileID: 619913693}
   generateOnStart: 1
-  finalLegacyGenerationFloor: 1
-  finalLegacyRequiredCoreItemCount: 7
   r84RejectNextFloorCommitForControlledFailure: 0
   showDebugOverlay: 1
 --- !u!4 &621725375
@@ -5632,7 +5622,7 @@ Transform:
   m_LocalPosition: {x: 0.7200894, y: 0.42743215, z: -0.009202534}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &621725376
