@@ -64,6 +64,11 @@ public sealed class GameplaySessionController : MonoBehaviour
             return;
         }
 
+        if (flowManager == null)
+        {
+            flowManager = GameFlowManager.GetOrCreate();
+        }
+
         if (!flowManager.TryBeginGameOver())
         {
             return;

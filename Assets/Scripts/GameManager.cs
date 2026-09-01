@@ -36,6 +36,19 @@ public sealed class GameManager : MonoBehaviour
     [Header("啟動")]
     [SerializeField] private bool generateOnStart = true;
 
+    [Header("SYS12 Final Legacy")]
+    [Tooltip(
+        "收集全部核心道具后使用旧 ProceduralCells 生成器建立终局迷宫。" +
+        "这个数字只作为旧生成器的 floorNumber 输入，不代表普通楼层进度。")]
+    [Min(1)]
+    [SerializeField] private int finalLegacyGenerationFloor = 1;
+
+    [Tooltip(
+        "收集到这个数量后，普通迷宫的下一次出口不再进入下一层，" +
+        "而是切换到 Final Legacy 1.0 迷宫。")]
+    [Min(1)]
+    [SerializeField] private int finalLegacyRequiredCoreItemCount = 7;
+
     [Header("R8.4 受控失败测试")]
     [Tooltip(
         "只用于 R8.4：已有楼层时，拒绝下一层的事务提交，" +
@@ -56,8 +69,16 @@ public sealed class GameManager : MonoBehaviour
         DungeonRenderMode.ProceduralCells;
     private string generationModeStatus = "尚未生成";
     private int r84TransactionSerial;
+    private bool isFinalLegacyMode;
 
     public int CurrentFloor { get; private set; }
+
+    /// <summary>
+    /// SYS12-B1: true only after all core items have been collected and the
+    /// current GameScene has been replaced by the original ProceduralCells
+    /// labyrinth. GameFlow remains Playing so the player can still walk.
+    /// </summary>
+    public bool IsFinalLegacyMode => isFinalLegacyMode;
 
     public int CurrentSeed =>
         currentLayout != null
@@ -122,6 +143,12 @@ public sealed class GameManager : MonoBehaviour
             return;
         }
 
+        // The final legacy maze is a destination, not another rerollable floor.
+        if (isFinalLegacyMode)
+        {
+            return;
+        }
+
         if (Input.GetKeyDown(KeyCode.R))
         {
             RegenerateCurrentFloor();
@@ -135,18 +162,44 @@ public sealed class GameManager : MonoBehaviour
             return;
         }
 
+        if (isFinalLegacyMode)
+        {
+            TryFinishFinalLegacyRun();
+            return;
+        }
+
+        // SYS12-B1.1: completing the collection does not tear the current
+        // floor away immediately. The player's next deliberate exit is the
+        // portal into the original 1.0 maze.
+        if (IsFinalLegacyReady())
+        {
+            TryEnterFinalLegacyMode();
+            return;
+        }
+
         TryGenerateNextFloor();
     }
 
     /// <summary>
     /// R8.4 出口入口。失败时返回 false，让当前出口重新待命。
-    /// 原有 PlayerReachedExit() 与 GenerateNextFloor() 均继续保留。
+    /// SYS12-B1.1：普通迷宫集齐核心道具后，下一次出口进入
+    /// Final Legacy；Final Legacy 自己的出口才结束本局。
     /// </summary>
     public bool TryPlayerReachedExit()
     {
         if (!GameFlowManager.AllowsGameplayInput)
         {
             return false;
+        }
+
+        if (isFinalLegacyMode)
+        {
+            return TryFinishFinalLegacyRun();
+        }
+
+        if (IsFinalLegacyReady())
+        {
+            return TryEnterFinalLegacyMode();
         }
 
         return TryGenerateNextFloor();
@@ -159,20 +212,176 @@ public sealed class GameManager : MonoBehaviour
 
     private bool TryGenerateNextFloor()
     {
+        if (isFinalLegacyMode)
+        {
+            return false;
+        }
+
+        // Protect every legacy/secondary caller of GenerateNextFloor as well,
+        // so no path can skip the final 1.0 maze after collection is complete.
+        if (IsFinalLegacyReady())
+        {
+            return TryEnterFinalLegacyMode();
+        }
+
         int targetFloorNumber =
             Mathf.Max(1, CurrentFloor + 1);
 
         return GenerateFloor(targetFloorNumber);
     }
 
+    private bool IsFinalLegacyReady()
+    {
+        CacheComponents();
+
+        return !isFinalLegacyMode &&
+               itemManager != null &&
+               itemManager.CollectedItemCount >=
+                   Mathf.Max(1, finalLegacyRequiredCoreItemCount);
+    }
+
     public void RegenerateCurrentFloor()
     {
+        if (isFinalLegacyMode)
+        {
+            return;
+        }
+
         int targetFloorNumber =
             CurrentFloor > 0
                 ? CurrentFloor
                 : 1;
 
         GenerateFloor(targetFloorNumber);
+    }
+
+    /// <summary>
+    /// SYS12-B1 authoritative transition into the "return to origin" maze.
+    /// It deliberately reuses DungeonGenerator.Generate(), the old
+    /// ProceduralCells path. The current player is preserved, while enemies,
+    /// item spawning and normal floor progression are removed.
+    /// </summary>
+    public bool TryEnterFinalLegacyMode()
+    {
+        if (isFinalLegacyMode || isGenerating)
+        {
+            return false;
+        }
+
+        if (!GameFlowManager.AllowsGameplayInput)
+        {
+            return false;
+        }
+
+        CacheComponents();
+
+        if (itemManager != null)
+        {
+            itemManager.ValidateProgressionConfiguration(
+                Mathf.Max(1, finalLegacyRequiredCoreItemCount),
+                false);
+        }
+
+        if (dungeonGenerator == null ||
+            dungeonRenderer == null ||
+            exitSpawner == null ||
+            cameraManager == null ||
+            playerManager == null ||
+            enemyManager == null ||
+            itemManager == null)
+        {
+            Debug.LogError(
+                "[SYS12-B1] Final Legacy transition failed: required " +
+                "GameManager components are missing.",
+                this);
+            return false;
+        }
+
+        DungeonLayout legacyLayout;
+        string failureReason;
+
+        if (!TryGenerateProceduralLayout(
+                Mathf.Max(1, finalLegacyGenerationFloor),
+                out legacyLayout,
+                out failureReason))
+        {
+            Debug.LogError(
+                "[SYS12-B1] Final Legacy generation failed.\n" +
+                failureReason,
+                this);
+            return false;
+        }
+
+        isGenerating = true;
+
+        try
+        {
+            // RemoveCurrentFloor is also the single existing authority for
+            // clearing current enemies and the active pickup.
+            RemoveCurrentFloor();
+
+            isFinalLegacyMode = true;
+            currentLayout = legacyLayout;
+            requestedGenerationMode =
+                DungeonRenderMode.ProceduralCells;
+            effectiveGenerationMode =
+                DungeonRenderMode.ProceduralCells;
+            generationModeStatus = "Final Legacy / 1.0";
+
+            currentDungeonRoot =
+                new GameObject("GeneratedDungeon_FinalLegacy")
+                    .transform;
+
+            currentDungeonRoot.SetParent(transform);
+            currentDungeonRoot.localPosition = Vector3.zero;
+
+            // Even if DungeonRenderer is configured for Hybrid at scene level,
+            // a non-hybrid DungeonLayout explicitly falls back to the old
+            // ProceduralCells renderer.
+            dungeonRenderer.Render(
+                currentLayout,
+                currentDungeonRoot);
+
+            Transform player =
+                playerManager.PlacePlayer(
+                    currentLayout.StartCell,
+                    dungeonRenderer);
+
+            if (player == null)
+            {
+                Debug.LogError(
+                    "[SYS12-B1] Final Legacy player placement failed.",
+                    this);
+                return false;
+            }
+
+            // The existing RuntimeDungeonExit calls back into this GameManager.
+            // PlayerReachedExit() now routes this particular mode to Ending.
+            exitSpawner.Spawn(
+                currentLayout.ExitCell,
+                currentDungeonRoot,
+                dungeonRenderer,
+                this);
+
+            cameraManager.SetTarget(player);
+
+            Debug.Log(
+                "[SYS12-B1] Final Legacy Mode entered" +
+                " | SourceFloor=" + CurrentFloor +
+                " | LegacySeed=" + currentLayout.Seed +
+                " | Rooms=" + currentLayout.Rooms.Count +
+                " | Enemies=0" +
+                " | ItemSpawn=Off" +
+                " | Reroll=Off" +
+                " | Exit=Ending",
+                this);
+
+            return true;
+        }
+        finally
+        {
+            isGenerating = false;
+        }
     }
 
     /// <summary>
@@ -184,6 +393,13 @@ public sealed class GameManager : MonoBehaviour
     {
         error = string.Empty;
         CacheComponents();
+
+        if (isFinalLegacyMode)
+        {
+            error =
+                "Final Legacy Mode is an ending area and cannot be saved.";
+            return false;
+        }
 
         if (CurrentFloor < 1)
         {
@@ -265,6 +481,9 @@ public sealed class GameManager : MonoBehaviour
     {
         CacheComponents();
 
+        isFinalLegacyMode = false;
+        EndingRunContext.Clear();
+
         if (enemyManager != null)
         {
             enemyManager.ResetRunRecord();
@@ -274,6 +493,9 @@ public sealed class GameManager : MonoBehaviour
     private bool TryStartFromSave(SaveGameData data)
     {
         CacheComponents();
+
+        isFinalLegacyMode = false;
+        EndingRunContext.Clear();
 
         if (data == null)
         {
@@ -342,6 +564,79 @@ public sealed class GameManager : MonoBehaviour
         return true;
     }
 
+    private bool TryFinishFinalLegacyRun()
+    {
+        if (!isFinalLegacyMode || isGenerating)
+        {
+            return false;
+        }
+
+        CacheComponents();
+
+        if (playerManager == null ||
+            playerManager.CurrentHealth == null ||
+            itemManager == null ||
+            enemyManager == null)
+        {
+            Debug.LogError(
+                "[SYS12-B2] Cannot resolve ending: run state is incomplete.",
+                this);
+            return false;
+        }
+
+        List<string> itemIds = new List<string>();
+        IReadOnlyList<ItemDefinition> collected =
+            itemManager.CreateProgressSnapshot().CollectedItems;
+
+        for (int i = 0; i < collected.Count; i++)
+        {
+            ItemDefinition definition = collected[i];
+
+            if (definition != null &&
+                !string.IsNullOrWhiteSpace(definition.ItemId))
+            {
+                itemIds.Add(definition.ItemId);
+            }
+        }
+
+        EndingRunData endingData =
+            new EndingRunData(
+                CurrentFloor,
+                playerManager.CurrentHealth.CurrentHealth,
+                itemIds,
+                enemyManager.RecordedPlayerDeathCount);
+
+        endingData.endingId =
+            EndingResolver.Resolve(endingData);
+
+        EndingRunContext.Queue(endingData);
+
+        GameFlowManager flow =
+            GameFlowManager.GetOrCreate();
+
+        if (!flow.TryBeginVictory())
+        {
+            EndingRunContext.Clear();
+
+            Debug.LogWarning(
+                "[SYS12-B2] Final exit reached but Victory state " +
+                "could not begin.",
+                this);
+            return false;
+        }
+
+        Debug.Log(
+            "[SYS12-B2] Final exit reached" +
+            " | EndingId=" + endingData.endingId +
+            " | HP=" + endingData.finalHP.ToString("0.##") +
+            " | Items=" + endingData.collectedItemIds.Count +
+            " | Kills=" + endingData.killCount,
+            this);
+
+        flow.LoadEnding();
+        return true;
+    }
+
     private bool FailContinueStartup(string reason)
     {
         Debug.LogError(
@@ -387,7 +682,20 @@ public sealed class GameManager : MonoBehaviour
             " | Kills=" +
             (enemyManager != null
                 ? enemyManager.RecordedPlayerDeathCount
-                : -1),
+                : -1) +
+            " | FinalLegacy=" + isFinalLegacyMode,
+            this);
+    }
+
+    [ContextMenu("SYS12 Debug/Enter Final Legacy Mode")]
+    private void DebugEnterFinalLegacyMode()
+    {
+        bool success = TryEnterFinalLegacyMode();
+
+        Debug.Log(
+            "[SYS12] Debug enter Final Legacy=" + success +
+            " | CurrentFloor=" + CurrentFloor +
+            " | IsFinalLegacy=" + isFinalLegacyMode,
             this);
     }
 #endif
@@ -1211,7 +1519,7 @@ public sealed class GameManager : MonoBehaviour
                 : 0;
 
         float nextItemChance =
-            itemManager != null
+            !isFinalLegacyMode && itemManager != null
                 ? itemManager.GetSpawnChanceForFloor(
                     CurrentFloor + 1)
                 : 0f;
@@ -1227,11 +1535,15 @@ public sealed class GameManager : MonoBehaviour
 
         GUI.Label(
             new Rect(24f, 22f, 540f, 24f),
-            "WASD / 方向鍵：移動    R：重生成本層");
+            isFinalLegacyMode
+                ? "FINAL LEGACY：WASD / 方向鍵：移動    R：停用"
+                : "WASD / 方向鍵：移動    R：重生成本層");
 
         GUI.Label(
             new Rect(24f, 48f, 540f, 24f),
-            "黃色方塊：下一層    核心道具：碰觸拾取");
+            isFinalLegacyMode
+                ? "出口：進入結局    敵人/道具刷新：停用"
+                : "黃色方塊：下一層    核心道具：碰觸拾取");
 
         GUI.Label(
             new Rect(24f, 74f, 540f, 24f),
