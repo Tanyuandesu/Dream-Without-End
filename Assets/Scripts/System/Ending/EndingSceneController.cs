@@ -136,7 +136,9 @@ public sealed class EndingSceneController : MonoBehaviour
     private void ResolveDialogueBridge()
     {
         MonoBehaviour[] behaviours =
-            FindObjectsOfType<MonoBehaviour>(true);
+            FindObjectsByType<MonoBehaviour>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID);
 
         for (int i = 0; i < behaviours.Length; i++)
         {
@@ -566,7 +568,7 @@ public static class EndingSceneBootstrap
 
         EndingSceneController existing =
             UnityEngine.Object
-                .FindObjectOfType<EndingSceneController>();
+                .FindFirstObjectByType<EndingSceneController>();
 
         if (existing != null)
         {

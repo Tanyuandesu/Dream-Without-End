@@ -37,7 +37,7 @@ public sealed class DreamBackgroundProgressionController : MonoBehaviour
 
     private void Reset()
     {
-        itemManager = FindObjectOfType<ItemManager>();
+        itemManager = FindFirstObjectByType<ItemManager>();
         fogLayers = GetComponentsInChildren<DreamFogDrift>(true);
 
         ParticleSystem[] particles =
@@ -51,7 +51,7 @@ public sealed class DreamBackgroundProgressionController : MonoBehaviour
     {
         if (itemManager == null)
         {
-            itemManager = FindObjectOfType<ItemManager>();
+            itemManager = FindFirstObjectByType<ItemManager>();
         }
 
         CacheBaseValues();

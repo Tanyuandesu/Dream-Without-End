@@ -98,7 +98,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
         }
 
         SystemSettingsManager existing =
-            FindObjectOfType<SystemSettingsManager>();
+            FindFirstObjectByType<SystemSettingsManager>();
 
         if (existing != null)
         {

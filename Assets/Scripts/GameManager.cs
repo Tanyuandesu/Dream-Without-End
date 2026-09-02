@@ -386,7 +386,7 @@ public sealed class GameManager : MonoBehaviour
 
     /// <summary>
     /// SYS9 gameplay-to-save mapping. Saves only the lightweight run contract:
-    /// floor, current HP, collected stable Item IDs and cumulative player kills.
+    /// floor, current HP, collected stable Item IDs and cumulative EnemyRunRecord facts.
     /// Generated world state is deliberately excluded.
     /// </summary>
     public bool TrySaveCurrentRun(out string error)
@@ -451,11 +451,14 @@ public sealed class GameManager : MonoBehaviour
             itemIds.Add(definition.ItemId);
         }
 
+        EnemyRunRecordSnapshot enemySnapshot =
+            enemyManager.CurrentRunSnapshot;
+
         SaveGameData data = new SaveGameData(
             CurrentFloor,
             currentHp,
             itemIds,
-            enemyManager.RecordedPlayerDeathCount);
+            enemySnapshot);
 
         bool success =
             SaveSystemManager.GetOrCreate().TryWriteSave(
@@ -469,8 +472,9 @@ public sealed class GameManager : MonoBehaviour
                 " | Floor=" + CurrentFloor +
                 " | HP=" + currentHp.ToString("0.##") +
                 " | Items=" + itemIds.Count +
-                " | Kills=" +
-                enemyManager.RecordedPlayerDeathCount,
+                " | RunEnemies=" +
+                enemySnapshot.EligibleSpawnedCount +
+                " | Kills=" + enemySnapshot.PlayerKillCount,
                 this);
         }
 
@@ -511,13 +515,22 @@ public sealed class GameManager : MonoBehaviour
                 "PlayerManager, EnemyManager or ItemManager is missing.");
         }
 
+        if (data.enemyRun == null)
+        {
+            return FailContinueStartup(
+                "Enemy run save data is missing.");
+        }
+
         Debug.Log(
             "[SYS9] Continue startup" +
             " | TargetFloor=" + data.floorIndex +
             " | SavedHP=" + data.currentHP.ToString("0.##") +
             " | SavedItems=" + data.collectedItemIds.Count +
+            " | SavedRunEnemies=" +
+            data.enemyRun.eligibleSpawnedCount +
             " | SavedKills=" + data.killCount +
-            " | WorldSnapshot=Reset",
+            " | WorldSnapshot=Regenerate" +
+            " | RunHistory=Restore",
             this);
 
         if (!itemManager.TryRestoreRunProgress(
@@ -529,12 +542,12 @@ public sealed class GameManager : MonoBehaviour
                 "Item restore failed: " + itemError);
         }
 
-        if (!enemyManager.TryRestoreSavedPlayerKillCount(
-                data.killCount,
+        if (!enemyManager.TryRestoreSavedRunRecord(
+                data.enemyRun.CreateSnapshot(),
                 out string enemyError))
         {
             return FailContinueStartup(
-                "Kill-count restore failed: " + enemyError);
+                "Enemy run history restore failed: " + enemyError);
         }
 
         if (!GenerateFloor(data.floorIndex))
@@ -551,13 +564,18 @@ public sealed class GameManager : MonoBehaviour
                 "Player HP restore failed: " + healthError);
         }
 
+        EnemyRunRecordSnapshot restoredEnemySnapshot =
+            enemyManager.CurrentRunSnapshot;
+
         Debug.Log(
-            "[SYS9] Continue restore complete" +
+            "[SYS13-Bugfix1] Continue restore complete" +
             " | Floor=" + CurrentFloor +
             " | HP=" +
             playerManager.CurrentHealth.CurrentHealth.ToString("0.##") +
             " | Items=" + itemManager.CollectedItemCount +
-            " | Kills=" + enemyManager.RecordedPlayerDeathCount +
+            " | RunEnemies=" +
+            restoredEnemySnapshot.EligibleSpawnedCount +
+            " | Kills=" + restoredEnemySnapshot.PlayerKillCount +
             " | GeneratedOnce=True",
             this);
 
@@ -599,12 +617,15 @@ public sealed class GameManager : MonoBehaviour
             }
         }
 
+        EnemyRunRecordSnapshot endingEnemySnapshot =
+            enemyManager.CurrentRunSnapshot;
+
         EndingRunData endingData =
             new EndingRunData(
                 CurrentFloor,
                 playerManager.CurrentHealth.CurrentHealth,
                 itemIds,
-                enemyManager.RecordedPlayerDeathCount);
+                endingEnemySnapshot);
 
         endingData.endingId =
             EndingResolver.Resolve(endingData);
@@ -630,6 +651,8 @@ public sealed class GameManager : MonoBehaviour
             " | EndingId=" + endingData.endingId +
             " | HP=" + endingData.finalHP.ToString("0.##") +
             " | Items=" + endingData.collectedItemIds.Count +
+            " | RunEnemies=" +
+            endingData.eligibleEnemySpawnCount +
             " | Kills=" + endingData.killCount,
             this);
 
@@ -670,6 +693,11 @@ public sealed class GameManager : MonoBehaviour
     {
         CacheComponents();
 
+        EnemyRunRecordSnapshot enemySnapshot =
+            enemyManager != null
+                ? enemyManager.CurrentRunSnapshot
+                : new EnemyRunRecordSnapshot();
+
         Debug.Log(
             "[SYS9] Live state" +
             " | Floor=" + CurrentFloor +
@@ -679,10 +707,8 @@ public sealed class GameManager : MonoBehaviour
                 : "<none>") +
             " | Items=" +
             (itemManager != null ? itemManager.CollectedItemCount : -1) +
-            " | Kills=" +
-            (enemyManager != null
-                ? enemyManager.RecordedPlayerDeathCount
-                : -1) +
+            " | RunEnemies=" + enemySnapshot.EligibleSpawnedCount +
+            " | Kills=" + enemySnapshot.PlayerKillCount +
             " | FinalLegacy=" + isFinalLegacyMode,
             this);
     }
@@ -1579,12 +1605,10 @@ public sealed class GameManager : MonoBehaviour
             "Run Enemies: " +
             combatSnapshot.EligibleSpawnedCount +
             "    Player Kills: " +
-            (enemyManager != null
-                ? enemyManager.RecordedPlayerDeathCount
-                : 0) +
+            combatSnapshot.PlayerKillCount +
             "    Other Deaths: " +
             combatSnapshot.OtherDeathCount +
-            "    Survived Floors: " +
+            "    Survived Enemies: " +
             combatSnapshot.SurvivedFloorCount);
     }
 }

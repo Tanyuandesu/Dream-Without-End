@@ -42,7 +42,7 @@ public sealed class DreamBackgroundFinaleBurst : MonoBehaviour
 
     private void Reset()
     {
-        itemManager = FindObjectOfType<ItemManager>();
+        itemManager = FindFirstObjectByType<ItemManager>();
 
         if (backgroundBase == null)
         {
@@ -73,7 +73,7 @@ public sealed class DreamBackgroundFinaleBurst : MonoBehaviour
     {
         if (itemManager == null)
         {
-            itemManager = FindObjectOfType<ItemManager>();
+            itemManager = FindFirstObjectByType<ItemManager>();
         }
     }
 

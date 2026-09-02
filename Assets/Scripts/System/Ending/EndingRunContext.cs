@@ -14,13 +14,23 @@ public sealed class EndingRunData
     public int sourceFloor;
     public float finalHP;
     public List<string> collectedItemIds;
-    public int killCount;
+
+    public int allEnemySpawnCount;
+    public int eligibleEnemySpawnCount;
+    public int playerKillCount;
+    public int otherEnemyDeathCount;
+    public int survivedEnemyCount;
+    public int removedWithoutDeathCount;
+    public int activeEnemyCount;
+
+    // Compatibility read surface. Enemy run history is authoritative.
+    public int killCount => playerKillCount;
 
     public EndingRunData(
         int sourceFloor,
         float finalHP,
         IEnumerable<string> collectedItemIds,
-        int killCount)
+        EnemyRunRecordSnapshot enemySnapshot)
     {
         this.sourceFloor = Math.Max(1, sourceFloor);
         this.finalHP = finalHP;
@@ -28,18 +38,61 @@ public sealed class EndingRunData
             collectedItemIds != null
                 ? new List<string>(collectedItemIds)
                 : new List<string>();
-        this.killCount = Math.Max(0, killCount);
+
+        allEnemySpawnCount = Math.Max(0, enemySnapshot.AllSpawnedCount);
+        eligibleEnemySpawnCount =
+            Math.Max(0, enemySnapshot.EligibleSpawnedCount);
+        playerKillCount = Math.Max(0, enemySnapshot.PlayerKillCount);
+        otherEnemyDeathCount = Math.Max(0, enemySnapshot.OtherDeathCount);
+        survivedEnemyCount = Math.Max(0, enemySnapshot.SurvivedFloorCount);
+        removedWithoutDeathCount =
+            Math.Max(0, enemySnapshot.RemovedWithoutDeathCount);
+        activeEnemyCount = Math.Max(0, enemySnapshot.ActiveCount);
         endingId = string.Empty;
+    }
+
+    /// <summary>
+    /// Compatibility overload for direct/test callers that only possess a
+    /// kill count. Runtime completion uses the full snapshot overload.
+    /// </summary>
+    public EndingRunData(
+        int sourceFloor,
+        float finalHP,
+        IEnumerable<string> collectedItemIds,
+        int killCount)
+        : this(
+            sourceFloor,
+            finalHP,
+            collectedItemIds,
+            new EnemyRunRecordSnapshot(
+                Math.Max(0, killCount),
+                Math.Max(0, killCount),
+                Math.Max(0, killCount),
+                0,
+                0,
+                0,
+                0))
+    {
     }
 
     public EndingRunData Clone()
     {
+        EnemyRunRecordSnapshot enemySnapshot =
+            new EnemyRunRecordSnapshot(
+                allEnemySpawnCount,
+                eligibleEnemySpawnCount,
+                playerKillCount,
+                otherEnemyDeathCount,
+                survivedEnemyCount,
+                removedWithoutDeathCount,
+                activeEnemyCount);
+
         EndingRunData clone =
             new EndingRunData(
                 sourceFloor,
                 finalHP,
                 collectedItemIds,
-                killCount);
+                enemySnapshot);
 
         clone.endingId = endingId;
         return clone;
@@ -52,7 +105,7 @@ public sealed class EndingRunData
                 1,
                 1f,
                 Array.Empty<string>(),
-                0);
+                new EnemyRunRecordSnapshot());
 
         data.endingId = EndingResolver.DefaultEndingId;
         return data;

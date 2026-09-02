@@ -244,28 +244,8 @@ public sealed class GameFlowManager : MonoBehaviour
             this);
     }
 
-    // SYS1 verification hooks. These do not ship in player builds and let the
-    // current stage be tested before the real Pause UI exists in SYS5.
-    [ContextMenu("SYS1 Debug/Pause Game")]
-    private void DebugPauseGame()
-    {
-        Debug.Log(
-            "[SYS1] Pause request: " + TryPauseGame() +
-            " | State=" + State +
-            " | timeScale=" + Time.timeScale,
-            this);
-    }
-
-    [ContextMenu("SYS1 Debug/Resume Game")]
-    private void DebugResumeGame()
-    {
-        Debug.Log(
-            "[SYS1] Resume request: " + TryResumeGame() +
-            " | State=" + State +
-            " | timeScale=" + Time.timeScale,
-            this);
-    }
-
+    // Editor-only dialogue gate probes remain useful until the future NPC/dialogue
+    // system provides its own authoring and regression surface.
     [ContextMenu("SYS1 Debug/Begin Dialogue Gate")]
     private void DebugBeginDialogue()
     {
@@ -291,14 +271,38 @@ public sealed class GameFlowManager : MonoBehaviour
     {
         Scene activeScene = SceneManager.GetActiveScene();
 
-        int flowCount = FindObjectsOfType<GameFlowManager>(true).Length;
-        int settingsCount = FindObjectsOfType<SystemSettingsManager>(true).Length;
-        int localizationCount = FindObjectsOfType<LocalizationManager>(true).Length;
-        int audioCount = FindObjectsOfType<AudioManager>(true).Length;
-        int saveCount = FindObjectsOfType<SaveSystemManager>(true).Length;
-        int pauseCount = FindObjectsOfType<PauseMenuController>(true).Length;
-        int gameManagerCount = FindObjectsOfType<GameManager>(true).Length;
-        int titleControllerCount = FindObjectsOfType<TitleScreenController>(true).Length;
+        int flowCount =
+            FindObjectsByType<GameFlowManager>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int settingsCount =
+            FindObjectsByType<SystemSettingsManager>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int localizationCount =
+            FindObjectsByType<LocalizationManager>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int audioCount =
+            FindObjectsByType<AudioManager>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int saveCount =
+            FindObjectsByType<SaveSystemManager>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int pauseCount =
+            FindObjectsByType<PauseMenuController>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int gameManagerCount =
+            FindObjectsByType<GameManager>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
+        int titleControllerCount =
+            FindObjectsByType<TitleScreenController>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID).Length;
 
         bool titleSceneClean =
             activeScene.name != titleSceneName ||

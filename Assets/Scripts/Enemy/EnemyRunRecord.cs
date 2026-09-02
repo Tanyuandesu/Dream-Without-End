@@ -138,6 +138,7 @@ public sealed class EnemyFloorCombatRecord
     }
 }
 
+[Serializable]
 public struct EnemyRunRecordSnapshot
 {
     public int AllSpawnedCount { get; }
@@ -182,14 +183,25 @@ public struct EnemyRunRecordSnapshot
 }
 
 /// <summary>
-/// In-memory record for one complete run. It deliberately does not save to
-/// disk yet, but exposes stable queries for future ending logic.
+/// Authoritative combat-history record for one complete run. Detailed live
+/// entries stay in memory; Continue may restore earlier history as compact
+/// cumulative totals while preserving the same snapshot semantics.
 /// </summary>
 [Serializable]
 public sealed class EnemyRunRecord
 {
     [SerializeField] private List<EnemyFloorCombatRecord> floors =
         new List<EnemyFloorCombatRecord>();
+
+    // Continue compacts pre-load detailed entries into one authoritative
+    // historical baseline. Newly generated floors continue accumulating in
+    // floors, so CreateSnapshot always returns the complete run history.
+    [SerializeField] private int carriedAllSpawnedCount;
+    [SerializeField] private int carriedEligibleSpawnedCount;
+    [SerializeField] private int carriedPlayerKillCount;
+    [SerializeField] private int carriedOtherDeathCount;
+    [SerializeField] private int carriedSurvivedFloorCount;
+    [SerializeField] private int carriedRemovedWithoutDeathCount;
 
     [NonSerialized]
     private Dictionary<string, EnemyCombatRecordEntry> entryLookup;
@@ -328,12 +340,12 @@ public sealed class EnemyRunRecord
 
     public EnemyRunRecordSnapshot CreateSnapshot()
     {
-        int allSpawned = 0;
-        int eligibleSpawned = 0;
-        int playerKills = 0;
-        int otherDeaths = 0;
-        int survived = 0;
-        int missing = 0;
+        int allSpawned = carriedAllSpawnedCount;
+        int eligibleSpawned = carriedEligibleSpawnedCount;
+        int playerKills = carriedPlayerKillCount;
+        int otherDeaths = carriedOtherDeathCount;
+        int survived = carriedSurvivedFloorCount;
+        int missing = carriedRemovedWithoutDeathCount;
         int active = 0;
 
         if (floors != null)
@@ -406,6 +418,50 @@ public sealed class EnemyRunRecord
             active);
     }
 
+    /// <summary>
+    /// Restores the durable factual history of an earlier run without
+    /// restoring enemy instances or a generated floor. Enemies that were
+    /// still Active at the save point are counted as SurvivedFloor on
+    /// Continue because those exact instances are abandoned when the world
+    /// snapshot is regenerated. Their original spawns remain in the ending
+    /// denominator and therefore cannot be erased by loading.
+    /// </summary>
+    public bool TryRestorePersistentHistory(
+        EnemyRunRecordSnapshot snapshot,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (!TryValidateSnapshot(snapshot, out error))
+        {
+            return false;
+        }
+
+        if (floors == null)
+        {
+            floors = new List<EnemyFloorCombatRecord>();
+        }
+        else
+        {
+            floors.Clear();
+        }
+
+        carriedAllSpawnedCount = snapshot.AllSpawnedCount;
+        carriedEligibleSpawnedCount = snapshot.EligibleSpawnedCount;
+        carriedPlayerKillCount = snapshot.PlayerKillCount;
+        carriedOtherDeathCount = snapshot.OtherDeathCount;
+        carriedSurvivedFloorCount =
+            snapshot.SurvivedFloorCount + snapshot.ActiveCount;
+        carriedRemovedWithoutDeathCount =
+            snapshot.RemovedWithoutDeathCount;
+
+        entryLookup = new Dictionary<string, EnemyCombatRecordEntry>(
+            StringComparer.Ordinal);
+        currentFloor = null;
+        Changed?.Invoke();
+        return true;
+    }
+
     public void ResetRun()
     {
         if (floors == null)
@@ -417,9 +473,58 @@ public sealed class EnemyRunRecord
             floors.Clear();
         }
 
+        carriedAllSpawnedCount = 0;
+        carriedEligibleSpawnedCount = 0;
+        carriedPlayerKillCount = 0;
+        carriedOtherDeathCount = 0;
+        carriedSurvivedFloorCount = 0;
+        carriedRemovedWithoutDeathCount = 0;
+
         entryLookup = new Dictionary<string, EnemyCombatRecordEntry>();
         currentFloor = null;
         Changed?.Invoke();
+    }
+
+    private static bool TryValidateSnapshot(
+        EnemyRunRecordSnapshot snapshot,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (snapshot.AllSpawnedCount < 0 ||
+            snapshot.EligibleSpawnedCount < 0 ||
+            snapshot.PlayerKillCount < 0 ||
+            snapshot.OtherDeathCount < 0 ||
+            snapshot.SurvivedFloorCount < 0 ||
+            snapshot.RemovedWithoutDeathCount < 0 ||
+            snapshot.ActiveCount < 0)
+        {
+            error = "Enemy run history contains a negative count.";
+            return false;
+        }
+
+        if (snapshot.AllSpawnedCount < snapshot.EligibleSpawnedCount)
+        {
+            error =
+                "Eligible enemy count cannot exceed all spawned enemies.";
+            return false;
+        }
+
+        long classifiedEligible =
+            (long)snapshot.PlayerKillCount +
+            snapshot.OtherDeathCount +
+            snapshot.SurvivedFloorCount +
+            snapshot.RemovedWithoutDeathCount +
+            snapshot.ActiveCount;
+
+        if (classifiedEligible != snapshot.EligibleSpawnedCount)
+        {
+            error =
+                "Eligible enemy history is internally inconsistent.";
+            return false;
+        }
+
+        return true;
     }
 
     private bool TryGetOrRegister(

@@ -70,7 +70,7 @@ public sealed class LocalizationManager : MonoBehaviour
         }
 
         LocalizationManager existing =
-            FindObjectOfType<LocalizationManager>();
+            FindFirstObjectByType<LocalizationManager>();
 
         if (existing != null)
         {

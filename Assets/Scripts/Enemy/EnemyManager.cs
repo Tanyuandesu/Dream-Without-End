@@ -513,38 +513,55 @@ public sealed class EnemyManager : MonoBehaviour
     }
 
     /// <summary>
-    /// SYS9 restores only the cumulative player-kill count. Detailed enemy
-    /// instance/floor history intentionally starts fresh after Continue.
+    /// Restores the cumulative EnemyRunRecord facts before Continue generates
+    /// its first replacement floor. Detailed pre-load instance history is
+    /// compacted inside EnemyRunRecord; the run totals remain authoritative.
     /// </summary>
-    public bool TryRestoreSavedPlayerKillCount(
-        int savedKillCount,
+    public bool TryRestoreSavedRunRecord(
+        EnemyRunRecordSnapshot savedSnapshot,
         out string error)
     {
         error = string.Empty;
         RemoveDestroyedReferences();
 
-        if (savedKillCount < 0)
-        {
-            error = "Saved kill count cannot be negative.";
-            return false;
-        }
-
         if (activeEnemies.Count > 0)
         {
             error =
-                "Kill count must be restored before the first floor spawns enemies.";
+                "Enemy run history must be restored before the first floor spawns enemies.";
             return false;
         }
 
         ResetRunRecord();
-        recordedPlayerDeathCount = savedKillCount;
+
+        if (runRecord == null)
+        {
+            runRecord = new EnemyRunRecord();
+        }
+
+        if (!runRecord.TryRestorePersistentHistory(
+                savedSnapshot,
+                out error))
+        {
+            return false;
+        }
+
+        EnemyRunRecordSnapshot restored =
+            runRecord.CreateSnapshot();
+
+        recordedPlayerDeathCount = restored.PlayerKillCount;
+        recordedOtherDeathCount = restored.OtherDeathCount;
 
         Debug.Log(
-            "[SYS9] Player kill count restored" +
-            " | Kills=" + recordedPlayerDeathCount +
-            " | DetailedEnemyHistory=Reset",
+            "[SYS13-Bugfix1] Enemy run history restored" +
+            " | RunEnemies=" + restored.EligibleSpawnedCount +
+            " | PlayerKills=" + restored.PlayerKillCount +
+            " | OtherDeaths=" + restored.OtherDeathCount +
+            " | Survived=" + restored.SurvivedFloorCount +
+            " | SavedActiveMigratedToSurvived=" +
+            savedSnapshot.ActiveCount,
             this);
 
         return true;
     }
+
 }

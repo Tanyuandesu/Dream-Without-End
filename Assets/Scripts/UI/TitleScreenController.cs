@@ -190,7 +190,9 @@ public sealed class TitleScreenController : MonoBehaviour
     private void ResolveExistingTitleButtons()
     {
         Button[] buttons =
-            FindObjectsOfType<Button>(true);
+            FindObjectsByType<Button>(
+                FindObjectsInactive.Include,
+                FindObjectsSortMode.InstanceID);
 
         for (int i = 0; i < buttons.Length; i++)
         {
@@ -283,7 +285,7 @@ public sealed class TitleScreenController : MonoBehaviour
 
         if (canvas == null)
         {
-            canvas = FindObjectOfType<Canvas>();
+            canvas = FindFirstObjectByType<Canvas>();
         }
 
         if (canvas == null)

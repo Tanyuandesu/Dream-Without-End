@@ -23,14 +23,14 @@ public sealed class GameplaySessionController : MonoBehaviour
 
     private void Reset()
     {
-        playerManager = FindObjectOfType<PlayerManager>();
+        playerManager = FindFirstObjectByType<PlayerManager>();
     }
 
     private void Awake()
     {
         if (playerManager == null)
         {
-            playerManager = FindObjectOfType<PlayerManager>();
+            playerManager = FindFirstObjectByType<PlayerManager>();
         }
 
         flowManager = GameFlowManager.GetOrCreate();

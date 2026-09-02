@@ -15,7 +15,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class SaveSystemManager : MonoBehaviour
 {
-    public const int CurrentSaveVersion = 1;
+    public const int CurrentSaveVersion = 2;
 
     private const string SaveDirectoryName = "DreamDungeon";
     private const string SaveFileName = "run_save.json";
@@ -53,7 +53,7 @@ public sealed class SaveSystemManager : MonoBehaviour
         }
 
         SaveSystemManager existing =
-            FindObjectOfType<SaveSystemManager>();
+            FindFirstObjectByType<SaveSystemManager>();
 
         if (existing != null)
         {
@@ -278,9 +278,11 @@ public sealed class SaveSystemManager : MonoBehaviour
             return false;
         }
 
-        if (source.killCount < 0)
+        if (!TryValidateEnemyRunData(
+                source.enemyRun,
+                out string enemyRunError))
         {
-            error = "Kill count cannot be negative.";
+            error = "Enemy run history is invalid: " + enemyRunError;
             return false;
         }
 
@@ -293,10 +295,59 @@ public sealed class SaveSystemManager : MonoBehaviour
                 source.floorIndex,
                 source.currentHP,
                 itemIds,
-                source.killCount)
+                source.enemyRun.CreateSnapshot())
             {
                 saveVersion = CurrentSaveVersion
             };
+
+        return true;
+    }
+
+
+    private static bool TryValidateEnemyRunData(
+        EnemyRunSaveData source,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (source == null)
+        {
+            error = "EnemyRunSaveData is null.";
+            return false;
+        }
+
+        if (source.allSpawnedCount < 0 ||
+            source.eligibleSpawnedCount < 0 ||
+            source.playerKillCount < 0 ||
+            source.otherDeathCount < 0 ||
+            source.survivedFloorCount < 0 ||
+            source.removedWithoutDeathCount < 0 ||
+            source.activeCount < 0)
+        {
+            error = "Enemy run counts cannot be negative.";
+            return false;
+        }
+
+        if (source.allSpawnedCount < source.eligibleSpawnedCount)
+        {
+            error =
+                "Eligible spawned count cannot exceed all spawned count.";
+            return false;
+        }
+
+        long classifiedEligible =
+            (long)source.playerKillCount +
+            source.otherDeathCount +
+            source.survivedFloorCount +
+            source.removedWithoutDeathCount +
+            source.activeCount;
+
+        if (classifiedEligible != source.eligibleSpawnedCount)
+        {
+            error =
+                "Eligible enemy classifications must equal eligible spawned count.";
+            return false;
+        }
 
         return true;
     }
@@ -389,6 +440,7 @@ public sealed class SaveSystemManager : MonoBehaviour
             " | Floor=4" +
             " | HP=63" +
             " | Items=first_memory,third_memory" +
+            " | RunEnemies=27" +
             " | Kills=27" +
             " | Path=" + SaveFilePath +
             (success ? string.Empty : " | Error=" + error),
@@ -418,6 +470,7 @@ public sealed class SaveSystemManager : MonoBehaviour
             " | HP=" + data.currentHP.ToString("0.##") +
             " | Items=" +
             string.Join(",", data.collectedItemIds) +
+            " | RunEnemies=" + data.enemyRun.eligibleSpawnedCount +
             " | Kills=" + data.killCount,
             this);
     }

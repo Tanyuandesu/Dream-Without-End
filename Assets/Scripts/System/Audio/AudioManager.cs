@@ -111,7 +111,7 @@ public sealed class AudioManager : MonoBehaviour
             return Instance;
         }
 
-        AudioManager existing = FindObjectOfType<AudioManager>();
+        AudioManager existing = FindFirstObjectByType<AudioManager>();
         if (existing != null)
         {
             Instance = existing;

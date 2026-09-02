@@ -48,7 +48,7 @@ public sealed class PlayerCircularHealthUI : MonoBehaviour
     private void Reset()
     {
         playerManager =
-            FindObjectOfType<PlayerManager>();
+            FindFirstObjectByType<PlayerManager>();
 
         healthRingImage =
             GetComponentInChildren<Image>(true);
@@ -105,7 +105,7 @@ public sealed class PlayerCircularHealthUI : MonoBehaviour
         if (playerManager == null)
         {
             playerManager =
-                FindObjectOfType<PlayerManager>();
+                FindFirstObjectByType<PlayerManager>();
         }
 
         if (playerManager == null ||
