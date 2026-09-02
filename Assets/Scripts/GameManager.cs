@@ -33,6 +33,9 @@ public sealed class GameManager : MonoBehaviour
     [Header("獨立道具系統")]
     [SerializeField] private ItemManager itemManager;
 
+    [Header("獨立 NPC 系統")]
+    [SerializeField] private NpcManager npcManager;
+
     [Header("啟動")]
     [SerializeField] private bool generateOnStart = true;
 
@@ -288,7 +291,8 @@ public sealed class GameManager : MonoBehaviour
             cameraManager == null ||
             playerManager == null ||
             enemyManager == null ||
-            itemManager == null)
+            itemManager == null ||
+            npcManager == null)
         {
             Debug.LogError(
                 "[SYS12-B1] Final Legacy transition failed: required " +
@@ -363,6 +367,21 @@ public sealed class GameManager : MonoBehaviour
                 dungeonRenderer,
                 this);
 
+            HashSet<Vector2Int> runtimeSpawnReservations =
+                new HashSet<Vector2Int>
+                {
+                    currentLayout.StartCell,
+                    currentLayout.ExitCell
+                };
+
+            npcManager.SetupFinalLegacy(
+                currentLayout,
+                currentDungeonRoot,
+                dungeonRenderer,
+                player,
+                itemManager,
+                runtimeSpawnReservations);
+
             cameraManager.SetTarget(player);
 
             Debug.Log(
@@ -423,9 +442,11 @@ public sealed class GameManager : MonoBehaviour
             return false;
         }
 
-        if (itemManager == null || enemyManager == null)
+        if (itemManager == null ||
+            enemyManager == null ||
+            npcManager == null)
         {
-            error = "ItemManager or EnemyManager is not available.";
+            error = "ItemManager, EnemyManager or NpcManager is not available.";
             return false;
         }
 
@@ -458,7 +479,8 @@ public sealed class GameManager : MonoBehaviour
             CurrentFloor,
             currentHp,
             itemIds,
-            enemySnapshot);
+            enemySnapshot,
+            npcManager.FirstEncounterCompleted);
 
         bool success =
             SaveSystemManager.GetOrCreate().TryWriteSave(
@@ -474,7 +496,9 @@ public sealed class GameManager : MonoBehaviour
                 " | Items=" + itemIds.Count +
                 " | RunEnemies=" +
                 enemySnapshot.EligibleSpawnedCount +
-                " | Kills=" + enemySnapshot.PlayerKillCount,
+                " | Kills=" + enemySnapshot.PlayerKillCount +
+                " | NpcFirstEncounter=" +
+                npcManager.FirstEncounterCompleted,
                 this);
         }
 
@@ -491,6 +515,11 @@ public sealed class GameManager : MonoBehaviour
         if (enemyManager != null)
         {
             enemyManager.ResetRunRecord();
+        }
+
+        if (npcManager != null)
+        {
+            npcManager.ResetRunState();
         }
     }
 
@@ -509,10 +538,11 @@ public sealed class GameManager : MonoBehaviour
 
         if (playerManager == null ||
             enemyManager == null ||
-            itemManager == null)
+            itemManager == null ||
+            npcManager == null)
         {
             return FailContinueStartup(
-                "PlayerManager, EnemyManager or ItemManager is missing.");
+                "PlayerManager, EnemyManager, ItemManager or NpcManager is missing.");
         }
 
         if (data.enemyRun == null)
@@ -529,6 +559,8 @@ public sealed class GameManager : MonoBehaviour
             " | SavedRunEnemies=" +
             data.enemyRun.eligibleSpawnedCount +
             " | SavedKills=" + data.killCount +
+            " | NpcFirstEncounter=" +
+            data.npcFirstEncounterCompleted +
             " | WorldSnapshot=Regenerate" +
             " | RunHistory=Restore",
             this);
@@ -549,6 +581,9 @@ public sealed class GameManager : MonoBehaviour
             return FailContinueStartup(
                 "Enemy run history restore failed: " + enemyError);
         }
+
+        npcManager.RestoreRunState(
+            data.npcFirstEncounterCompleted);
 
         if (!GenerateFloor(data.floorIndex))
         {
@@ -576,6 +611,8 @@ public sealed class GameManager : MonoBehaviour
             " | RunEnemies=" +
             restoredEnemySnapshot.EligibleSpawnedCount +
             " | Kills=" + restoredEnemySnapshot.PlayerKillCount +
+            " | NpcFirstEncounter=" +
+            npcManager.FirstEncounterCompleted +
             " | GeneratedOnce=True",
             this);
 
@@ -583,6 +620,24 @@ public sealed class GameManager : MonoBehaviour
     }
 
     private bool TryFinishFinalLegacyRun()
+    {
+        return TryFinishFinalLegacyRun(string.Empty);
+    }
+
+    public bool TryFinishFinalLegacyRunFromNpc(
+        string endingEventFlag)
+    {
+        if (string.IsNullOrWhiteSpace(endingEventFlag))
+        {
+            return false;
+        }
+
+        return TryFinishFinalLegacyRun(
+            endingEventFlag.Trim());
+    }
+
+    private bool TryFinishFinalLegacyRun(
+        string endingEventFlag)
     {
         if (!isFinalLegacyMode || isGenerating)
         {
@@ -627,6 +682,8 @@ public sealed class GameManager : MonoBehaviour
                 itemIds,
                 endingEnemySnapshot);
 
+        endingData.AddEventFlag(endingEventFlag);
+
         endingData.endingId =
             EndingResolver.Resolve(endingData);
 
@@ -653,7 +710,11 @@ public sealed class GameManager : MonoBehaviour
             " | Items=" + endingData.collectedItemIds.Count +
             " | RunEnemies=" +
             endingData.eligibleEnemySpawnCount +
-            " | Kills=" + endingData.killCount,
+            " | Kills=" + endingData.killCount +
+            " | EventFlag=" +
+            (string.IsNullOrWhiteSpace(endingEventFlag)
+                ? "None"
+                : endingEventFlag),
             this);
 
         flow.LoadEnding();
@@ -737,10 +798,11 @@ public sealed class GameManager : MonoBehaviour
 
         if (playerManager == null ||
             enemyManager == null ||
-            itemManager == null)
+            itemManager == null ||
+            npcManager == null)
         {
             Debug.LogError(
-                "GameManager：PlayerManager、EnemyManager 或 ItemManager 未設定。");
+                "GameManager：PlayerManager、EnemyManager、ItemManager 或 NpcManager 未設定。");
 
             return false;
         }
@@ -903,6 +965,18 @@ public sealed class GameManager : MonoBehaviour
                 dungeonRenderer,
                 runtimeSpawnReservations);
 
+            // SYS14 order is Item -> NPC -> Enemy. The first encounter reads
+            // the item's actual resolved room/cell, and the NPC then reserves
+            // its own cell before enemy spawning.
+            npcManager.SetupFloor(
+                CurrentFloor,
+                currentLayout,
+                currentDungeonRoot,
+                dungeonRenderer,
+                player,
+                itemManager,
+                runtimeSpawnReservations);
+
             enemyManager.SetupFloor(
                 CurrentFloor,
                 currentLayout,
@@ -910,6 +984,9 @@ public sealed class GameManager : MonoBehaviour
                 dungeonRenderer,
                 player,
                 runtimeSpawnReservations);
+
+            npcManager.IgnoreEnemyCollisions(
+                enemyManager.ActiveEnemies);
 
             cameraManager.SetTarget(player);
 
@@ -1469,6 +1546,11 @@ public sealed class GameManager : MonoBehaviour
 
     private void RemoveCurrentFloor()
     {
+        if (npcManager != null)
+        {
+            npcManager.ClearFloor();
+        }
+
         if (enemyManager != null)
         {
             enemyManager.ClearFloor();
@@ -1519,6 +1601,28 @@ public sealed class GameManager : MonoBehaviour
         {
             itemManager =
                 GetComponentInChildren<ItemManager>(true);
+        }
+
+        if (npcManager == null)
+        {
+            npcManager =
+                GetComponentInChildren<NpcManager>(true);
+        }
+
+        // No manual scene surgery is required for SYS14. In edit mode we do
+        // not mutate the scene; at runtime GameManager owns this lightweight
+        // persistent-across-floors manager just like Item/Enemy managers.
+        if (npcManager == null && Application.isPlaying)
+        {
+            GameObject npcSystem =
+                new GameObject("NpcSystem_Runtime");
+            npcSystem.transform.SetParent(transform, false);
+            npcManager = npcSystem.AddComponent<NpcManager>();
+        }
+
+        if (npcManager != null)
+        {
+            npcManager.BindGameManager(this);
         }
     }
 

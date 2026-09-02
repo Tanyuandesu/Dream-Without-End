@@ -1,0 +1,58 @@
+{
+  "entries": [
+    {
+      "key": "NPC_UI_TALK",
+      "english": "E  Talk",
+      "japanese": "E  話す",
+      "traditionalChinese": "E  交談"
+    },
+    {
+      "key": "NPC_UI_CONTINUE",
+      "english": "E  Continue",
+      "japanese": "E  次へ",
+      "traditionalChinese": "E  繼續"
+    },
+    {
+      "key": "NPC_SYS14_DEV_NAME",
+      "english": "SYS14 Test NPC",
+      "japanese": "SYS14 テストNPC",
+      "traditionalChinese": "SYS14 測試NPC"
+    },
+    {
+      "key": "NPC_SYS14_FIRST_01",
+      "english": "SYS14 first-encounter test dialogue.",
+      "japanese": "SYS14 初回遭遇テスト会話です。",
+      "traditionalChinese": "SYS14 第一次遭遇測試對話。"
+    },
+    {
+      "key": "NPC_SYS14_FIRST_02",
+      "english": "After this conversation, the NPC begins wandering.",
+      "japanese": "この会話の後、NPCは巡回を始めます。",
+      "traditionalChinese": "這段對話結束後，NPC會開始巡遊。"
+    },
+    {
+      "key": "NPC_SYS14_CLASSROOM_01",
+      "english": "SYS14 room-pool test: Classroom.",
+      "japanese": "SYS14 部屋別会話テスト：教室。",
+      "traditionalChinese": "SYS14 房間對話池測試：教室。"
+    },
+    {
+      "key": "NPC_SYS14_CROSSROAD_01",
+      "english": "SYS14 room-pool test: Crossroad.",
+      "japanese": "SYS14 部屋別会話テスト：十字路。",
+      "traditionalChinese": "SYS14 房間對話池測試：十字路口。"
+    },
+    {
+      "key": "NPC_SYS14_MUSICROOM_01",
+      "english": "SYS14 room-pool test: Music Room.",
+      "japanese": "SYS14 部屋別会話テスト：音楽室。",
+      "traditionalChinese": "SYS14 房間對話池測試：音樂室。"
+    },
+    {
+      "key": "NPC_SYS14_FINAL_01",
+      "english": "SYS14 Final Legacy NPC hook test.",
+      "japanese": "SYS14 Final Legacy NPC フックのテストです。",
+      "traditionalChinese": "SYS14 Final Legacy NPC Hook 測試。"
+    }
+  ]
+}

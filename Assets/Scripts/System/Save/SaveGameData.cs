@@ -68,6 +68,10 @@ public sealed class SaveGameData
     public List<string> collectedItemIds = new List<string>();
     public EnemyRunSaveData enemyRun = new EnemyRunSaveData();
 
+    // SYS14: the only persisted NPC fact. Ordinary dialogue history, NPC
+    // position/room and wander state intentionally remain transient.
+    public bool npcFirstEncounterCompleted;
+
     // Compatibility read surface for existing debug/UI code. There is no
     // second persisted kill-count field; EnemyRunSaveData is authoritative.
     public int killCount =>
@@ -83,12 +87,14 @@ public sealed class SaveGameData
         int floorIndex,
         float currentHP,
         IEnumerable<string> collectedItemIds,
-        EnemyRunRecordSnapshot enemyRunSnapshot)
+        EnemyRunRecordSnapshot enemyRunSnapshot,
+        bool npcFirstEncounterCompleted = false)
     {
         saveVersion = SaveSystemManager.CurrentSaveVersion;
         this.floorIndex = floorIndex;
         this.currentHP = currentHP;
         enemyRun = new EnemyRunSaveData(enemyRunSnapshot);
+        this.npcFirstEncounterCompleted = npcFirstEncounterCompleted;
 
         if (collectedItemIds != null)
         {
@@ -130,7 +136,8 @@ public sealed class SaveGameData
             currentHP = currentHP,
             enemyRun = enemyRun != null
                 ? enemyRun.CreateCopy()
-                : null
+                : null,
+            npcFirstEncounterCompleted = npcFirstEncounterCompleted
         };
 
         if (collectedItemIds != null)

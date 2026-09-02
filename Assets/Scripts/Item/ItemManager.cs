@@ -44,6 +44,18 @@ public sealed class ItemManager : MonoBehaviour
     public GameObject ActivePickup =>
         activePickup;
 
+    // SYS14 runtime-only bridge. This exposes where the current floor item
+    // actually spawned without teaching NPC code how ItemSpawner chooses rooms.
+    public DungeonSpawnCellResult ActiveSpawnResult =>
+        activePickup != null && itemSpawner != null
+            ? itemSpawner.LastSpawnResult
+            : null;
+
+    public int FirstGuaranteedFloor =>
+        spawnPolicy != null
+            ? spawnPolicy.FirstGuaranteedFloor
+            : 2;
+
     public event Action<ItemCollectedEvent>
         ItemCollected;
 
@@ -273,6 +285,11 @@ public sealed class ItemManager : MonoBehaviour
     public void ClearFloor()
     {
         activePickup = null;
+
+        if (itemSpawner != null)
+        {
+            itemSpawner.ClearRuntimeSpawnResult();
+        }
     }
 
     /// <summary>

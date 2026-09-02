@@ -10,6 +10,8 @@ public sealed class ItemSpawner : MonoBehaviour
 {
     private const int R83ItemSelectionSalt = 830303;
 
+    public DungeonSpawnCellResult LastSpawnResult { get; private set; }
+
     [Header("生成位置")]
     [Min(0)]
     [SerializeField] private int minimumDistanceFromStart = 4;
@@ -60,6 +62,10 @@ public sealed class ItemSpawner : MonoBehaviour
         int floorNumber,
         ISet<Vector2Int> runtimeSpawnReservations)
     {
+        // SYS14: this is runtime-only information used by the first NPC
+        // encounter. Never persist it across floor regeneration.
+        LastSpawnResult = null;
+
         if (definition == null ||
             layout == null ||
             floorRoot == null ||
@@ -194,6 +200,8 @@ public sealed class ItemSpawner : MonoBehaviour
             itemManager,
             floorNumber);
 
+        LastSpawnResult = spawnResult;
+
         if (runtimeSpawnReservations != null)
         {
             runtimeSpawnReservations.Add(
@@ -242,6 +250,11 @@ public sealed class ItemSpawner : MonoBehaviour
             this);
 
         return pickup;
+    }
+
+    public void ClearRuntimeSpawnResult()
+    {
+        LastSpawnResult = null;
     }
 
     private GameObject CreatePickupObject(

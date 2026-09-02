@@ -10,7 +10,8 @@ public enum DreamRoomSpawnPointKind
     Player = 1,
     Exit = 2,
     Enemy = 3,
-    Item = 4
+    Item = 4,
+    Npc = 5
 }
 
 /// <summary>
@@ -103,6 +104,9 @@ public sealed class DreamRoomSpawnPoint : MonoBehaviour
 
             case DreamRoomSpawnPointKind.Item:
                 return new Color(0.45f, 1f, 0.45f);
+
+            case DreamRoomSpawnPointKind.Npc:
+                return new Color(0.72f, 0.62f, 1f);
 
             default:
                 return Color.white;

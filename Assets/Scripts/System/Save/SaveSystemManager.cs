@@ -295,7 +295,8 @@ public sealed class SaveSystemManager : MonoBehaviour
                 source.floorIndex,
                 source.currentHP,
                 itemIds,
-                source.enemyRun.CreateSnapshot())
+                source.enemyRun.CreateSnapshot(),
+                source.npcFirstEncounterCompleted)
             {
                 saveVersion = CurrentSaveVersion
             };

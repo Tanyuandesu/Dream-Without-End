@@ -14,6 +14,7 @@ public sealed class EndingRunData
     public int sourceFloor;
     public float finalHP;
     public List<string> collectedItemIds;
+    public List<string> eventFlags = new List<string>();
 
     public int allEnemySpawnCount;
     public int eligibleEnemySpawnCount;
@@ -95,7 +96,38 @@ public sealed class EndingRunData
                 enemySnapshot);
 
         clone.endingId = endingId;
+
+        if (eventFlags != null)
+        {
+            clone.eventFlags.AddRange(eventFlags);
+        }
+
         return clone;
+    }
+
+    public void AddEventFlag(string eventFlag)
+    {
+        if (string.IsNullOrWhiteSpace(eventFlag))
+        {
+            return;
+        }
+
+        string normalized = eventFlag.Trim();
+        if (!eventFlags.Contains(normalized))
+        {
+            eventFlags.Add(normalized);
+        }
+    }
+
+    public bool HasEventFlag(string eventFlag)
+    {
+        if (string.IsNullOrWhiteSpace(eventFlag) ||
+            eventFlags == null)
+        {
+            return false;
+        }
+
+        return eventFlags.Contains(eventFlag.Trim());
     }
 
     public static EndingRunData CreateDirectSceneFallback()
