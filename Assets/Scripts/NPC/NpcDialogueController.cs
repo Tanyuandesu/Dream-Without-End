@@ -286,31 +286,45 @@ public sealed class NpcDialogueController : MonoBehaviour
             new Vector2(1500f, 300f),
             new Color(0.025f, 0.03f, 0.045f, 0.94f));
 
-        nameText = CreateText(
+        // Dialogue content uses explicit, non-overlapping vertical bands.
+        // The previous stretch-offset layout let the name/body rectangles overlap,
+        // which became especially visible with CJK fonts.
+        nameText = CreateAnchoredText(
             "NpcName",
             dialogueRoot.transform,
-            30f,
+            27f,
             TextAlignmentOptions.TopLeft,
-            new Vector2(48f, -30f),
-            new Vector2(-48f, -82f));
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -28f),
+            new Vector2(-96f, 42f));
         nameText.fontStyle = FontStyles.Bold;
+        nameText.enableWordWrapping = false;
 
-        bodyText = CreateText(
+        bodyText = CreateAnchoredText(
             "DialogueText",
             dialogueRoot.transform,
-            34f,
+            32f,
             TextAlignmentOptions.TopLeft,
-            new Vector2(48f, -92f),
-            new Vector2(-48f, -60f));
+            new Vector2(0f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, -84f),
+            new Vector2(-96f, 160f));
         bodyText.enableWordWrapping = true;
 
-        continueText = CreateText(
+        continueText = CreateAnchoredText(
             "ContinueText",
             dialogueRoot.transform,
-            23f,
+            22f,
             TextAlignmentOptions.BottomRight,
-            new Vector2(48f, 22f),
-            new Vector2(-48f, 20f));
+            new Vector2(0f, 0f),
+            new Vector2(1f, 0f),
+            new Vector2(0.5f, 0f),
+            new Vector2(0f, 18f),
+            new Vector2(-96f, 36f));
+        continueText.enableWordWrapping = false;
     }
 
     private static GameObject CreatePanel(
@@ -354,6 +368,42 @@ public sealed class NpcDialogueController : MonoBehaviour
         rect.anchorMax = Vector2.one;
         rect.offsetMin = offsetMin;
         rect.offsetMax = offsetMax;
+
+        TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
+        text.fontSize = fontSize;
+        text.alignment = alignment;
+        text.color = Color.white;
+        text.raycastTarget = false;
+
+        if (TMP_Settings.defaultFontAsset != null)
+        {
+            text.font = TMP_Settings.defaultFontAsset;
+        }
+
+        ApplyFont(text);
+        return text;
+    }
+
+    private TMP_Text CreateAnchoredText(
+        string name,
+        Transform parent,
+        float fontSize,
+        TextAlignmentOptions alignment,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 anchoredPosition,
+        Vector2 sizeDelta)
+    {
+        GameObject textObject = new GameObject(name);
+        textObject.transform.SetParent(parent, false);
+
+        RectTransform rect = textObject.AddComponent<RectTransform>();
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.anchoredPosition = anchoredPosition;
+        rect.sizeDelta = sizeDelta;
 
         TextMeshProUGUI text = textObject.AddComponent<TextMeshProUGUI>();
         text.fontSize = fontSize;
