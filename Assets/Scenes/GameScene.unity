@@ -5535,8 +5535,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2a8325c344094724b89b6c6e8974f27f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  visualScale: 0.75
-  exitColor: {r: 1, g: 0.78, b: 0.12, a: 1}
+  exitSortingOrder: 10
+  triggerRadius: 0.42
 --- !u!114 &621725373
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5573,6 +5573,9 @@ MonoBehaviour:
   layeredCorridorOpenPrimaryRoute: 1
   layeredCorridorOpenJunctions: 1
   r82InjectNoLegalPlayerCellForControlledFailure: 0
+  p10132EnableFidelityAwareRoomMix: 1
+  p10132ProceduralMediumTargetRatio: 0.43
+  p10132PreferUniqueProceduralMediumFamilies: 1
   roomGraphMinimumExtraConnections: 1
   roomGraphMaximumExtraConnections: 2
   socketCorridorWidth: 2
@@ -5588,6 +5591,11 @@ MonoBehaviour:
   templateFirstMaximumPlacementAttemptsPerRoom: 100
   templateFirstMaximumFloorAttempts: 20
   templateFirstUseAllowedQuarterTurns: 1
+  p1012R2BEnableMedium13x9AuthorityCommit: 1
+  p1012B2EnableSmall08x06AuthorityCommit: 1
+  p1012B3EnableWide18x07AuthorityCommit: 1
+  p1012B4EnableTall09x16AuthorityCommit: 1
+  p1012R2BDrawDebugObstacles: 1
 --- !u!114 &621725374
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5607,7 +5615,10 @@ MonoBehaviour:
   playerManager: {fileID: 1036781217}
   enemyManager: {fileID: 908851852}
   itemManager: {fileID: 619913693}
+  npcManager: {fileID: 0}
   generateOnStart: 1
+  finalLegacyGenerationFloor: 1
+  finalLegacyRequiredCoreItemCount: 7
   r84RejectNextFloorCommitForControlledFailure: 0
   showDebugOverlay: 1
 --- !u!4 &621725375
@@ -5622,7 +5633,7 @@ Transform:
   m_LocalPosition: {x: 0.7200894, y: 0.42743215, z: -0.009202534}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
+  m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &621725376
@@ -10662,6 +10673,12 @@ MonoBehaviour:
   enemySpawner: {fileID: 908851853}
   runRecord:
     floors: []
+    carriedAllSpawnedCount: 0
+    carriedEligibleSpawnedCount: 0
+    carriedPlayerKillCount: 0
+    carriedOtherDeathCount: 0
+    carriedSurvivedFloorCount: 0
+    carriedRemovedWithoutDeathCount: 0
   registeredEnemyCount: 0
   deathNotificationCount: 0
   recordedPlayerDeathCount: 0
@@ -10826,7 +10843,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerSprite: {fileID: -1333008625247902045, guid: 83ebfee57da198640912eaa26343a350, type: 3}
-  animationProfile: {fileID: 11400000, guid: 474a8b67476848842a817c79c6055d66, type: 2}
+  animationProfile: {fileID: 11400000, guid: 80565cec521d7f64e84b4ec1f787a8fa, type: 2}
   visualWorldHeight: 0.9
   visualOffset: {x: 0, y: 0.12}
   sortingOrder: 20

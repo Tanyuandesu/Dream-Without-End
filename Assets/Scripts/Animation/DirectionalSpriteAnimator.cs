@@ -21,6 +21,11 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
     [Min(0.05f)]
     [SerializeField] private float visualWorldHeight = 1f;
 
+    [Tooltip("使用 Idle 第一帧作为固定缩放基准。开启后，64x64、88x88、92x92 等不同画布尺寸的动作不会导致角色忽大忽小。")]
+    [SerializeField] private bool lockVisualScaleToIdleReference = true;
+
+    private float referenceSpriteHeight;
+
     [Header("移动判定")]
     [Min(0.000001f)]
     [SerializeField] private float movementEpsilon = 0.0005f;
@@ -111,6 +116,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
     {
         CacheFacingSource();
         ResetTracking();
+        RefreshReferenceSpriteHeight();
         RefreshSequence(true);
     }
 
@@ -186,6 +192,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
             : CharacterFacingDirection.South;
 
         ResetTracking();
+        RefreshReferenceSpriteHeight();
         RefreshSequence(true);
     }
 
@@ -203,6 +210,7 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
             ? profile.DefaultFacing
             : CharacterFacingDirection.South;
 
+        RefreshReferenceSpriteHeight();
         ClearAction();
         RefreshSequence(true);
     }
@@ -494,6 +502,43 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         ApplyCurrentFrame();
     }
 
+    private void RefreshReferenceSpriteHeight()
+    {
+        referenceSpriteHeight = 0f;
+
+        if (profile == null)
+        {
+            return;
+        }
+
+        bool unusedFlip;
+        SpriteAnimationSequence idleSequence =
+            profile.GetSequence(
+                CharacterAnimationState.Idle,
+                profile.DefaultFacing,
+                out unusedFlip);
+
+        if (idleSequence == null ||
+            !idleSequence.HasFrames)
+        {
+            return;
+        }
+
+        Sprite referenceFrame = idleSequence.GetFrame(0);
+
+        if (referenceFrame == null)
+        {
+            return;
+        }
+
+        float height = referenceFrame.bounds.size.y;
+
+        if (height > 0.0001f)
+        {
+            referenceSpriteHeight = height;
+        }
+    }
+
     private void ApplyCurrentFrame()
     {
         if (spriteRenderer == null ||
@@ -513,7 +558,11 @@ public sealed class DirectionalSpriteAnimator : MonoBehaviour
         spriteRenderer.sprite = frame;
         spriteRenderer.flipX = activeFlipX;
 
-        float spriteHeight = frame.bounds.size.y;
+        float spriteHeight =
+            lockVisualScaleToIdleReference &&
+            referenceSpriteHeight > 0.0001f
+                ? referenceSpriteHeight
+                : frame.bounds.size.y;
 
         if (spriteHeight <= 0.0001f)
         {
