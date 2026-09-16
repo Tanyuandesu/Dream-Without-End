@@ -31,6 +31,12 @@
       "traditionalChinese": "這段對話結束後，NPC會開始巡遊。"
     },
     {
+      "key": "NPC_SYS14_FIRST_FOLLOWUP_01",
+      "english": "SYS14 first-encounter follow-up dialogue. This pool does not depend on the room.",
+      "japanese": "SYS14 初回遭遇後の再会話テストです。この会話は部屋種類に依存しません。",
+      "traditionalChinese": "SYS14 首遇後續對話測試。此對話池不依賴房間類型。"
+    },
+    {
       "key": "NPC_SYS14_CLASSROOM_01",
       "english": "SYS14 room-pool test: Classroom.",
       "japanese": "SYS14 部屋別会話テスト：教室。",

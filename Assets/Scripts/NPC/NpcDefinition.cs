@@ -203,6 +203,13 @@ public sealed class NpcDefinition : ScriptableObject
     [SerializeField] private List<NpcDialogueEntry> firstEncounterDialogues =
         new List<NpcDialogueEntry>();
 
+    [Header("第一次遭遇：同层后续对话")]
+    [Tooltip(
+        "首遇完成后，只要该首遇实例仍存在，就从这里抽选。" +
+        "该池不依赖房间类型，避免保底道具房为非高精度房时失去对话。")]
+    [SerializeField] private List<NpcDialogueEntry> firstEncounterFollowupDialogues =
+        new List<NpcDialogueEntry>();
+
     [Header("普通高精度房间对话池")]
     [SerializeField] private List<NpcRoomDialoguePool> roomDialoguePools =
         new List<NpcRoomDialoguePool>();
@@ -231,6 +238,8 @@ public sealed class NpcDefinition : ScriptableObject
     public float IdleTimeMax => Mathf.Max(IdleTimeMin, idleTimeMax);
     public IReadOnlyList<NpcDialogueEntry> FirstEncounterDialogues =>
         firstEncounterDialogues;
+    public IReadOnlyList<NpcDialogueEntry> FirstEncounterFollowupDialogues =>
+        firstEncounterFollowupDialogues;
     public IReadOnlyList<NpcRoomDialoguePool> RoomDialoguePools =>
         roomDialoguePools;
     public bool AppearsInFinalLegacy => appearsInFinalLegacy;
@@ -311,6 +320,14 @@ public sealed class NpcDefinition : ScriptableObject
                     "sys14_first",
                     "NPC_SYS14_FIRST_01",
                     "NPC_SYS14_FIRST_02")
+            };
+
+        definition.firstEncounterFollowupDialogues =
+            new List<NpcDialogueEntry>
+            {
+                NpcDialogueEntry.CreateRuntime(
+                    "sys14_first_followup",
+                    "NPC_SYS14_FIRST_FOLLOWUP_01")
             };
 
         definition.roomDialoguePools =

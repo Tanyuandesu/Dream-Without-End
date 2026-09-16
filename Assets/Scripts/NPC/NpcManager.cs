@@ -657,10 +657,16 @@ public sealed class NpcManager : MonoBehaviour
 
         IReadOnlyList<NpcDialogueEntry> source = null;
 
-        if (activeNpc.IsFirstEncounterInstance &&
-            !FirstEncounterCompleted)
+        if (activeNpc.IsFirstEncounterInstance)
         {
-            source = activeNpc.Definition.FirstEncounterDialogues;
+            // The first-encounter instance is a special lifetime state, not
+            // a normal room-bound NPC. The guaranteed item can legally spawn
+            // in a non-HighPrecision room, so after the initial conversation
+            // this same instance must keep using a room-independent follow-up
+            // pool for the rest of the floor.
+            source = !FirstEncounterCompleted
+                ? activeNpc.Definition.FirstEncounterDialogues
+                : activeNpc.Definition.FirstEncounterFollowupDialogues;
         }
         else if (activeNpc.IsFinalLegacyInstance)
         {
