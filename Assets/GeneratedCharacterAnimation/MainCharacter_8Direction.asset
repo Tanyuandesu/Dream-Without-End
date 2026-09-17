@@ -91,7 +91,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 0ff15b2ed057998408c5ffc68a8b66c6, type: 3}
       - {fileID: 21300000, guid: 4637bb6c5a48ba741af27befdcccbba0, type: 3}
       - {fileID: 21300000, guid: fda4c780363967444bfeddb981c49e92, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     southEast:
       frames:
@@ -103,7 +103,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 6de5b10901fb1f4438126125d13c3413, type: 3}
       - {fileID: 21300000, guid: 7fe5f6a73fe424a4eb04233a5a728535, type: 3}
       - {fileID: 21300000, guid: e9ba449b24e28c148844dffede627cbe, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     east:
       frames:
@@ -115,7 +115,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 64ba0e7acaeb0a74580fcdd5221ad408, type: 3}
       - {fileID: 21300000, guid: ce54c62b3b2ff1e4fa2afddb3d1231ba, type: 3}
       - {fileID: 21300000, guid: af82c1b2861ff8344905066ac30356e4, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     northEast:
       frames:
@@ -127,7 +127,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 4e7bf98ab2888e3449524057f9c321c6, type: 3}
       - {fileID: 21300000, guid: b6b0ca4eb8e1a1346ad24bb14dcb290a, type: 3}
       - {fileID: 21300000, guid: 868230965825daa43935e4bff493d4bc, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     north:
       frames:
@@ -139,7 +139,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 603acfb60da0c864e97c2834b8e51274, type: 3}
       - {fileID: 21300000, guid: 95f21e80b2e1a79449a92f370246b865, type: 3}
       - {fileID: 21300000, guid: fb72101e50b84ac448101fc31381f8ab, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     northWest:
       frames:
@@ -151,7 +151,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: a11be0829b2b7c5428f738c701d05f0b, type: 3}
       - {fileID: 21300000, guid: 9afd11b3e9b78e9428bf204209b69e25, type: 3}
       - {fileID: 21300000, guid: f60723366046a7f479a2dcca50da8951, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     west:
       frames:
@@ -163,7 +163,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 6594eaba34c08f142a02d13b7f0e7d36, type: 3}
       - {fileID: 21300000, guid: 30ff871f1a86f68418c2dfc4ed10eab9, type: 3}
       - {fileID: 21300000, guid: 45be49baa8f1b3a429c1084794747e64, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
     southWest:
       frames:
@@ -175,7 +175,7 @@ MonoBehaviour:
       - {fileID: 21300000, guid: 4e9aa226f01dce3459757269e227236e, type: 3}
       - {fileID: 21300000, guid: 1ec67d2f4c026154ea0194cf4ab34ef6, type: 3}
       - {fileID: 21300000, guid: 226ce60a85596c14d810a0004aad0ccc, type: 3}
-      framesPerSecond: 8
+      framesPerSecond: 12
       loop: 1
   attack:
     south:
