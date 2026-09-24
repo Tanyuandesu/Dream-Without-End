@@ -30,6 +30,10 @@ public sealed class PlayerCombatController : MonoBehaviour
     [SerializeField] private DirectAttackSettings directAttackSettings =
         DirectAttackSettings.CreateDefault();
 
+    [Header("CB11 HP-consuming blood shot")]
+    [SerializeField] private BloodShotSettings bloodShotSettings =
+        BloodShotSettings.CreateDefault();
+
     [Header("CB4.5 mouse and keyboard input bindings")]
     [SerializeField] private PlayerCombatInputBindings inputBindings =
         PlayerCombatInputBindings.CreateDefault();
@@ -97,6 +101,22 @@ public sealed class PlayerCombatController : MonoBehaviour
     [SerializeField] private Vector2 lastDirectAttackAimDirection = Vector2.down;
     [SerializeField] private CharacterFacingDirection lastDirectAttackFacing =
         CharacterFacingDirection.South;
+
+    [Header("CB11 blood-shot diagnostics")]
+    [SerializeField] private int issuedBloodShotCount;
+    [SerializeField] private int startedBloodShotActionCount;
+    [SerializeField] private int successfulBloodShotActionCount;
+    [SerializeField] private int bloodShotHealthRejectCount;
+    [SerializeField] private int bloodShotCooldownRejectCount;
+    [SerializeField] private int bloodShotRecoveryRejectCount;
+    [SerializeField] private float lastBloodShotStartedAt = -1f;
+    [SerializeField] private float nextBloodShotReadyAt = -1f;
+    [SerializeField] private bool directGestureActive;
+    [SerializeField] private bool directGestureConsumedByBloodShot;
+    [SerializeField] private float directGestureStartedAt = -1f;
+    [SerializeField] private bool directGestureMouseSource;
+    [SerializeField] private bool directGesturePrimarySource;
+    [SerializeField] private bool directGestureSecondarySource;
 
     [Header("CB4.5 multi-input diagnostics")]
     [SerializeField] private int mousePushInputCount;
@@ -174,6 +194,7 @@ public sealed class PlayerCombatController : MonoBehaviour
         nonlethalPushSettings;
     public DirectAttackSettings DirectAttackSettings =>
         directAttackSettings;
+    public BloodShotSettings BloodShotSettings => bloodShotSettings;
     public PlayerCombatInputBindings InputBindings => inputBindings;
     public CombatActionArbitrationSettings ActionArbitrationSettings =>
         actionArbitrationSettings;
@@ -374,11 +395,24 @@ public sealed class PlayerCombatController : MonoBehaviour
                 ? ReadNonlethalPushInputs()
                 : default(CombatInputFrame);
 
+        bool bloodShotConsumedFrame = false;
+
         CombatInputFrame directInput =
             directAttackSettings != null &&
             directAttackSettings.Enabled
-                ? ReadDirectAttackInputs()
+                ? ReadDirectAttackOrBloodShotInput(
+                    out bloodShotConsumedFrame)
                 : default(CombatInputFrame);
+
+        if (bloodShotConsumedFrame)
+        {
+            if (pushInput.AnyPressed)
+            {
+                suppressedPushInputFrameCount++;
+            }
+
+            return;
+        }
 
         ResolveCombatInputFrame(pushInput, directInput);
     }
@@ -589,9 +623,31 @@ public sealed class PlayerCombatController : MonoBehaviour
             actionArbitrationSettings != null;
     }
 
+    public void ConfigureBloodShot(BloodShotSettings newSettings)
+    {
+        bloodShotSettings = newSettings != null
+            ? newSettings.CreateRuntimeCopy()
+            : BloodShotSettings.CreateDefault();
+
+        ResetDirectGesture();
+        nextBloodShotReadyAt = -1f;
+        lastBloodShotStartedAt = -1f;
+        issuedBloodShotCount = 0;
+        startedBloodShotActionCount = 0;
+        successfulBloodShotActionCount = 0;
+        bloodShotHealthRejectCount = 0;
+        bloodShotCooldownRejectCount = 0;
+        bloodShotRecoveryRejectCount = 0;
+    }
+
     public void SetCombatInputEnabled(bool shouldEnable)
     {
         combatInputEnabled = initialized && shouldEnable;
+
+        if (!combatInputEnabled)
+        {
+            ResetDirectGesture();
+        }
     }
 
     /// <summary>
@@ -621,6 +677,10 @@ public sealed class PlayerCombatController : MonoBehaviour
         {
             issuedDirectAttackCount++;
         }
+        else if (actionKind == CombatActionKind.BloodShot)
+        {
+            issuedBloodShotCount++;
+        }
 
         return lastIssuedAttackId;
     }
@@ -645,6 +705,105 @@ public sealed class PlayerCombatController : MonoBehaviour
                 inputBindings.DirectAttackPrimaryKey),
             IsKeyPressedThisFrame(
                 inputBindings.DirectAttackSecondaryKey));
+    }
+
+    /// <summary>
+    /// When Blood Shot is enabled, B becomes a tap/hold gesture:
+    /// release before HoldThreshold -> DirectAttack; hold to threshold -> BloodShot.
+    /// The shot fires at the threshold, so the player does not need to release it.
+    /// </summary>
+    private CombatInputFrame ReadDirectAttackOrBloodShotInput(
+        out bool bloodShotConsumedFrame)
+    {
+        bloodShotConsumedFrame = false;
+
+        if (bloodShotSettings == null || !bloodShotSettings.Enabled)
+        {
+            return ReadDirectAttackInputs();
+        }
+
+        bool mouseDown = inputBindings.EnableMouseDirectAttack &&
+                         Input.GetMouseButtonDown(1);
+        bool primaryDown = IsKeyPressedThisFrame(
+            inputBindings.DirectAttackPrimaryKey);
+        bool secondaryDown = IsKeyPressedThisFrame(
+            inputBindings.DirectAttackSecondaryKey);
+
+        if (!directGestureActive &&
+            (mouseDown || primaryDown || secondaryDown))
+        {
+            directGestureActive = true;
+            directGestureConsumedByBloodShot = false;
+            directGestureStartedAt = Time.time;
+            directGestureMouseSource = mouseDown;
+            directGesturePrimarySource = primaryDown;
+            directGestureSecondarySource = secondaryDown;
+        }
+
+        if (!directGestureActive)
+        {
+            return default(CombatInputFrame);
+        }
+
+        bool anyHeld = IsAnyDirectAttackBindingHeld();
+        float heldDuration = Mathf.Max(
+            0f,
+            Time.time - directGestureStartedAt);
+
+        if (!directGestureConsumedByBloodShot &&
+            heldDuration >= bloodShotSettings.HoldThreshold &&
+            anyHeld)
+        {
+            TryPerformBloodShot();
+            directGestureConsumedByBloodShot = true;
+            bloodShotConsumedFrame = true;
+            return default(CombatInputFrame);
+        }
+
+        if (anyHeld)
+        {
+            return default(CombatInputFrame);
+        }
+
+        bool shouldFireTap =
+            !directGestureConsumedByBloodShot &&
+            heldDuration < bloodShotSettings.HoldThreshold;
+
+        CombatInputFrame tap = shouldFireTap
+            ? new CombatInputFrame(
+                directGestureMouseSource,
+                directGesturePrimarySource,
+                directGestureSecondarySource)
+            : default(CombatInputFrame);
+
+        ResetDirectGesture();
+        return tap;
+    }
+
+    private bool IsAnyDirectAttackBindingHeld()
+    {
+        bool mouseHeld = inputBindings.EnableMouseDirectAttack &&
+                         Input.GetMouseButton(1);
+
+        bool primaryHeld =
+            inputBindings.DirectAttackPrimaryKey != KeyCode.None &&
+            Input.GetKey(inputBindings.DirectAttackPrimaryKey);
+
+        bool secondaryHeld =
+            inputBindings.DirectAttackSecondaryKey != KeyCode.None &&
+            Input.GetKey(inputBindings.DirectAttackSecondaryKey);
+
+        return mouseHeld || primaryHeld || secondaryHeld;
+    }
+
+    private void ResetDirectGesture()
+    {
+        directGestureActive = false;
+        directGestureConsumedByBloodShot = false;
+        directGestureStartedAt = -1f;
+        directGestureMouseSource = false;
+        directGesturePrimarySource = false;
+        directGestureSecondarySource = false;
     }
 
     private void ResolveCombatInputFrame(
@@ -1027,6 +1186,108 @@ public sealed class PlayerCombatController : MonoBehaviour
         return false;
     }
 
+    public bool TryPerformBloodShot()
+    {
+        if (!initialized ||
+            !combatInputEnabled ||
+            bloodShotSettings == null ||
+            !bloodShotSettings.Enabled ||
+            body == null ||
+            health == null ||
+            health.IsDead)
+        {
+            return false;
+        }
+
+        float actionStartedAt = Time.time;
+
+        if (directAttackRecoveryEndsAt >= 0f &&
+            actionStartedAt < directAttackRecoveryEndsAt)
+        {
+            bloodShotRecoveryRejectCount++;
+            return false;
+        }
+
+        if (nextBloodShotReadyAt >= 0f &&
+            actionStartedAt < nextBloodShotReadyAt)
+        {
+            bloodShotCooldownRejectCount++;
+            return false;
+        }
+
+        if (health.CurrentHealth - bloodShotSettings.HealthCost <
+            bloodShotSettings.MinimumRemainingHealth)
+        {
+            bloodShotHealthRejectCount++;
+            return false;
+        }
+
+        if (!ResolveDirectAttackAgainstPushRecovery(actionStartedAt))
+        {
+            bloodShotRecoveryRejectCount++;
+            return false;
+        }
+
+        bool facingChangedThisFrame =
+            movement.RefreshInputAndFacingForCombat();
+
+        CharacterFacingDirection actionFacing = movement.CurrentFacing;
+        Vector2 aimDirection = movement.FacingVector;
+
+        if (aimDirection.sqrMagnitude < MinimumAimMagnitude)
+        {
+            aimDirection = Vector2.down;
+            actionFacing = CharacterFacingDirection.South;
+        }
+
+        aimDirection.Normalize();
+
+        if (!health.TrySpendHealth(
+                bloodShotSettings.HealthCost,
+                bloodShotSettings.MinimumRemainingHealth))
+        {
+            bloodShotHealthRejectCount++;
+            return false;
+        }
+
+        BeginBloodShotActionTiming(actionStartedAt);
+
+        if (visualAnimator != null)
+        {
+            visualAnimator.SetFacingDirection(actionFacing);
+        }
+
+        CombatActionAnimationRequested?.Invoke(
+            this,
+            CombatActionKind.BloodShot,
+            actionFacing);
+
+        CombatAttackId attackId = IssueAttackId(
+            CombatActionKind.BloodShot);
+
+        Vector2 spawnPosition =
+            body.position +
+            aimDirection * bloodShotSettings.SpawnOffset;
+
+        PlayerBloodProjectile projectile =
+            PlayerBloodProjectile.Spawn(
+                gameObject,
+                attackId,
+                spawnPosition,
+                aimDirection,
+                bloodShotSettings);
+
+        if (projectile == null)
+        {
+            return false;
+        }
+
+        startedBloodShotActionCount++;
+        successfulBloodShotActionCount++;
+        lastBloodShotStartedAt = actionStartedAt;
+        return true;
+    }
+
     private static bool IsKeyPressedThisFrame(KeyCode key)
     {
         return key != KeyCode.None && Input.GetKeyDown(key);
@@ -1270,7 +1531,8 @@ public sealed class PlayerCombatController : MonoBehaviour
 
             lastPushActionStartFrame = frame;
         }
-        else if (actionKind == CombatActionKind.DirectAttack)
+        else if (actionKind == CombatActionKind.DirectAttack ||
+                 actionKind == CombatActionKind.BloodShot)
         {
             if (lastPushActionStartFrame == frame)
             {
@@ -1314,6 +1576,27 @@ public sealed class PlayerCombatController : MonoBehaviour
         {
             directAttackAfterlagMovementRejectCount++;
         }
+    }
+
+    private void BeginBloodShotActionTiming(float startedAt)
+    {
+        RecordActionStart(CombatActionKind.BloodShot);
+
+        directAttackRecoveryEndsAt =
+            startedAt + bloodShotSettings.AfterlagDuration;
+
+        nextBloodShotReadyAt =
+            startedAt + bloodShotSettings.CooldownDuration;
+
+        if (movement == null)
+        {
+            return;
+        }
+
+        movement.TryBeginTimedMovementScale(
+            bloodShotSettings.AfterlagMovementMultiplier,
+            bloodShotSettings.AfterlagDuration,
+            replaceExisting: true);
     }
 
     private void BeginLeftPushActionTiming(float startedAt)
@@ -1405,6 +1688,19 @@ public sealed class PlayerCombatController : MonoBehaviour
         else
         {
             directAttackSettings.CollectValidationErrors(
+                errors,
+                gameObject.name);
+        }
+
+        if (bloodShotSettings == null)
+        {
+            errors.Add(
+                gameObject.name +
+                ": Blood Shot settings are missing.");
+        }
+        else
+        {
+            bloodShotSettings.CollectValidationErrors(
                 errors,
                 gameObject.name);
         }

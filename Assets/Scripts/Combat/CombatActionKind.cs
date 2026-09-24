@@ -7,6 +7,7 @@ public enum CombatActionKind
     Unspecified = 0,
     NonlethalPush = 10,
     DirectAttack = 20,
+    BloodShot = 25,
     EnemyAttack = 30,
     Environment = 40
 }

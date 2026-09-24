@@ -305,6 +305,9 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
         CombatHit enemyResolvedBaseHit =
             ApplyDirectAttackResponseResolution(hit);
 
+        enemyResolvedBaseHit =
+            ApplyBloodShotResponseResolution(enemyResolvedBaseHit);
+
         KnockbackResolution resolution =
             ResolveKnockbackResistance(
                 enemyResolvedBaseHit,
@@ -726,6 +729,78 @@ public sealed class EnemyCombatReceiver : MonoBehaviour
             reaction.IsValid
                 ? reaction.Duration
                 : 0f;
+
+        return new CombatHit(
+            hit.AttackId,
+            hit.ActionKind,
+            hit.Source,
+            hit.SourceFaction,
+            hit.Attribution,
+            hit.HitPoint,
+            hit.Direction,
+            hit.Damage,
+            displacement,
+            reaction,
+            shouldCountTowardKnockbackDecay: false,
+            shouldTriggerPursuitRecovery: false);
+    }
+
+    private CombatHit ApplyBloodShotResponseResolution(
+        CombatHit hit)
+    {
+        if (hit.ActionKind != CombatActionKind.BloodShot ||
+            definition == null)
+        {
+            return hit;
+        }
+
+        float distanceMultiplier =
+            definition.BloodShotDisplacementMultiplier;
+        float stunMultiplier =
+            definition.BloodShotStunMultiplier;
+
+        CombatDisplacementRequest displacement =
+            default(CombatDisplacementRequest);
+
+        if (hit.HasDisplacement && distanceMultiplier > 0f)
+        {
+            float resolvedDistance =
+                hit.Displacement.Distance * distanceMultiplier;
+
+            if (resolvedDistance > 0f)
+            {
+                float resolvedDuration = Mathf.Max(
+                    MinimumScaledDuration,
+                    hit.Displacement.Duration * distanceMultiplier);
+
+                displacement = new CombatDisplacementRequest(
+                    hit.Displacement.AttackId,
+                    hit.Displacement.Direction,
+                    resolvedDistance,
+                    resolvedDuration,
+                    hit.Displacement.CancelTimedNavigationSpeed);
+            }
+        }
+
+        CombatReactionRequest reaction =
+            default(CombatReactionRequest);
+
+        if (hit.HasReaction && stunMultiplier > 0f)
+        {
+            float resolvedDuration =
+                hit.Reaction.Duration * stunMultiplier;
+
+            if (resolvedDuration > 0f)
+            {
+                reaction = new CombatReactionRequest(
+                    hit.Reaction.AttackId,
+                    hit.Reaction.Kind,
+                    resolvedDuration,
+                    hit.Reaction.ExtendExistingReaction,
+                    hit.Reaction.CancelTimedNavigationSpeed,
+                    hit.Reaction.Reason);
+            }
+        }
 
         return new CombatHit(
             hit.AttackId,

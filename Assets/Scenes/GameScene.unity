@@ -5224,8 +5224,8 @@ Camera:
   near clip plane: 0.3
   far clip plane: 1000
   field of view: 60
-  orthographic: 0
-  orthographic size: 5
+  orthographic: 1
+  orthographic size: 5.2
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -5520,7 +5520,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   targetCamera: {fileID: 0}
-  orthographicSize: 8
+  orthographicSize: 5.2
   smoothTime: 0.12
   backgroundColor: {r: 0.035, g: 0.035, b: 0.055, a: 1}
 --- !u!114 &621725370
@@ -10857,7 +10857,7 @@ MonoBehaviour:
   regenerationInterval: 3
   regenerationAmountPerTick: 1
   requireDamageBeforeRegeneration: 1
-  moveSpeed: 5
+  moveSpeed: 4.4
   nonlethalPushSettings:
     enabled: 1
     range: 1.35
@@ -10884,6 +10884,25 @@ MonoBehaviour:
     weakDisplacementDuration: 0.06
     weakHitPauseDuration: 0.08
     cb7WeakResponseInitialized: 1
+  bloodShotSettings:
+    enabled: 1
+    holdThreshold: 0.4
+    healthCost: 6
+    minimumRemainingHealth: 1
+    projectileSpeed: 9
+    projectileLifetime: 1.4
+    projectileRadius: 0.12
+    spawnOffset: 0.45
+    projectileVisualSize: 0.24
+    projectileSprite: {fileID: 0}
+    projectileColor: {r: 0.55, g: 0.05, b: 0.08, a: 1}
+    damage: 6
+    displacementDistance: 0.6
+    displacementDuration: 0.12
+    stunDuration: 0.3
+    cooldownDuration: 0.75
+    afterlagDuration: 0.25
+    afterlagMovementMultiplier: 0.35
   combatInputBindings:
     enableMouseNonlethalPush: 1
     nonlethalPushPrimaryKey: 106

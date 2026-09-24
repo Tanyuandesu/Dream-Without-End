@@ -58,6 +58,7 @@ public sealed class HealthRegeneration : MonoBehaviour
         if (health != null)
         {
             health.Damaged += HandleDamaged;
+            health.Spent += HandleSpent;
             health.Died += HandleDied;
         }
     }
@@ -67,6 +68,7 @@ public sealed class HealthRegeneration : MonoBehaviour
         if (health != null)
         {
             health.Damaged -= HandleDamaged;
+            health.Spent -= HandleSpent;
             health.Died -= HandleDied;
         }
     }
@@ -158,6 +160,14 @@ public sealed class HealthRegeneration : MonoBehaviour
     private void HandleDamaged(
         Health damagedHealth,
         DamageInfo damageInfo)
+    {
+        hasTakenDamage = true;
+        RestartRegenerationTimer();
+    }
+
+    private void HandleSpent(
+        Health sourceHealth,
+        float spentAmount)
     {
         hasTakenDamage = true;
         RestartRegenerationTimer();

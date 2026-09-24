@@ -141,7 +141,7 @@ public sealed class EnemyDefinition : ScriptableObject
         "Each resistance tier scales this value with its Stagger Multiplier.")]
     [Min(0f)]
     [SerializeField]
-    private float postKnockbackPauseDuration = 0.22f;
+    private float postKnockbackPauseDuration = 0.55f;
 
     [Tooltip(
         "Duration of the temporary navigation speed bonus after the " +
@@ -177,6 +177,20 @@ public sealed class EnemyDefinition : ScriptableObject
 
     [SerializeField, HideInInspector]
     private bool cb7DirectHitResponseInitialized;
+
+    [Header("Blood-shot response")]
+    [Tooltip("Per-enemy multiplier for Blood Shot displacement. Zero disables Blood Shot movement for this enemy.")]
+    [Range(0f, 2f)]
+    [SerializeField]
+    private float bloodShotDisplacementMultiplier = 1f;
+
+    [Tooltip("Per-enemy multiplier for Blood Shot post-displacement stun. Zero disables the stun for this enemy.")]
+    [Range(0f, 2f)]
+    [SerializeField]
+    private float bloodShotStunMultiplier = 1f;
+
+    [SerializeField, HideInInspector]
+    private bool cb11BloodShotResponseInitialized;
 
     [Header("Temporary health bar presentation")]
     [Tooltip("Per-enemy switch layered on top of the EnemySpawner master switch.")]
@@ -361,6 +375,24 @@ public sealed class EnemyDefinition : ScriptableObject
         {
             EnsureDirectHitResponseSettings();
             return directAttackWeakHitPauseMultiplier;
+        }
+    }
+
+    public float BloodShotDisplacementMultiplier
+    {
+        get
+        {
+            EnsureBloodShotResponseSettings();
+            return bloodShotDisplacementMultiplier;
+        }
+    }
+
+    public float BloodShotStunMultiplier
+    {
+        get
+        {
+            EnsureBloodShotResponseSettings();
+            return bloodShotStunMultiplier;
         }
     }
 
@@ -587,6 +619,20 @@ public sealed class EnemyDefinition : ScriptableObject
                 name + ": Direct Attack Weak Hit Pause Multiplier must be within 0..2.");
         }
 
+        if (bloodShotDisplacementMultiplier < 0f ||
+            bloodShotDisplacementMultiplier > 2f)
+        {
+            errors.Add(
+                name + ": Blood Shot Displacement Multiplier must be within 0..2.");
+        }
+
+        if (bloodShotStunMultiplier < 0f ||
+            bloodShotStunMultiplier > 2f)
+        {
+            errors.Add(
+                name + ": Blood Shot Stun Multiplier must be within 0..2.");
+        }
+
         if (temporaryHealthBarSizeMultiplier <= 0f)
         {
             errors.Add(
@@ -596,6 +642,7 @@ public sealed class EnemyDefinition : ScriptableObject
         EnsureKnockbackSettings();
         EnsureKnockbackRecoverySettings();
         EnsureDirectHitResponseSettings();
+        EnsureBloodShotResponseSettings();
         EnsureTemporaryHealthBarSettings();
         knockbackResistance.CollectValidationErrors(
             errors,
@@ -621,7 +668,7 @@ public sealed class EnemyDefinition : ScriptableObject
             // already authored during CB2/CB3.
             if (postKnockbackPauseDuration <= 0f)
             {
-                postKnockbackPauseDuration = 0.22f;
+                postKnockbackPauseDuration = 0.55f;
             }
 
             cb4KnockbackRecoveryInitialized = true;
@@ -664,6 +711,31 @@ public sealed class EnemyDefinition : ScriptableObject
 
         directAttackWeakHitPauseMultiplier = Mathf.Clamp(
             directAttackWeakHitPauseMultiplier,
+            0f,
+            2f);
+    }
+
+    private void EnsureBloodShotResponseSettings()
+    {
+        if (!cb11BloodShotResponseInitialized)
+        {
+            if (bloodShotDisplacementMultiplier <= 0f &&
+                bloodShotStunMultiplier <= 0f)
+            {
+                bloodShotDisplacementMultiplier = 1f;
+                bloodShotStunMultiplier = 1f;
+            }
+
+            cb11BloodShotResponseInitialized = true;
+        }
+
+        bloodShotDisplacementMultiplier = Mathf.Clamp(
+            bloodShotDisplacementMultiplier,
+            0f,
+            2f);
+
+        bloodShotStunMultiplier = Mathf.Clamp(
+            bloodShotStunMultiplier,
             0f,
             2f);
     }
@@ -748,6 +820,7 @@ public sealed class EnemyDefinition : ScriptableObject
         knockbackResistance.EnsureValid();
         EnsureKnockbackRecoverySettings();
         EnsureDirectHitResponseSettings();
+        EnsureBloodShotResponseSettings();
         EnsureTemporaryHealthBarSettings();
 
         detectionRadius = Mathf.Max(0.1f, detectionRadius);

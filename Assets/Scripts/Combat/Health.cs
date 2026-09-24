@@ -45,6 +45,7 @@ public sealed class Health : MonoBehaviour
     public event Action<Health, DamageInfo> Damaged;
     public event Action<Health> Died;
     public event Action<Health, float> Healed;
+    public event Action<Health, float> Spent;
 
     private void Awake()
     {
@@ -126,6 +127,55 @@ public sealed class Health : MonoBehaviour
 
         if (previousHealth > 0f &&
             currentHealth <= 0f)
+        {
+            Die();
+        }
+
+        return true;
+    }
+
+
+    /// <summary>
+    /// Spends health as a resource. This bypasses damage invulnerability and
+    /// friendly-fire rules because it is a cost, not incoming damage.
+    /// </summary>
+    public bool TrySpendHealth(
+        float amount,
+        float minimumRemainingHealth = 0f)
+    {
+        if (IsDead || amount < 0f)
+        {
+            return false;
+        }
+
+        if (amount <= 0f)
+        {
+            return true;
+        }
+
+        float minimum = Mathf.Clamp(
+            minimumRemainingHealth,
+            0f,
+            maxHealth);
+
+        if (currentHealth - amount < minimum)
+        {
+            return false;
+        }
+
+        float previousHealth = currentHealth;
+        currentHealth = Mathf.Max(0f, currentHealth - amount);
+        float spentAmount = previousHealth - currentHealth;
+
+        if (spentAmount <= 0f)
+        {
+            return false;
+        }
+
+        Spent?.Invoke(this, spentAmount);
+        HealthChanged?.Invoke(this, currentHealth, maxHealth);
+
+        if (previousHealth > 0f && currentHealth <= 0f)
         {
             Die();
         }

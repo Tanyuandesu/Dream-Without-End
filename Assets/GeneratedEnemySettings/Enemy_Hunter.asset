@@ -29,6 +29,12 @@ MonoBehaviour:
   maximumChasePathCost: 42
   searchRadiusInCells: 4
   searchDuration: 7
+  minimumRepathInterval: 0.08
+  stuckTimeout: 0.75
+  stuckMovementThreshold: 0.015
+  maximumRecoveryAttempts: 3
+  maximumRecoverySnapDistance: 0.8
+  failedPathRetryDelay: 0.5
   detectionRadius: 6
   loseTargetRadius: 14
   requireLineOfSight: 1
@@ -38,6 +44,7 @@ MonoBehaviour:
   viewAngle: 220
   broadcastsAlert: 0
   alertRadius: 0
+  alertBroadcastCooldown: 1
   knockbackResistance:
     decayBuildWindow: 0.9
     recoveryDelay: 1.5
@@ -49,13 +56,16 @@ MonoBehaviour:
       staggerMultiplier: 0.25
     - distanceMultiplier: 0.3
       staggerMultiplier: 0
-  postKnockbackPauseDuration: 0.22
+  postKnockbackPauseDuration: 0.55
   postKnockbackPursuitDuration: 0.5
   postKnockbackPursuitSpeedMultiplier: 1.2
   cb4KnockbackRecoveryInitialized: 1
   directAttackWeakDisplacementMultiplier: 1
   directAttackWeakHitPauseMultiplier: 1
   cb7DirectHitResponseInitialized: 1
+  bloodShotDisplacementMultiplier: 1
+  bloodShotStunMultiplier: 1
+  cb11BloodShotResponseInitialized: 1
   temporaryHealthBarEnabled: 1
   temporaryHealthBarSizeMultiplier: 1
   temporaryHealthBarOffset: {x: 0, y: 0}
@@ -68,6 +78,12 @@ MonoBehaviour:
   attackRecovery: 0.32
   attackCooldown: 0.58
   projectileSpeed: 0
+  projectileMinimumRange: 0
+  projectileRetreatSearchRadiusInCells: 0
+  projectileLifetime: 2
+  projectileRadius: 0.12
+  projectileVisualSize: 0.24
+  projectileColor: {r: 0.82, g: 0.68, b: 1, a: 1}
   enemySprite: {fileID: 5218823490559287709, guid: 2d947c87434048a46af17bec1edfb5aa, type: 3}
   animationProfile: {fileID: 11400000, guid: 820a207758b8ef24cbe5017de424e90b, type: 2}
   visualWorldHeight: 0.8

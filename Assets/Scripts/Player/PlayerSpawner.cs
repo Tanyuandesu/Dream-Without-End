@@ -73,6 +73,11 @@ public sealed class PlayerSpawner : MonoBehaviour
     private DirectAttackSettings directAttackSettings =
         DirectAttackSettings.CreateDefault();
 
+    [Header("战斗：血弹远程攻击")]
+    [SerializeField]
+    private BloodShotSettings bloodShotSettings =
+        BloodShotSettings.CreateDefault();
+
     [Header("战斗：鼠标与全键盘输入")]
     [SerializeField]
     private PlayerCombatInputBindings combatInputBindings =
@@ -88,6 +93,9 @@ public sealed class PlayerSpawner : MonoBehaviour
 
     public DirectAttackSettings DirectAttackSettings =>
         directAttackSettings;
+
+    public BloodShotSettings BloodShotSettings =>
+        bloodShotSettings;
 
     public PlayerCombatInputBindings CombatInputBindings =>
         combatInputBindings;
@@ -133,6 +141,14 @@ public sealed class PlayerSpawner : MonoBehaviour
         }
 
         directAttackSettings.EnsureValid();
+
+        if (bloodShotSettings == null)
+        {
+            bloodShotSettings =
+                BloodShotSettings.CreateDefault();
+        }
+
+        bloodShotSettings.EnsureValid();
 
         if (combatInputBindings == null)
         {
@@ -250,6 +266,12 @@ public sealed class PlayerSpawner : MonoBehaviour
                 DirectAttackSettings.CreateDefault();
         }
 
+        if (bloodShotSettings == null)
+        {
+            bloodShotSettings =
+                BloodShotSettings.CreateDefault();
+        }
+
         if (combatInputBindings == null)
         {
             combatInputBindings =
@@ -271,6 +293,9 @@ public sealed class PlayerSpawner : MonoBehaviour
             directAttackSettings,
             combatInputBindings,
             actionArbitrationSettings);
+
+        combatController.ConfigureBloodShot(
+            bloodShotSettings);
 
         combatController.SetCombatInputEnabled(
             combatInputBindings.HasAnyEnabledBinding);

@@ -132,7 +132,8 @@ public sealed class EnemyCombatAnimationBridge : MonoBehaviour
 
         CombatActionKind actionKind = presentationEvent.Hit.ActionKind;
 
-        if (actionKind == CombatActionKind.NonlethalPush &&
+        if ((actionKind == CombatActionKind.NonlethalPush ||
+             actionKind == CombatActionKind.BloodShot) &&
             presentationEvent.HasVisibleKnockback)
         {
             bool played = animator.PlayAction(

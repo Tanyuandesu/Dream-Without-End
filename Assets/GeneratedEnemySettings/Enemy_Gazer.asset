@@ -29,6 +29,12 @@ MonoBehaviour:
   maximumChasePathCost: 24
   searchRadiusInCells: 2
   searchDuration: 4
+  minimumRepathInterval: 0.08
+  stuckTimeout: 0.75
+  stuckMovementThreshold: 0.015
+  maximumRecoveryAttempts: 3
+  maximumRecoverySnapDistance: 0.8
+  failedPathRetryDelay: 0.5
   detectionRadius: 9
   loseTargetRadius: 13
   requireLineOfSight: 1
@@ -38,6 +44,7 @@ MonoBehaviour:
   viewAngle: 170
   broadcastsAlert: 0
   alertRadius: 0
+  alertBroadcastCooldown: 1
   knockbackResistance:
     decayBuildWindow: 0.9
     recoveryDelay: 1.5
@@ -49,13 +56,16 @@ MonoBehaviour:
       staggerMultiplier: 0.25
     - distanceMultiplier: 0.3
       staggerMultiplier: 0
-  postKnockbackPauseDuration: 0.22
+  postKnockbackPauseDuration: 0.55
   postKnockbackPursuitDuration: 0.5
   postKnockbackPursuitSpeedMultiplier: 1.2
   cb4KnockbackRecoveryInitialized: 1
   directAttackWeakDisplacementMultiplier: 1
   directAttackWeakHitPauseMultiplier: 1
   cb7DirectHitResponseInitialized: 1
+  bloodShotDisplacementMultiplier: 1
+  bloodShotStunMultiplier: 1
+  cb11BloodShotResponseInitialized: 1
   temporaryHealthBarEnabled: 1
   temporaryHealthBarSizeMultiplier: 1
   temporaryHealthBarOffset: {x: 0, y: 0}

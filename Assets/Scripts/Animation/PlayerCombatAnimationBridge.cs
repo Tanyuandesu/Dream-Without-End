@@ -95,8 +95,11 @@ public sealed class PlayerCombatAnimationBridge : MonoBehaviour
 
         CharacterAnimationState state;
 
-        if (actionKind == CombatActionKind.DirectAttack)
+        if (actionKind == CombatActionKind.DirectAttack ||
+            actionKind == CombatActionKind.BloodShot)
         {
+            // Blood Shot temporarily reuses Attack presentation until a
+            // dedicated ranged animation is authored. Gameplay stays separate.
             state = CharacterAnimationState.Attack;
         }
         else if (actionKind == CombatActionKind.NonlethalPush)
