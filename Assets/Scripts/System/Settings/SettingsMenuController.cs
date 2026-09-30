@@ -15,6 +15,8 @@ public sealed class SettingsMenuController : MonoBehaviour
     private Button englishButton;
     private Button japaneseButton;
     private Button traditionalChineseButton;
+    private Button normalVisualButton;
+    private Button prototypeVisualButton;
     private bool built;
 
     private void Awake()
@@ -54,29 +56,36 @@ public sealed class SettingsMenuController : MonoBehaviour
         built = true;
 
         CreateLocalizedLabel(transform, "UI_SETTINGS_MASTER_VOLUME", 26f,
-            new Vector2(-250f, 120f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
-        masterSlider = CreateSlider(transform, "MasterVolumeSlider", new Vector2(70f, 120f));
-        masterValueLabel = CreateValueLabel(transform, "MasterVolumeValue", new Vector2(300f, 120f));
+            new Vector2(-250f, 190f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
+        masterSlider = CreateSlider(transform, "MasterVolumeSlider", new Vector2(70f, 190f));
+        masterValueLabel = CreateValueLabel(transform, "MasterVolumeValue", new Vector2(300f, 190f));
 
         CreateLocalizedLabel(transform, "UI_SETTINGS_BGM_VOLUME", 26f,
-            new Vector2(-250f, 45f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
-        bgmSlider = CreateSlider(transform, "BgmVolumeSlider", new Vector2(70f, 45f));
-        bgmValueLabel = CreateValueLabel(transform, "BgmVolumeValue", new Vector2(300f, 45f));
+            new Vector2(-250f, 115f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
+        bgmSlider = CreateSlider(transform, "BgmVolumeSlider", new Vector2(70f, 115f));
+        bgmValueLabel = CreateValueLabel(transform, "BgmVolumeValue", new Vector2(300f, 115f));
 
         CreateLocalizedLabel(transform, "UI_SETTINGS_SFX_VOLUME", 26f,
-            new Vector2(-250f, -30f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
-        sfxSlider = CreateSlider(transform, "SfxVolumeSlider", new Vector2(70f, -30f));
-        sfxValueLabel = CreateValueLabel(transform, "SfxVolumeValue", new Vector2(300f, -30f));
+            new Vector2(-250f, 40f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
+        sfxSlider = CreateSlider(transform, "SfxVolumeSlider", new Vector2(70f, 40f));
+        sfxValueLabel = CreateValueLabel(transform, "SfxVolumeValue", new Vector2(300f, 40f));
 
         CreateLocalizedLabel(transform, "UI_SETTINGS_LANGUAGE", 26f,
-            new Vector2(-250f, -125f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
+            new Vector2(-250f, -55f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
 
         englishButton = CreateLanguageButton(transform, "EnglishButton", "UI_LANGUAGE_ENGLISH",
-            GameLanguage.English, new Vector2(-55f, -125f));
+            GameLanguage.English, new Vector2(-55f, -55f));
         japaneseButton = CreateLanguageButton(transform, "JapaneseButton", "UI_LANGUAGE_JAPANESE",
-            GameLanguage.Japanese, new Vector2(145f, -125f));
+            GameLanguage.Japanese, new Vector2(145f, -55f));
         traditionalChineseButton = CreateLanguageButton(transform, "TraditionalChineseButton",
-            "UI_LANGUAGE_TRADITIONAL_CHINESE", GameLanguage.TraditionalChinese, new Vector2(345f, -125f));
+            "UI_LANGUAGE_TRADITIONAL_CHINESE", GameLanguage.TraditionalChinese, new Vector2(345f, -55f));
+
+        CreateLocalizedLabel(transform, "UI_SETTINGS_VISUAL_MODE", 26f,
+            new Vector2(-250f, -140f), new Vector2(260f, 54f), TextAlignmentOptions.MidlineLeft);
+        normalVisualButton = CreateVisualModeButton(transform, "VisualNormalButton",
+            "UI_VISUAL_NORMAL", GameVisualMode.Normal, new Vector2(20f, -140f));
+        prototypeVisualButton = CreateVisualModeButton(transform, "VisualPrototypeButton",
+            "UI_VISUAL_PROTOTYPE", GameVisualMode.Prototype, new Vector2(260f, -140f));
 
         masterSlider.onValueChanged.AddListener(HandleMasterSliderChanged);
         bgmSlider.onValueChanged.AddListener(HandleBgmSliderChanged);
@@ -105,6 +114,7 @@ public sealed class SettingsMenuController : MonoBehaviour
         RefreshBgmValue(settings.BgmVolume);
         RefreshSfxValue(settings.SfxVolume);
         RefreshLanguageButtons(settings.Language);
+        RefreshVisualModeButtons(settings.VisualMode);
     }
 
     public void FlushPendingChanges()
@@ -124,6 +134,7 @@ public sealed class SettingsMenuController : MonoBehaviour
         settings.BgmVolumeChanged += HandleBgmVolumeChanged;
         settings.SfxVolumeChanged += HandleSfxVolumeChanged;
         settings.LanguageChanged += HandleLanguageChanged;
+        settings.VisualModeChanged += HandleVisualModeChanged;
     }
 
     private void Unsubscribe()
@@ -137,6 +148,7 @@ public sealed class SettingsMenuController : MonoBehaviour
         settings.BgmVolumeChanged -= HandleBgmVolumeChanged;
         settings.SfxVolumeChanged -= HandleSfxVolumeChanged;
         settings.LanguageChanged -= HandleLanguageChanged;
+        settings.VisualModeChanged -= HandleVisualModeChanged;
     }
 
     private void HandleMasterSliderChanged(float value)
@@ -175,6 +187,24 @@ public sealed class SettingsMenuController : MonoBehaviour
     private void HandleLanguageChanged(GameLanguage language)
     {
         RefreshLanguageButtons(language);
+    }
+
+    private void HandleVisualModeChanged(GameVisualMode mode)
+    {
+        RefreshVisualModeButtons(mode);
+    }
+
+    private void SetVisualMode(GameVisualMode mode)
+    {
+        settings?.SetVisualMode(mode, true);
+    }
+
+    private void RefreshVisualModeButtons(GameVisualMode mode)
+    {
+        if (normalVisualButton != null)
+            normalVisualButton.interactable = mode != GameVisualMode.Normal;
+        if (prototypeVisualButton != null)
+            prototypeVisualButton.interactable = mode != GameVisualMode.Prototype;
     }
 
     private void SetLanguage(GameLanguage language)
@@ -224,6 +254,15 @@ public sealed class SettingsMenuController : MonoBehaviour
     {
         Button button = CreateButton(parent, name, localizationKey, position, new Vector2(180f, 56f));
         button.onClick.AddListener(() => SetLanguage(language));
+        return button;
+    }
+
+    private Button CreateVisualModeButton(Transform parent, string name,
+        string localizationKey, GameVisualMode mode, Vector2 position)
+    {
+        Button button = CreateButton(parent, name, localizationKey, position,
+            new Vector2(210f, 56f));
+        button.onClick.AddListener(() => SetVisualMode(mode));
         return button;
     }
 

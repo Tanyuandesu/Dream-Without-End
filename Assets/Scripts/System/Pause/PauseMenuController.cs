@@ -326,11 +326,11 @@ public sealed class PauseMenuController : MonoBehaviour
         itemViewerController.BuildRuntimeControls();
         itemsBackButton = CreateButton(itemsPanel.transform, "ItemsBackButton", "UI_PAUSE_BACK", new Vector2(0f, -290f), ShowMain, new Vector2(420f, 64f));
 
-        settingsPanel = CreatePanel("SettingsPanel", overlayRoot.transform, new Vector2(980f, 620f));
-        CreateLocalizedLabel(settingsPanel.transform, "UI_PAUSE_SETTINGS", 42, new Vector2(0f, 230f), new Vector2(820f, 70f));
+        settingsPanel = CreatePanel("SettingsPanel", overlayRoot.transform, new Vector2(980f, 760f));
+        CreateLocalizedLabel(settingsPanel.transform, "UI_PAUSE_SETTINGS", 42, new Vector2(0f, 305f), new Vector2(820f, 70f));
         settingsMenuController = settingsPanel.AddComponent<SettingsMenuController>();
         settingsMenuController.BuildRuntimeControls();
-        settingsBackButton = CreateButton(settingsPanel.transform, "SettingsBackButton", "UI_PAUSE_BACK", new Vector2(0f, -230f), ShowMain);
+        settingsBackButton = CreateButton(settingsPanel.transform, "SettingsBackButton", "UI_PAUSE_BACK", new Vector2(0f, -320f), ShowMain);
 
         returnConfirmPanel = CreatePanel("ReturnConfirmPanel", overlayRoot.transform, new Vector2(760f, 430f));
         CreateLocalizedLabel(returnConfirmPanel.transform, "UI_PAUSE_RETURN_CONFIRM", 30, new Vector2(0f, 85f), new Vector2(640f, 130f));

@@ -12,7 +12,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public sealed class SystemSettingsManager : MonoBehaviour
 {
-    private const int CurrentSettingsVersion = 2;
+    private const int CurrentSettingsVersion = 3;
 
     private const string KeyVersion =
         "DreamDungeon.Settings.Version";
@@ -25,6 +25,11 @@ public sealed class SystemSettingsManager : MonoBehaviour
     private const string KeySfxVolume =
         "DreamDungeon.Settings.SfxVolume";
 
+    private const string KeyVisualMode =
+        "DreamDungeon.Settings.VisualMode";
+
+    public const GameVisualMode DefaultVisualMode = GameVisualMode.Normal;
+
     public const GameLanguage DefaultLanguage =
         GameLanguage.Japanese;
     public const float DefaultMasterVolume = 1f;
@@ -34,6 +39,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
     public static SystemSettingsManager Instance { get; private set; }
 
     private GameLanguage language = DefaultLanguage;
+    private GameVisualMode visualMode = DefaultVisualMode;
     private float masterVolume = DefaultMasterVolume;
     private float bgmVolume = DefaultBgmVolume;
     private float sfxVolume = DefaultSfxVolume;
@@ -75,9 +81,19 @@ public sealed class SystemSettingsManager : MonoBehaviour
         }
     }
 
+    public GameVisualMode VisualMode
+    {
+        get
+        {
+            EnsureInitialized();
+            return visualMode;
+        }
+    }
+
     public bool IsInitialized => initialized;
 
     public event Action<GameLanguage> LanguageChanged;
+    public event Action<GameVisualMode> VisualModeChanged;
     public event Action<float> MasterVolumeChanged;
     public event Action<float> BgmVolumeChanged;
     public event Action<float> SfxVolumeChanged;
@@ -158,7 +174,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
             language,
             masterVolume,
             bgmVolume,
-            sfxVolume);
+            sfxVolume,
+            visualMode);
     }
 
     public void SetLanguage(
@@ -184,6 +201,20 @@ public sealed class SystemSettingsManager : MonoBehaviour
         }
 
         LanguageChanged?.Invoke(language);
+        NotifySettingsChanged();
+    }
+
+    public void SetVisualMode(
+        GameVisualMode value,
+        bool persistImmediately = true)
+    {
+        EnsureInitialized();
+        GameVisualMode sanitized = SanitizeVisualMode(value);
+        if (visualMode == sanitized) return;
+        visualMode = sanitized;
+        PlayerPrefs.SetInt(KeyVisualMode, (int)visualMode);
+        if (persistImmediately) Flush();
+        VisualModeChanged?.Invoke(visualMode);
         NotifySettingsChanged();
     }
 
@@ -269,6 +300,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
 
         bool languageChanged =
             language != DefaultLanguage;
+        bool visualModeChanged = visualMode != DefaultVisualMode;
         bool masterChanged =
             !Mathf.Approximately(
                 masterVolume,
@@ -283,6 +315,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
                 DefaultSfxVolume);
 
         language = DefaultLanguage;
+        visualMode = DefaultVisualMode;
         masterVolume = DefaultMasterVolume;
         bgmVolume = DefaultBgmVolume;
         sfxVolume = DefaultSfxVolume;
@@ -299,6 +332,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
             LanguageChanged?.Invoke(language);
         }
 
+        if (visualModeChanged) VisualModeChanged?.Invoke(visualMode);
+
         if (masterChanged)
         {
             MasterVolumeChanged?.Invoke(masterVolume);
@@ -314,7 +349,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
             SfxVolumeChanged?.Invoke(sfxVolume);
         }
 
-        if (languageChanged || masterChanged || bgmChanged || sfxChanged)
+        if (languageChanged || visualModeChanged || masterChanged || bgmChanged || sfxChanged)
         {
             NotifySettingsChanged();
         }
@@ -324,6 +359,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
     {
         bool wasInitialized = initialized;
         GameLanguage previousLanguage = language;
+        GameVisualMode previousVisualMode = visualMode;
         float previousMaster = masterVolume;
         float previousBgm = bgmVolume;
         float previousSfx = sfxVolume;
@@ -341,6 +377,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
             LanguageChanged?.Invoke(language);
         }
 
+        if (previousVisualMode != visualMode) VisualModeChanged?.Invoke(visualMode);
+
         if (!Mathf.Approximately(previousMaster, masterVolume))
         {
             MasterVolumeChanged?.Invoke(masterVolume);
@@ -357,6 +395,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
         }
 
         if (previousLanguage != language ||
+            previousVisualMode != visualMode ||
             !Mathf.Approximately(previousMaster, masterVolume) ||
             !Mathf.Approximately(previousBgm, bgmVolume) ||
             !Mathf.Approximately(previousSfx, sfxVolume))
@@ -388,6 +427,8 @@ public sealed class SystemSettingsManager : MonoBehaviour
             (int)DefaultLanguage);
 
         language = SanitizeLanguage(rawLanguage);
+        visualMode = SanitizeVisualMode(
+            (GameVisualMode)PlayerPrefs.GetInt(KeyVisualMode, (int)DefaultVisualMode));
 
         masterVolume = SanitizeVolume(
             PlayerPrefs.GetFloat(
@@ -413,6 +454,7 @@ public sealed class SystemSettingsManager : MonoBehaviour
     {
         PlayerPrefs.SetInt(KeyVersion, CurrentSettingsVersion);
         PlayerPrefs.SetInt(KeyLanguage, (int)language);
+        PlayerPrefs.SetInt(KeyVisualMode, (int)visualMode);
         PlayerPrefs.SetFloat(KeyMasterVolume, masterVolume);
         PlayerPrefs.SetFloat(KeyBgmVolume, bgmVolume);
         PlayerPrefs.SetFloat(KeySfxVolume, sfxVolume);
@@ -441,6 +483,13 @@ public sealed class SystemSettingsManager : MonoBehaviour
             default:
                 return DefaultLanguage;
         }
+    }
+
+    private static GameVisualMode SanitizeVisualMode(GameVisualMode value)
+    {
+        return value == GameVisualMode.Prototype
+            ? GameVisualMode.Prototype
+            : GameVisualMode.Normal;
     }
 
     private static float SanitizeVolume(float value)

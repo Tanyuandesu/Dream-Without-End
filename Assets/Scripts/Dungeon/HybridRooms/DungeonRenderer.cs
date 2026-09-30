@@ -144,6 +144,20 @@ public sealed class DungeonRenderer : MonoBehaviour
     {
         BuildFloors(layout, dungeonRoot);
         BuildWalls(layout, dungeonRoot);
+        Transform floors = dungeonRoot.Find("Floors");
+        Transform walls = dungeonRoot.Find("Walls");
+        if (floors != null)
+        {
+            PrototypeCorridorAppearance appearance =
+                floors.gameObject.AddComponent<PrototypeCorridorAppearance>();
+            appearance.Configure(whiteSprite, floorColor, false);
+        }
+        if (walls != null)
+        {
+            PrototypeCorridorAppearance appearance =
+                walls.gameObject.AddComponent<PrototypeCorridorAppearance>();
+            appearance.Configure(whiteSprite, wallColor, true);
+        }
     }
 
     /// <summary>
@@ -341,6 +355,16 @@ public sealed class DungeonRenderer : MonoBehaviour
                         roomIndex);
                 }
 
+                // Prototype Mode is only a presentation layer for formal rooms.
+                // Inactive Rooms root ensures initial setup runs after socket commit.
+                if (!placement.HasRuntimeProceduralOverride &&
+                    instanceTemplate.RoomFidelityTier == DreamRoomFidelityTier.HighPrecision)
+                {
+                    PrototypeRoomAppearance appearance =
+                        roomInstance.AddComponent<PrototypeRoomAppearance>();
+                    appearance.Configure(instanceTemplate);
+                }
+
                 // 必须操作实例组件，绝不能修改 assetTemplate。
                 instanceTemplate.SetAllSocketsOpen(false);
 
@@ -509,6 +533,15 @@ public sealed class DungeonRenderer : MonoBehaviour
         }
 
         int openedSocketCount = resolvedSockets.Count;
+
+        // Corridor visuals are created once. Swap only their SpriteRenderer
+        // presentation when settings change; preserve all wall colliders.
+        PrototypeCorridorAppearance corridorAppearance =
+            corridorsRoot.gameObject.AddComponent<PrototypeCorridorAppearance>();
+        corridorAppearance.Configure(whiteSprite, floorColor, false);
+        PrototypeCorridorAppearance wallAppearance =
+            corridorWallsRoot.gameObject.AddComponent<PrototypeCorridorAppearance>();
+        wallAppearance.Configure(whiteSprite, wallColor, true);
 
         corridorsRoot.name = "Corridors";
         corridorWallsRoot.name = "CorridorWalls";

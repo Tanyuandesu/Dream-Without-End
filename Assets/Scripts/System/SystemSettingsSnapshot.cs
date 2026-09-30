@@ -7,16 +7,19 @@ public struct SystemSettingsSnapshot
     public float MasterVolume;
     public float BgmVolume;
     public float SfxVolume;
+    public GameVisualMode VisualMode;
 
     public SystemSettingsSnapshot(
         GameLanguage language,
         float masterVolume,
         float bgmVolume,
-        float sfxVolume)
+        float sfxVolume,
+        GameVisualMode visualMode = GameVisualMode.Normal)
     {
         Language = language;
         MasterVolume = masterVolume;
         BgmVolume = bgmVolume;
         SfxVolume = sfxVolume;
+        VisualMode = visualMode;
     }
 }

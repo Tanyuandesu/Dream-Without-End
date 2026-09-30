@@ -161,6 +161,24 @@
       "english": "Save failed.",
       "japanese": "セーブに失敗しました。",
       "traditionalChinese": "儲存失敗。"
+    },
+    {
+      "key": "UI_SETTINGS_VISUAL_MODE",
+      "english": "Visual Style",
+      "japanese": "表示スタイル",
+      "traditionalChinese": "視覺模式"
+    },
+    {
+      "key": "UI_VISUAL_NORMAL",
+      "english": "Normal",
+      "japanese": "通常",
+      "traditionalChinese": "正常"
+    },
+    {
+      "key": "UI_VISUAL_PROTOTYPE",
+      "english": "Prototype",
+      "japanese": "プロトタイプ",
+      "traditionalChinese": "原型"
     }
   ]
 }
