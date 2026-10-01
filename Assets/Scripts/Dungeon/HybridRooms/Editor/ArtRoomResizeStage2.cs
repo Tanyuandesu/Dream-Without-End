@@ -7,15 +7,18 @@ using UnityEngine;
 /// ArtRoom_01 Stage 2:
 /// Preserve the existing 13x21 visual design and re-fit it to 11x18.
 ///
-/// This is intentionally NOT a redesign and NOT a scale operation.
-/// Pixel mapping:
+/// This is intentionally NOT a redesign.
+/// The existing four art layers are scaled together from:
 /// - source 832x1344 (13x21 @ 64 PPU)
 /// - target 704x1152 (11x18 @ 64 PPU)
-/// - remove one 64 px column from each side
-/// - keep the south/bottom edge fixed
-/// - remove the top three 64 px rows
 ///
-/// Keeping the south edge fixed preserves the existing entrance alignment.
+/// X scale = 704 / 832 = 0.8461538.
+/// Y scale = 1152 / 1344 = 0.8571429.
+/// Relative anisotropy is only about 1.3%, so the old design is preserved
+/// while filling the exact 11x18 canvas.
+/// Nearest-neighbour resampling is used to avoid introducing new blended
+/// colours / alpha values into the pixel-art layers.
+///
 /// Collision is NOT copied; it is re-authored after visual review.
 /// </summary>
 public static class ArtRoomResizeStage2
@@ -31,9 +34,6 @@ public static class ArtRoomResizeStage2
 
     private const int TargetWidth = 11 * Ppu;
     private const int TargetHeight = 18 * Ppu;
-
-    private const int CropX = 1 * Ppu;
-    private const int CropY = 0;
 
     private const string SourceRoot =
         "Documentation/ArtRoom_01_Legacy13x21";
@@ -63,12 +63,14 @@ public static class ArtRoomResizeStage2
 
         bool confirmed = EditorUtility.DisplayDialog(
             "ArtRoom_01 Stage 2",
-            "这一步不会重新设计画室，也不会缩放旧图。\n\n" +
-            "将旧 13x21 四层按原像素重新适配为 11x18：\n" +
-            "• 左右各裁 1 格\n" +
-            "• 保留南侧入口边界\n" +
-            "• 北侧裁 3 格\n" +
-            "• 原像素尺寸与 PPU 保持不变\n\n" +
+            "这一步不会重新设计画室。\n\n" +
+            "将旧 13x21 四层整体缩小并做极轻微比例适配到 11x18：\n" +
+            "• X：84.615%\n" +
+            "• Y：85.714%\n" +
+            "• 相对拉伸差约 1.3%\n" +
+            "• 四层使用完全相同的变换\n" +
+            "• 最近邻采样，不新增模糊颜色\n" +
+            "• PPU 最终仍为 64\n\n" +
             "碰撞不会继承，后续重新审图制作。\n\n" +
             "继续？",
             "Fit Existing Art",
@@ -98,14 +100,14 @@ public static class ArtRoomResizeStage2
                 "[ArtRoom Stage 2] Existing design fitted to 11x18.\n" +
                 "Source=13x21 / 832x1344\n" +
                 "Target=11x18 / 704x1152\n" +
-                "Mapping=Crop left 64 + right 64 + north 192; south edge preserved\n" +
-                "Scale=1:1 pixels | PPU=64\n" +
+                "ScaleX=0.8461538 | ScaleY=0.8571429 | RelativeStretch=~1.3%\n" +
+                "Resample=NearestNeighbour | PPU=64\n" +
                 "CollisionCopied=False | Redesign=False");
 
             EditorUtility.DisplayDialog(
                 "ArtRoom Stage 2 Passed",
-                "旧 ArtRoom_01 四层已按 1:1 像素重新适配到 11x18。\n\n" +
-                "没有重新设计，没有整体缩放。\n" +
+                "旧 ArtRoom_01 四层已整体缩小并轻微拉伸适配到 11x18。\n\n" +
+                "没有重新设计，没有裁切主要内容。\n" +
                 "下一步先审图，再重新制作 blockedCells / Collider。",
                 "OK");
         }
@@ -185,31 +187,60 @@ public static class ArtRoomResizeStage2
                     sourceTexture.height);
             }
 
-            Color32[] pixels =
+            Color32[] sourcePixels =
                 sourceTexture.GetPixels32();
 
-            Color32[] cropped =
+            Color32[] scaledPixels =
                 new Color32[
                     TargetWidth *
                     TargetHeight];
 
+            // 最近邻缩放：
+            // 四层使用完全相同的采样规则，保证坐标关系不会漂移。
+            // 用目标像素中心映射回源图，避免简单 floor 造成单侧偏移。
             for (int y = 0;
                  y < TargetHeight;
                  y++)
             {
-                int sourceRow =
-                    (y + CropY) *
-                    SourceWidth;
+                float sourceY =
+                    ((y + 0.5f) *
+                     SourceHeight /
+                     TargetHeight) -
+                    0.5f;
+
+                int nearestY =
+                    Mathf.Clamp(
+                        Mathf.RoundToInt(sourceY),
+                        0,
+                        SourceHeight - 1);
 
                 int targetRow =
                     y * TargetWidth;
 
-                Array.Copy(
-                    pixels,
-                    sourceRow + CropX,
-                    cropped,
-                    targetRow,
-                    TargetWidth);
+                int sourceRow =
+                    nearestY * SourceWidth;
+
+                for (int x = 0;
+                     x < TargetWidth;
+                     x++)
+                {
+                    float sourceX =
+                        ((x + 0.5f) *
+                         SourceWidth /
+                         TargetWidth) -
+                        0.5f;
+
+                    int nearestX =
+                        Mathf.Clamp(
+                            Mathf.RoundToInt(sourceX),
+                            0,
+                            SourceWidth - 1);
+
+                    scaledPixels[
+                        targetRow + x] =
+                        sourcePixels[
+                            sourceRow + nearestX];
+                }
             }
 
             targetTexture =
@@ -224,7 +255,8 @@ public static class ArtRoomResizeStage2
                 "Room_ArtRoom_01_" +
                 layer.Name;
 
-            targetTexture.SetPixels32(cropped);
+            targetTexture.SetPixels32(
+                scaledPixels);
             targetTexture.Apply(
                 false,
                 false);
