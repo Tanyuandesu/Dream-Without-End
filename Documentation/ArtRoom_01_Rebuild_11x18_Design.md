@@ -140,3 +140,31 @@ ArtRoom_01 的视觉设计、题材、物件关系与既有画室方案继续作
 
 Unity 一次性工具：
 `Tools > Dream Dungeon > Production Rooms > ArtRoom Rebuild > Stage 2 - Fit Existing Art to 11x18`
+
+
+## 10. Stage 3 碰撞重建
+
+碰撞不再沿用旧 13x21 的 96 个 blockedCells，而是以和美术完全相同的缩放关系重新生成：
+
+- X = 11 / 13
+- Y = 18 / 21
+
+物理碰撞：
+
+- 旧 34 个 HardBlock BoxCollider2D 的中心与尺寸按同一 X/Y 比例缩放。
+- 旧 3 个局部 PolygonCollider2D 的每个顶点按同一 X/Y 比例缩放。
+- 不直接复制旧 collider 坐标。
+
+导航格：
+
+- 在新的 11x18 网格上逐格检查格心是否落入缩放后的 HardBlock。
+- 得到 62 个 blockedCells。
+- 从 South_0 的两格门口 (4,0)、(5,0) 做四方向 flood fill。
+- 得到 115 个与门口连通的 walkableCells。
+- 其余 21 个未被硬阻挡但与门口断开的格子从 walkableCells 排除。
+- 3 个局部 PolygonCollider 不写入 blockedCells，继续作为“格子可走但局部有实体轮廓”的细碰撞。
+
+Unity 工具：
+`Tools > Dream Dungeon > Production Rooms > ArtRoom Rebuild > Stage 3 - Rebuild Collision for 11x18`
+
+Stage 3 完成后必须先做 P10.7 Validate 和 Prefab 可视检查，再考虑重新 Publish。
