@@ -48,6 +48,7 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
     private const float ClosedBlockerThickness = 0.35f;
     private const float PerimeterWallThickness = 0.35f;
     private const int ForegroundSortingOrder = 30;
+    private const int EffectsSortingOrder = 25;
 
     private static readonly Regex SafeRoomKeyRegex =
         new Regex("^[A-Za-z0-9_]+$", RegexOptions.Compiled);
@@ -941,7 +942,11 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             foregroundRoot,
             config.ForegroundSprite,
             ForegroundSortingOrder);
-        CreateRuntimeSprite("Effects_Runtime", effectsRoot, config.EffectsSprite, 10);
+        CreateRuntimeSprite(
+            "Effects_Runtime",
+            effectsRoot,
+            config.EffectsSprite,
+            EffectsSortingOrder);
 
         Transform blockersRoot = CreateEmptyChild(objectsRoot, "ClosedBlockers");
         Transform socketsRoot = CreateEmptyChild(root.transform, "Sockets");
@@ -1561,6 +1566,26 @@ public sealed class DreamRoomProductionPipelineP107 : EditorWindow
             "Effects_Runtime",
             size,
             errors);
+
+        if (effects != null)
+        {
+            Transform effectsRuntime = effects.Find("Effects_Runtime");
+            if (effectsRuntime != null)
+            {
+                SpriteRenderer effectsRenderer =
+                    effectsRuntime.GetComponent<SpriteRenderer>();
+
+                if (effectsRenderer != null &&
+                    effectsRenderer.sortingOrder != EffectsSortingOrder)
+                {
+                    errors.Add(
+                        "Effects_Runtime Sorting Order 必须为 " +
+                        EffectsSortingOrder +
+                        "（当前 Player/Enemy 基准为 20，Foreground 为 " +
+                        ForegroundSortingOrder + "）。" );
+                }
+            }
+        }
 
         Transform blockersRoot = prefab.transform.Find("Visual/Objects/ClosedBlockers");
         if (blockersRoot == null)
