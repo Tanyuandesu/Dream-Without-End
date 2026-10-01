@@ -168,3 +168,37 @@ Unity 工具：
 `Tools > Dream Dungeon > Production Rooms > ArtRoom Rebuild > Stage 3 - Rebuild Collision for 11x18`
 
 Stage 3 完成后必须先做 P10.7 Validate 和 Prefab 可视检查，再考虑重新 Publish。
+
+
+## 11. 2026-10-01 人工碰撞审图修正
+
+根据用户在 11x18 Prefab 俯视图上的标注：
+
+- 红色手绘区域 = 增加硬碰撞。
+- 青色手绘圈 = 取消硬碰撞。
+
+本次识别结果已写入 `ArtRoomCollisionStage3` 的显式人工覆盖表。
+
+取消碰撞：
+`(3,3), (8,3), (9,3), (8,4)`
+
+单独红圈新增：
+`(6,13), (7,12), (7,11), (7,10), (3,8), (4,8), (4,6), (3,2)`
+
+连续红色区域新增：
+- 左侧：`(0,14)`；`x=0..1, y=10..13`；`x=0, y=2..9`
+- 左下：`x=0..3, y=0..1`
+- 右侧：`x=10, y=2..12`
+- 右下：`x=6..9, y=0..1`
+
+这些新增格均不与 Stage 3 基准 62 个 blockedCells 重复，因此是 52 个净新增格；青色为 4 个净移除格。
+
+最终：
+- blockedCells = 110
+- 与 South_0 连通的 walkableCells = 57
+- 未 blocked 但与 South_0 断开的格 = 31
+- South_0 `(4,0),(5,0)` 保持可走
+- HardBlocks 改为根据最终 blockedCells 每行合并，得到 42 个 BoxCollider2D
+- 3 个局部 PolygonCollider2D 继续保留同比例缩放结果
+
+这样导航格和玩家物理碰撞使用同一份最终 blockedCells，不再出现“格子显示已改但实体碰撞仍沿用旧缩放矩形”的不一致。
