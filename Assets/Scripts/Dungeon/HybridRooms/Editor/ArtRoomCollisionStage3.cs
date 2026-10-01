@@ -32,6 +32,70 @@ public static class ArtRoomCollisionStage3
     private const float ScaleX = 11f / 13f;
     private const float ScaleY = 18f / 21f;
 
+    // 2026-10-01 visual review overrides.
+    // Red markup = add hard collision.
+    // Cyan markup = remove hard collision.
+    private static readonly Vector2Int[] ManualAddCells =
+    {
+        // Left perimeter / furniture strip.
+        new Vector2Int(0, 14),
+        new Vector2Int(0, 13), new Vector2Int(1, 13),
+        new Vector2Int(0, 12), new Vector2Int(1, 12),
+        new Vector2Int(0, 11), new Vector2Int(1, 11),
+        new Vector2Int(0, 10), new Vector2Int(1, 10),
+        new Vector2Int(0, 9),
+        new Vector2Int(0, 8),
+        new Vector2Int(0, 7),
+        new Vector2Int(0, 6),
+        new Vector2Int(0, 5),
+        new Vector2Int(0, 4),
+        new Vector2Int(0, 3),
+        new Vector2Int(0, 2),
+
+        // Bottom-left block, leaving the South_0 doorway clear.
+        new Vector2Int(0, 1), new Vector2Int(1, 1),
+        new Vector2Int(2, 1), new Vector2Int(3, 1),
+        new Vector2Int(0, 0), new Vector2Int(1, 0),
+        new Vector2Int(2, 0), new Vector2Int(3, 0),
+
+        // Bottom-right block.
+        new Vector2Int(6, 1), new Vector2Int(7, 1),
+        new Vector2Int(8, 1), new Vector2Int(9, 1),
+        new Vector2Int(6, 0), new Vector2Int(7, 0),
+        new Vector2Int(8, 0), new Vector2Int(9, 0),
+
+        // Right perimeter / furniture strip.
+        new Vector2Int(10, 12),
+        new Vector2Int(10, 11),
+        new Vector2Int(10, 10),
+        new Vector2Int(10, 9),
+        new Vector2Int(10, 8),
+        new Vector2Int(10, 7),
+        new Vector2Int(10, 6),
+        new Vector2Int(10, 5),
+        new Vector2Int(10, 4),
+        new Vector2Int(10, 3),
+        new Vector2Int(10, 2),
+
+        // Individually circled red cells.
+        new Vector2Int(6, 13),
+        new Vector2Int(7, 12),
+        new Vector2Int(7, 11),
+        new Vector2Int(7, 10),
+        new Vector2Int(3, 8),
+        new Vector2Int(4, 8),
+        new Vector2Int(4, 6),
+        new Vector2Int(3, 2),
+    };
+
+    private static readonly Vector2Int[] ManualRemoveCells =
+    {
+        new Vector2Int(8, 4),
+        new Vector2Int(8, 3),
+        new Vector2Int(9, 3),
+        new Vector2Int(3, 3),
+    };
+
     private static readonly HardRect[] LegacyHardRects =
     {
         new HardRect("Hard_09_12_Y17", 4.5f, 7f, 4f, 1f),
@@ -129,9 +193,10 @@ public static class ArtRoomCollisionStage3
                 "ArtRoom_01 Stage 3",
                 "将按 13x21 → 11x18 的同一缩放关系重建碰撞。\n\n" +
                 "会执行：\n" +
-                "• 34 个旧 HardBlock 按 X/Y 比例缩放\n" +
-                "• 3 个局部 PolygonCollider 同比例缩放\n" +
-                "• 从缩放后的硬碰撞重新计算 11x18 blockedCells\n" +
+                "• 以旧碰撞缩放结果作为基准\n" +
+                "• 套用截图红色 52 格新增 / 青色 4 格取消\n" +
+                "• 最终 blockedCells 重建为按行合并 BoxCollider2D\n" +
+                "• 3 个局部 PolygonCollider 继续同比例缩放\n" +
                 "• 只保留与 South_0 连通的 walkableCells\n\n" +
                 "不会复制旧 96 格列表。\n\n" +
                 "继续？",
@@ -205,14 +270,18 @@ public static class ArtRoomCollisionStage3
             DestroyAllChildren(hardBlocks);
             DestroyAllChildren(interior);
 
-            BuildScaledHardBlocks(
-                hardBlocks);
+            List<Vector2Int> blockedCells =
+                DeriveBlockedCells();
+
+            ApplyManualReviewOverrides(
+                blockedCells);
+
+            BuildGridHardBlocks(
+                hardBlocks,
+                blockedCells);
 
             BuildScaledPartialColliders(
                 interior);
-
-            List<Vector2Int> blockedCells =
-                DeriveBlockedCells();
 
             List<Vector2Int> walkableCells =
                 DeriveDoorConnectedWalkable(
@@ -264,11 +333,12 @@ public static class ArtRoomCollisionStage3
 
         Debug.Log(
             "[ArtRoom Stage 3] Collision rebuilt for 11x18.\n" +
-            "HardBlocks=34 scaled colliders\n" +
+            "HardBlocks=42 row-merged colliders\n" +
             "PartialPolygons=3 scaled colliders\n" +
-            "BlockedCells=62\n" +
-            "DoorConnectedWalkable=115\n" +
-            "ExcludedDisconnectedCells=21\n" +
+            "BlockedCells=110\n" +
+            "DoorConnectedWalkable=57\n" +
+            "ExcludedDisconnectedCells=31\n" +
+            "ManualAddCells=52 | ManualRemoveCells=4\n" +
             "DoorCells=(4,0),(5,0) walkable\n" +
             "ScaleX=11/13 | ScaleY=18/21\n" +
             "LegacyBlockedCellsCopied=False");
@@ -276,49 +346,139 @@ public static class ArtRoomCollisionStage3
         EditorUtility.DisplayDialog(
             "ArtRoom Stage 3 Passed",
             "11x18 画室碰撞已重建。\n\n" +
-            "HardBlocks：34\n" +
+            "HardBlocks：42\n" +
             "Partial Polygon：3\n" +
-            "BlockedCells：62\n" +
-            "South_0 连通 Walkable：115\n\n" +
+            "BlockedCells：110\n" +
+            "South_0 连通 Walkable：57\n" +
+            "人工加碰撞：52 格 / 取消碰撞：4 格\n\n" +
             "下一步：P10.7 Validate + Prefab 可视检查。",
             "OK");
     }
 
-    private static void BuildScaledHardBlocks(
-        Transform parent)
+    private static void BuildGridHardBlocks(
+        Transform parent,
+        List<Vector2Int> blockedCells)
     {
+        HashSet<Vector2Int> blocked =
+            new HashSet<Vector2Int>(
+                blockedCells);
+
+        int index = 0;
+
+        for (int y = 0;
+             y < RoomSize.y;
+             y++)
+        {
+            int x = 0;
+
+            while (x < RoomSize.x)
+            {
+                if (!blocked.Contains(
+                        new Vector2Int(x, y)))
+                {
+                    x++;
+                    continue;
+                }
+
+                int startX = x;
+
+                while (x + 1 < RoomSize.x &&
+                       blocked.Contains(
+                           new Vector2Int(
+                               x + 1,
+                               y)))
+                {
+                    x++;
+                }
+
+                int endX = x;
+                int width = endX - startX + 1;
+
+                GameObject go =
+                    new GameObject(
+                        "Hard_" +
+                        startX.ToString("00") +
+                        "_" +
+                        endX.ToString("00") +
+                        "_Y" +
+                        y.ToString("00") +
+                        "_Review");
+
+                go.transform.SetParent(
+                    parent,
+                    false);
+
+                Vector2 first =
+                    CellCenter(
+                        startX,
+                        y);
+
+                Vector2 last =
+                    CellCenter(
+                        endX,
+                        y);
+
+                go.transform.localPosition =
+                    new Vector3(
+                        (first.x + last.x) * 0.5f,
+                        first.y,
+                        0f);
+
+                BoxCollider2D collider =
+                    go.AddComponent<BoxCollider2D>();
+
+                collider.size =
+                    new Vector2(
+                        width,
+                        1f);
+
+                collider.offset = Vector2.zero;
+                collider.isTrigger = false;
+
+                index++;
+                x++;
+            }
+        }
+    }
+
+    private static void ApplyManualReviewOverrides(
+        List<Vector2Int> blockedCells)
+    {
+        HashSet<Vector2Int> blocked =
+            new HashSet<Vector2Int>(
+                blockedCells);
+
         for (int i = 0;
-             i < LegacyHardRects.Length;
+             i < ManualRemoveCells.Length;
              i++)
         {
-            HardRect source =
-                LegacyHardRects[i];
-
-            GameObject go =
-                new GameObject(
-                    source.Name + "_11x18");
-
-            go.transform.SetParent(
-                parent,
-                false);
-
-            go.transform.localPosition =
-                new Vector3(
-                    source.CenterX * ScaleX,
-                    source.CenterY * ScaleY,
-                    0f);
-
-            BoxCollider2D collider =
-                go.AddComponent<BoxCollider2D>();
-
-            collider.size =
-                new Vector2(
-                    source.Width * ScaleX,
-                    source.Height * ScaleY);
-
-            collider.offset = Vector2.zero;
-            collider.isTrigger = false;
+            blocked.Remove(
+                ManualRemoveCells[i]);
         }
+
+        for (int i = 0;
+             i < ManualAddCells.Length;
+             i++)
+        {
+            Vector2Int cell =
+                ManualAddCells[i];
+
+            if (cell.x < 0 ||
+                cell.y < 0 ||
+                cell.x >= RoomSize.x ||
+                cell.y >= RoomSize.y)
+            {
+                throw new InvalidOperationException(
+                    "ManualAddCells 越界：" +
+                    cell);
+            }
+
+            blocked.Add(cell);
+        }
+
+        blockedCells.Clear();
+        blockedCells.AddRange(blocked);
+        blockedCells.Sort(CompareCells);
     }
 
     private static void BuildScaledPartialColliders(
@@ -568,11 +728,10 @@ public static class ArtRoomCollisionStage3
         List<Vector2Int> blockedCells,
         List<Vector2Int> walkableCells)
     {
-        if (hardBlocks.childCount !=
-            LegacyHardRects.Length)
+        if (hardBlocks.childCount != 42)
         {
             throw new InvalidOperationException(
-                "HardBlocks 数量异常：" +
+                "HardBlocks 数量异常，预期 42 个按行合并碰撞，实际=" +
                 hardBlocks.childCount);
         }
 
@@ -584,17 +743,17 @@ public static class ArtRoomCollisionStage3
                 interior.childCount);
         }
 
-        if (blockedCells.Count != 62)
+        if (blockedCells.Count != 110)
         {
             throw new InvalidOperationException(
-                "BlockedCells 预期 62，实际=" +
+                "BlockedCells 预期 110，实际=" +
                 blockedCells.Count);
         }
 
-        if (walkableCells.Count != 115)
+        if (walkableCells.Count != 57)
         {
             throw new InvalidOperationException(
-                "DoorConnected Walkable 预期 115，实际=" +
+                "DoorConnected Walkable 预期 57，实际=" +
                 walkableCells.Count);
         }
 
