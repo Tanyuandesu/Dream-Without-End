@@ -117,3 +117,24 @@ ArtRoom_01 的视觉设计、题材、物件关系与既有画室方案继续作
 - 禁止引入新的画室主题、叙事或主要构图概念。
 - 禁止以新的概念图替代旧 ArtRoom_01 设计。
 - 禁止因为画布变小就把房间改造成另一间画室。
+
+
+## 9. Stage 2B 实装映射
+
+已锁定为纯 1:1 像素适配，不做任何生成式重画或整体缩放。
+
+旧 13x21 / 832x1344 → 新 11x18 / 704x1152：
+
+- 水平：左侧裁 64 px，右侧裁 64 px。
+- 垂直：保留南侧边界不动，北侧裁 192 px。
+- 像素比例保持 1:1。
+- PPU 保持 64。
+- Floor / Objects / Foreground / Effects 四层使用完全相同的裁切矩形。
+- South_0 入口因此继续保持在南侧，不因重排发生垂直漂移。
+- Stage 2B 只完成视觉重新实装，不复制任何旧碰撞。
+
+旧四层源图以原 Git blob 原样恢复到：
+`Documentation/ArtRoom_01_Legacy13x21/`
+
+Unity 一次性工具：
+`Tools > Dream Dungeon > Production Rooms > ArtRoom Rebuild > Stage 2 - Fit Existing Art to 11x18`
