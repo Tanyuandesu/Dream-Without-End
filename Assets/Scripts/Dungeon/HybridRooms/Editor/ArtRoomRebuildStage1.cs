@@ -926,14 +926,53 @@ public static class ArtRoomRebuildStage1
                 "Stage 1 的 Interior Collider 必须为空。");
         }
 
-        List<string> errors =
-            template.GetValidationErrors();
+        // Persistent Prefab Asset 上直接调用 GetComponentInParent
+        // 不保证能把子 Socket 的 owner 解析回根 DreamRoomTemplate。
+        // 现有 Production Pipeline 已经使用 LoadPrefabContents
+        // 规避这个 Unity 资产上下文假阴性，因此这里保持同一做法。
+        GameObject loadedRoot = null;
 
-        if (errors.Count > 0)
+        try
         {
-            throw new InvalidOperationException(
-                "保存后的 Template 校验失败：\n- " +
-                string.Join("\n- ", errors));
+            loadedRoot =
+                PrefabUtility.LoadPrefabContents(
+                    PrefabPath);
+
+            if (loadedRoot == null)
+            {
+                throw new InvalidOperationException(
+                    "无法加载保存后的 Prefab Contents。");
+            }
+
+            DreamRoomTemplate loadedTemplate =
+                loadedRoot.GetComponent<DreamRoomTemplate>();
+
+            if (loadedTemplate == null)
+            {
+                throw new InvalidOperationException(
+                    "加载后的 Prefab 根节点缺少 DreamRoomTemplate。");
+            }
+
+            loadedTemplate.RefreshDoorSockets();
+            loadedTemplate.RefreshSpawnPoints();
+
+            List<string> errors =
+                loadedTemplate.GetValidationErrors();
+
+            if (errors.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "保存后的 Template 校验失败：\n- " +
+                    string.Join("\n- ", errors));
+            }
+        }
+        finally
+        {
+            if (loadedRoot != null)
+            {
+                PrefabUtility.UnloadPrefabContents(
+                    loadedRoot);
+            }
         }
     }
 
